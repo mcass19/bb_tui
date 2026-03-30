@@ -1,0 +1,57 @@
+defmodule BB.TUI.Panels.Help do
+  @moduledoc """
+  Help popup — overlay showing all available keyboard shortcuts.
+
+  Pure function — returns a Popup widget struct.
+  """
+
+  alias ExRatatui.Style
+  alias ExRatatui.Widgets.Block
+  alias ExRatatui.Widgets.Paragraph
+  alias ExRatatui.Widgets.Popup
+
+  @help_text """
+  BB TUI Dashboard - Keyboard Shortcuts
+
+  Global:
+    q         Quit
+    Tab       Cycle active panel
+    ?         Toggle this help
+    a         Arm robot
+    d         Disarm robot
+    f         Force disarm (error state only)
+
+  Events panel:
+    j / Down  Scroll down
+    k / Up    Scroll up
+
+  Commands panel:
+    Up/Down   Select command
+    Enter     Execute command
+
+  Press any key to close\
+  """
+
+  @doc """
+  Renders the help popup as a Popup widget.
+  """
+  @spec render() :: struct()
+  def render do
+    content = %Paragraph{
+      text: @help_text,
+      style: %Style{fg: :white}
+    }
+
+    %Popup{
+      content: content,
+      percent_width: 60,
+      percent_height: 70,
+      block: %Block{
+        title: " Help ",
+        borders: [:all],
+        border_type: :double,
+        border_style: %Style{fg: :cyan}
+      }
+    }
+  end
+end
