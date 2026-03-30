@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dev environment with simulated WidowX-200 robot arm (`Dev.TestRobot`)
+
 ## [0.1.0] - 2026-03-30
 
 ### Added

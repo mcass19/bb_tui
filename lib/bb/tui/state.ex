@@ -42,14 +42,14 @@ defmodule BB.TUI.State do
           parameters: [{list(), term()}],
           commands: [term()],
           command_input: reference() | nil,
-          active_panel: :safety | :joints | :events | :commands | :parameters,
+          active_panel: :safety | :joints | :events | :commands,
           scroll_offset: non_neg_integer(),
           show_help: boolean(),
           confirm_force_disarm: boolean(),
           throbber_step: non_neg_integer()
         }
 
-  @panels [:safety, :joints, :events, :commands, :parameters]
+  @panels [:safety, :joints, :events, :commands]
 
   @doc """
   Returns the ordered list of panel names for tab cycling.
@@ -57,7 +57,7 @@ defmodule BB.TUI.State do
   ## Examples
 
       iex> BB.TUI.State.panels()
-      [:safety, :joints, :events, :commands, :parameters]
+      [:safety, :joints, :events, :commands]
   """
   @spec panels() :: [atom()]
   def panels, do: @panels
@@ -71,7 +71,7 @@ defmodule BB.TUI.State do
       iex> BB.TUI.State.cycle_panel(state).active_panel
       :joints
 
-      iex> state = %BB.TUI.State{active_panel: :parameters}
+      iex> state = %BB.TUI.State{active_panel: :commands}
       iex> BB.TUI.State.cycle_panel(state).active_panel
       :safety
   """

@@ -7,8 +7,8 @@ defmodule Mix.Tasks.Bb.Tui do
       $ mix bb.tui --robot MyApp.Robot
 
   The dashboard connects to a running robot's supervision tree and
-  displays safety controls, joint positions, event stream, and
-  available commands.
+  displays safety controls, runtime state, joint positions, event
+  stream, and available commands.
 
   ## Options
 
@@ -16,13 +16,24 @@ defmodule Mix.Tasks.Bb.Tui do
 
   ## Keybindings
 
+  ### Global
+
+    * `q` — quit
     * `Tab` — cycle active panel
+    * `?` — toggle help overlay
     * `a` — arm robot
     * `d` — disarm robot
     * `f` — force disarm (error state only)
-    * `j`/`k` — scroll events
-    * `?` — help overlay
-    * `q` — quit
+
+  ### Events panel
+
+    * `j` / `Down` — scroll down
+    * `k` / `Up` — scroll up
+
+  ### Commands panel
+
+    * `Up` / `Down` — select command
+    * `Enter` — execute command
   """
 
   use Mix.Task

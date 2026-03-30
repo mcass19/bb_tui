@@ -18,9 +18,6 @@ defmodule BB.TUI.StateTest do
       assert state.active_panel == :commands
 
       state = State.cycle_panel(state)
-      assert state.active_panel == :parameters
-
-      state = State.cycle_panel(state)
       assert state.active_panel == :safety
     end
   end
@@ -147,7 +144,7 @@ defmodule BB.TUI.StateTest do
 
   describe "panels/0" do
     test "returns the ordered panel list" do
-      assert State.panels() == [:safety, :joints, :events, :commands, :parameters]
+      assert State.panels() == [:safety, :joints, :events, :commands]
     end
   end
 end

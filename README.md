@@ -7,7 +7,7 @@
 
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
 
-Provides equivalent core functionality to `bb_liveview` — safety controls, joint display, event stream, command execution — while operating entirely within terminal environments: over SSH, on headless systems, or in low-bandwidth scenarios.
+Provides core dashboard functionality — safety controls, runtime state, joint positions, event stream, and command display — within terminal environments: over SSH, on headless systems, or in low-bandwidth scenarios.
 
 ## Features
 
@@ -82,17 +82,44 @@ children = [
 | `d`   | Disarm robot              |
 | `f`   | Force disarm (error only) |
 
-### Panel-scoped
+### Events panel
 
-| Key        | Panel    | Action         |
-|------------|----------|----------------|
-| `j` / `k`  | Events   | Scroll down/up |
-| Arrow keys | Commands | Select command |
-| `Enter`    | Commands | Execute        |
+| Key          | Action      |
+|--------------|-------------|
+| `j` / `Down` | Scroll down |
+| `k` / `Up`   | Scroll up   |
+
+### Commands panel
+
+| Key           | Action         |
+|---------------|----------------|
+| `Up` / `Down` | Select command |
+| `Enter`       | Execute        |
 
 ## How It Works
 
 BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly. No optimistic updates — the TUI is a faithful reflection of the robot's actual state.
+
+## Development
+
+The project ships a simulated WidowX-200 robot arm that starts automatically in dev:
+
+```sh
+mix deps.get
+iex -S mix
+```
+
+Then launch the TUI against the simulated robot:
+
+```elixir
+BB.TUI.start(Dev.TestRobot)
+```
+
+Or via the mix task:
+
+```sh
+mix bb.tui --robot Dev.TestRobot
+```
 
 ## License
 

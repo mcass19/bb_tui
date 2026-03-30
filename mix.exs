@@ -105,7 +105,11 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Panels.Events,
           BB.TUI.Panels.Commands,
           BB.TUI.Panels.StatusBar,
-          BB.TUI.Panels.Help
+          BB.TUI.Panels.Help,
+          BB.TUI.Panels.ForceDisarm
+        ],
+        Styling: [
+          BB.TUI.Theme
         ],
         "Mix Tasks": [
           Mix.Tasks.Bb.Tui

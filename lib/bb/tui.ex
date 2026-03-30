@@ -2,9 +2,9 @@ defmodule BB.TUI do
   @moduledoc """
   Terminal-based dashboard for Beam Bots robots.
 
-  BB.TUI provides a TUI interface for monitoring and controlling BB robots,
-  offering the same core functionality as `bb_liveview` — safety controls,
-  joint display, event stream, command execution — in terminal environments.
+  BB.TUI provides a TUI interface for monitoring and controlling BB robots —
+  safety controls, runtime state, joint positions, event stream, and command
+  display — in terminal environments.
 
   ## Usage
 
