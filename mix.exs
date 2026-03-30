@@ -21,7 +21,9 @@ defmodule BB.TUI.MixProject do
           BB.TUI,
           Mix.Tasks.Bb.Tui,
           BB.TUI.TestRobot,
-          BB.TUI.Test.Fixtures
+          BB.TUI.Test.Fixtures,
+          Dev.Application,
+          Dev.TestRobot
         ]
       ],
       package: package(),
@@ -37,13 +39,23 @@ defmodule BB.TUI.MixProject do
     ]
   end
 
-  def application do
+  def application, do: application(Mix.env())
+
+  def application(:dev) do
+    [
+      extra_applications: [:logger],
+      mod: {Dev.Application, []}
+    ]
+  end
+
+  def application(_) do
     [
       extra_applications: [:logger]
     ]
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(:dev), do: ["lib", "dev"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
