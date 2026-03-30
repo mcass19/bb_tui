@@ -13,6 +13,13 @@ defmodule BB.TUI.Panels.Events do
   @doc """
   Renders the events panel as a List widget with formatted event entries.
   Newest events appear first. Scrollable with j/k when focused.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{events: [], scroll_offset: 0}
+      iex> widget = BB.TUI.Panels.Events.render(state, false)
+      iex> widget.items
+      []
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{events: events, scroll_offset: offset}, focused?) do

@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.ForceDisarmTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.ForceDisarm
 
   alias BB.TUI.Panels.ForceDisarm
   alias ExRatatui.Widgets.Popup

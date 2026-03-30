@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.JointsTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.Joints
 
   alias BB.TUI.Panels.Joints
   alias BB.TUI.Test.Fixtures

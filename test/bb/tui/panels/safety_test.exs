@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.SafetyTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.Safety
 
   alias BB.TUI.Panels.Safety
   alias BB.TUI.Test.Fixtures

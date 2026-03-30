@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.EventsTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.Events
 
   alias BB.TUI.Panels.Events
   alias BB.TUI.Test.Fixtures

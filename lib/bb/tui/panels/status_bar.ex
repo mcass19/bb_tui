@@ -11,6 +11,13 @@ defmodule BB.TUI.Panels.StatusBar do
 
   @doc """
   Renders the status bar as a Paragraph widget.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{robot: MyApp.Robot, runtime_state: :idle}
+      iex> widget = BB.TUI.Panels.StatusBar.render(state)
+      iex> widget.text =~ "MyApp.Robot"
+      true
   """
   @spec render(State.t()) :: struct()
   def render(%State{robot: robot, runtime_state: runtime_state}) do

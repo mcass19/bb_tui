@@ -1,5 +1,6 @@
 defmodule BB.TUI.StateTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.State
 
   alias BB.TUI.State
   alias BB.TUI.Test.Fixtures

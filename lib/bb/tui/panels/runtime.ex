@@ -13,6 +13,13 @@ defmodule BB.TUI.Panels.Runtime do
 
   @doc """
   Renders the runtime state panel as a Paragraph widget.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{runtime_state: :idle}
+      iex> widget = BB.TUI.Panels.Runtime.render(state)
+      iex> widget.text
+      "Idle"
   """
   @spec render(State.t()) :: struct()
   def render(%State{runtime_state: runtime_state}) do

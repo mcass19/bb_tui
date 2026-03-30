@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.CommandsTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.Commands
 
   alias BB.TUI.Panels.Commands
   alias BB.TUI.Test.Fixtures

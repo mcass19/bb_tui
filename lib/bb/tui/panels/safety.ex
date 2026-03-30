@@ -17,6 +17,14 @@ defmodule BB.TUI.Panels.Safety do
 
   When the robot is in the `:disarming` state, returns a Throbber widget
   instead to show the animated transition indicator.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{safety_state: :armed}
+      iex> %ExRatatui.Widgets.Paragraph{} = BB.TUI.Panels.Safety.render(state, true)
+
+      iex> state = %BB.TUI.State{safety_state: :disarming, throbber_step: 0}
+      iex> %ExRatatui.Widgets.Throbber{} = BB.TUI.Panels.Safety.render(state, false)
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{safety_state: :disarming} = state, focused?) do

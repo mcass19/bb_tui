@@ -12,6 +12,10 @@ defmodule BB.TUI.Panels.ForceDisarm do
 
   @doc """
   Renders the force disarm confirmation popup.
+
+  ## Examples
+
+      iex> %ExRatatui.Widgets.Popup{} = BB.TUI.Panels.ForceDisarm.render()
   """
   @spec render() :: struct()
   def render do

@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.RuntimeTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.Runtime
 
   alias BB.TUI.Panels.Runtime
   alias BB.TUI.Test.Fixtures

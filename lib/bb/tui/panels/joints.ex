@@ -13,6 +13,14 @@ defmodule BB.TUI.Panels.Joints do
   @doc """
   Renders the joints panel as a Table widget with columns for
   name, position, min limit, max limit.
+
+  ## Examples
+
+      iex> joints = %{shoulder: %{joint: %{name: :shoulder, limit: %{lower: -90.0, upper: 90.0}}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: joints}
+      iex> %ExRatatui.Widgets.Table{header: header} = BB.TUI.Panels.Joints.render(state, false)
+      iex> header
+      ["Joint", "Position", "Min", "Max"]
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{joints: joints}, focused?) do

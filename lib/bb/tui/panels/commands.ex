@@ -13,6 +13,13 @@ defmodule BB.TUI.Panels.Commands do
   @doc """
   Renders the commands panel as a List widget.
   Arrow keys select, Enter executes when focused.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{commands: [%{name: :home}]}
+      iex> widget = BB.TUI.Panels.Commands.render(state, false)
+      iex> widget.items
+      ["home"]
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{commands: commands}, focused?) do

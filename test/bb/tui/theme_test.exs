@@ -1,5 +1,6 @@
 defmodule BB.TUI.ThemeTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Theme
 
   alias BB.TUI.Theme
 

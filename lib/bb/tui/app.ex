@@ -4,6 +4,14 @@ defmodule BB.TUI.App do
 
   Renders the dashboard layout and handles keyboard events and PubSub messages
   from the BB robot. All state transitions are delegated to `BB.TUI.State`.
+
+  ## Callbacks
+
+    * `mount/1` — validates the robot module, subscribes to PubSub, snapshots ETS state
+    * `render/2` — composes panel functions into `[{widget, rect}]` list
+    * `handle_event/2` — keyboard input dispatches BB API calls and state transitions
+    * `handle_info/2` — PubSub messages (`{:bb, path, msg}`) update state
+    * `terminate/2` — cleanup (no-op)
   """
 
   use ExRatatui.App

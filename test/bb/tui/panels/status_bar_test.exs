@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.StatusBarTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.StatusBar
 
   alias BB.TUI.Panels.StatusBar
   alias BB.TUI.Test.Fixtures

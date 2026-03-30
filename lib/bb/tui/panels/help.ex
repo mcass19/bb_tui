@@ -34,6 +34,10 @@ defmodule BB.TUI.Panels.Help do
 
   @doc """
   Renders the help popup as a Popup widget.
+
+  ## Examples
+
+      iex> %ExRatatui.Widgets.Popup{} = BB.TUI.Panels.Help.render()
   """
   @spec render() :: struct()
   def render do

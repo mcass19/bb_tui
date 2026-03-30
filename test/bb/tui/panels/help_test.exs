@@ -1,5 +1,6 @@
 defmodule BB.TUI.Panels.HelpTest do
   use ExUnit.Case, async: true
+  doctest BB.TUI.Panels.Help
 
   alias BB.TUI.Panels.Help
   alias ExRatatui.Widgets.Popup
