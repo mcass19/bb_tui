@@ -97,6 +97,11 @@ defmodule BB.TUI.AppTest do
   end
 
   describe "handle_event/2" do
+    setup do
+      Mimic.stub(BB, :publish, fn _robot, _path, _msg -> :ok end)
+      :ok
+    end
+
     test "q key stops the app" do
       state = Fixtures.sample_state()
       event = %ExRatatui.Event.Key{code: "q", kind: "press"}
@@ -412,23 +417,278 @@ defmodule BB.TUI.AppTest do
       assert_receive {:command_result, {:error, :boom}}, 1000
     end
 
-    # Joints panel keys
-    test "j/down scrolls joints" do
-      events = Enum.map(1..5, &{DateTime.utc_now(), [:test], %{i: &1}})
-      state = Fixtures.sample_state(%{active_panel: :joints, events: events, scroll_offset: 0})
+    # Joints panel keys — navigation
+    test "j/down selects next joint" do
+      state = Fixtures.sample_state(%{active_panel: :joints, joint_selected: 0})
       event = %ExRatatui.Event.Key{code: "j", kind: "press"}
 
       assert {:noreply, new_state} = App.handle_event(event, state)
-      assert new_state.scroll_offset == 1
+      assert new_state.joint_selected == 1
     end
 
-    test "k/up scrolls joints" do
-      events = Enum.map(1..5, &{DateTime.utc_now(), [:test], %{i: &1}})
-      state = Fixtures.sample_state(%{active_panel: :joints, events: events, scroll_offset: 2})
+    test "down arrow selects next joint" do
+      state = Fixtures.sample_state(%{active_panel: :joints, joint_selected: 0})
+      event = %ExRatatui.Event.Key{code: "down", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joint_selected == 1
+    end
+
+    test "k/up selects previous joint" do
+      state = Fixtures.sample_state(%{active_panel: :joints, joint_selected: 1})
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.handle_event(event, state)
-      assert new_state.scroll_offset == 1
+      assert new_state.joint_selected == 0
+    end
+
+    test "up arrow selects previous joint" do
+      state = Fixtures.sample_state(%{active_panel: :joints, joint_selected: 1})
+      event = %ExRatatui.Event.Key{code: "up", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joint_selected == 0
+    end
+
+    # Joints panel keys — position control (simulated joints, no actuator)
+    test "l/right increases simulated joint position when armed" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joints.shoulder.position > 0.0
+    end
+
+    test "h/left decreases simulated joint position when armed" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joints.shoulder.position < 0.0
+    end
+
+    test "right arrow adjusts simulated joint position" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "right", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joints.shoulder.position > 0.0
+    end
+
+    test "L key increases position by 10x step" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      small_event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+      big_event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      {:noreply, small_state} = App.handle_event(small_event, state)
+      {:noreply, big_state} = App.handle_event(big_event, state)
+
+      small_delta = small_state.joints.shoulder.position
+      big_delta = big_state.joints.shoulder.position
+
+      assert_in_delta big_delta, small_delta * 10, 1.0e-10
+    end
+
+    test "H key decreases position by 10x step" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      small_event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+      big_event = %ExRatatui.Event.Key{code: "H", kind: "press"}
+
+      {:noreply, small_state} = App.handle_event(small_event, state)
+      {:noreply, big_state} = App.handle_event(big_event, state)
+
+      small_delta = abs(small_state.joints.shoulder.position)
+      big_delta = abs(big_state.joints.shoulder.position)
+
+      assert_in_delta big_delta, small_delta * 10, 1.0e-10
+    end
+
+    test "position is clamped to joint limits" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.99
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      # Big step that would exceed upper limit
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joints.shoulder.position == 1.0
+    end
+
+    test "joint control does nothing when not armed" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :disarmed
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joints.shoulder.position == 0.0
+    end
+
+    test "joint control does nothing with nil position" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: nil
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.joints.shoulder.position == nil
+    end
+
+    test "joint control does nothing with empty joints" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: %{},
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, ^state} = App.handle_event(event, state)
+    end
+
+    # Joints panel keys — real actuator joints
+    test "l key calls BB.Actuator.set_position! for joint with actuator" do
+      Fixtures.stub_bb_modules(safety_state: :armed)
+
+      Mimic.expect(BB.Actuator, :set_position!, fn _robot, :shoulder_motor, pos ->
+        assert pos > 0.0
+        :ok
+      end)
+
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      robot_struct =
+        Map.put(Fixtures.sample_robot_struct(), :actuators, %{
+          shoulder_motor: %{joint: :shoulder}
+        })
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed,
+          robot_struct: robot_struct
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      # Position NOT updated locally for real actuators — waits for sensor feedback
+      assert new_state.joints.shoulder.position == 0.0
     end
 
     test "ignores unknown events" do

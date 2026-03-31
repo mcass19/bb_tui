@@ -168,6 +168,31 @@ defmodule BB.TUI.Panels.JointsTest do
       assert widget.block.border_style.fg == :cyan
     end
 
+    test "focused panel shows selected row" do
+      state = Fixtures.sample_state(%{joint_selected: 0})
+      widget = Joints.render(state, true)
+      assert widget.selected == 0
+      assert widget.highlight_symbol == "\u{25B6} "
+    end
+
+    test "unfocused panel does not show selection" do
+      state = Fixtures.sample_state(%{joint_selected: 0})
+      widget = Joints.render(state, false)
+      assert widget.selected == nil
+    end
+
+    test "selected index is passed through from state" do
+      state = Fixtures.sample_state(%{joint_selected: 1})
+      widget = Joints.render(state, true)
+      assert widget.selected == 1
+    end
+
+    test "empty joints does not set selection" do
+      state = Fixtures.sample_state(%{joints: %{}, joint_selected: 0})
+      widget = Joints.render(state, true)
+      assert widget.selected == nil
+    end
+
     test "handles integer position for revolute joints" do
       joints = %{
         wrist: %{

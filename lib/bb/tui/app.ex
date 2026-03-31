@@ -137,6 +137,22 @@ defmodule BB.TUI.App do
 
   @impl true
   # ── Popup intercepts ────────────────────────────────────────
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{show_help: true} = state
+      )
+      when code in ["j", "down"] do
+    {:noreply, State.scroll_help_down(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{show_help: true} = state
+      )
+      when code in ["k", "up"] do
+    {:noreply, State.scroll_help_up(state)}
+  end
+
   def handle_event(%ExRatatui.Event.Key{kind: "press"}, %{show_help: true} = state) do
     {:noreply, State.toggle_help(state)}
   end
@@ -252,7 +268,7 @@ defmodule BB.TUI.App do
         %{active_panel: :joints} = state
       )
       when code in ["j", "down"] do
-    {:noreply, State.scroll_down(state)}
+    {:noreply, State.select_next_joint(state)}
   end
 
   def handle_event(
@@ -260,7 +276,37 @@ defmodule BB.TUI.App do
         %{active_panel: :joints} = state
       )
       when code in ["k", "up"] do
-    {:noreply, State.scroll_up(state)}
+    {:noreply, State.select_prev_joint(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :joints} = state
+      )
+      when code in ["l", "right"] do
+    adjust_selected_joint(state, :increase, 1)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :joints} = state
+      )
+      when code in ["h", "left"] do
+    adjust_selected_joint(state, :decrease, 1)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "L", kind: "press"},
+        %{active_panel: :joints} = state
+      ) do
+    adjust_selected_joint(state, :increase, 10)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "H", kind: "press"},
+        %{active_panel: :joints} = state
+      ) do
+    adjust_selected_joint(state, :decrease, 10)
   end
 
   # ── Catch-all ──────────────────────────────────────────────
@@ -326,8 +372,8 @@ defmodule BB.TUI.App do
 
   # ── Helpers ────────────────────────────────────────────────
 
-  defp maybe_add_popup(panels, %{show_help: true}, full) do
-    panels ++ [{Panels.Help.render(), full}]
+  defp maybe_add_popup(panels, %{show_help: true, help_scroll_offset: offset}, full) do
+    panels ++ [{Panels.Help.render(offset), full}]
   end
 
   defp maybe_add_popup(panels, %{confirm_force_disarm: true}, full) do
@@ -345,6 +391,66 @@ defmodule BB.TUI.App do
   rescue
     _ -> []
   end
+
+  defp adjust_selected_joint(state, _direction, _multiplier)
+       when state.safety_state not in [:armed, :disarming] do
+    {:noreply, state}
+  end
+
+  defp adjust_selected_joint(state, direction, multiplier) do
+    name = State.selected_joint_name(state)
+
+    case name && Map.get(state.joints, name) do
+      nil ->
+        {:noreply, state}
+
+      %{position: nil} ->
+        {:noreply, state}
+
+      %{position: pos, joint: joint} ->
+        step = State.joint_step(joint) * multiplier
+
+        new_pos =
+          case direction do
+            :increase -> pos + step
+            :decrease -> pos - step
+          end
+          |> State.clamp_position(joint)
+
+        actuator = find_actuator_for_joint(state.robot_struct, name)
+
+        if actuator do
+          BB.Actuator.set_position!(state.robot, actuator, new_pos)
+          {:noreply, state}
+        else
+          publish_simulated_position(state.robot, name, new_pos)
+          {:noreply, State.set_joint_position(state, name, new_pos)}
+        end
+    end
+  end
+
+  defp publish_simulated_position(robot, joint_name, position) do
+    {:ok, msg} =
+      BB.Message.new(BB.Message.Sensor.JointState, :simulated,
+        names: [joint_name],
+        positions: [position * 1.0],
+        velocities: [0.0],
+        efforts: [0.0]
+      )
+
+    BB.publish(robot, [:sensor, :simulated], msg)
+  end
+
+  defp find_actuator_for_joint(%{actuators: actuators}, joint_name) do
+    actuators
+    |> Enum.find(fn {_name, info} -> info.joint == joint_name end)
+    |> case do
+      {actuator_name, _info} -> actuator_name
+      nil -> nil
+    end
+  end
+
+  defp find_actuator_for_joint(_, _joint_name), do: nil
 
   defp execute_selected_command(%State{commands: commands, command_selected: idx} = state) do
     case Enum.at(commands, idx) do

@@ -22,7 +22,8 @@ defmodule BB.TUI.Test.Fixtures do
       events_paused: false,
       command_selected: 0,
       command_result: nil,
-      executing_command: nil
+      executing_command: nil,
+      joint_selected: 0
     }
 
     struct!(BB.TUI.State, Map.merge(defaults, overrides))
@@ -86,11 +87,13 @@ defmodule BB.TUI.Test.Fixtures do
     runtime_state = Keyword.get(overrides, :runtime_state, :disarmed)
 
     Mimic.stub(BB, :subscribe, fn _robot, _path -> :ok end)
+    Mimic.stub(BB, :publish, fn _robot, _path, _msg -> :ok end)
     Mimic.stub(BB.Safety, :state, fn _robot -> safety_state end)
     Mimic.stub(BB.Safety, :in_error?, fn _robot -> safety_state == :error end)
     Mimic.stub(BB.Safety, :arm, fn _robot -> :ok end)
     Mimic.stub(BB.Safety, :disarm, fn _robot -> :ok end)
     Mimic.stub(BB.Safety, :force_disarm, fn _robot -> :ok end)
+    Mimic.stub(BB.Actuator, :set_position!, fn _robot, _actuator, _pos -> :ok end)
     Mimic.stub(BB.Robot, :joints_in_order, fn _robot -> sample_joint_list() end)
     Mimic.stub(BB.Robot.Joint, :movable?, fn _joint -> true end)
     Mimic.stub(BB.Robot.Runtime, :get_robot, fn _robot -> sample_robot_struct() end)

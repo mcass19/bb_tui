@@ -1,6 +1,7 @@
 Application.ensure_all_started(:mimic)
 
 Mimic.copy(BB)
+Mimic.copy(BB.Actuator)
 Mimic.copy(BB.Safety)
 Mimic.copy(BB.Robot)
 Mimic.copy(BB.Robot.Joint)

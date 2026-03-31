@@ -231,4 +231,116 @@ defmodule BB.TUI.StateTest do
       assert state.command_result == nil
     end
   end
+
+  describe "sorted_joint_names/1" do
+    test "returns joint names sorted alphabetically" do
+      state = Fixtures.sample_state()
+      assert State.sorted_joint_names(state) == [:elbow, :shoulder]
+    end
+
+    test "returns empty list when no joints" do
+      state = Fixtures.sample_state(%{joints: %{}})
+      assert State.sorted_joint_names(state) == []
+    end
+  end
+
+  describe "selected_joint_name/1" do
+    test "returns the joint at the selected index" do
+      state = Fixtures.sample_state(%{joint_selected: 0})
+      assert State.selected_joint_name(state) == :elbow
+
+      state = Fixtures.sample_state(%{joint_selected: 1})
+      assert State.selected_joint_name(state) == :shoulder
+    end
+
+    test "returns nil when no joints" do
+      state = Fixtures.sample_state(%{joints: %{}, joint_selected: 0})
+      assert State.selected_joint_name(state) == nil
+    end
+
+    test "returns nil when index out of range" do
+      state = Fixtures.sample_state(%{joint_selected: 5})
+      assert State.selected_joint_name(state) == nil
+    end
+  end
+
+  describe "select_next_joint/1 and select_prev_joint/1" do
+    test "navigates joint selection" do
+      state = Fixtures.sample_state(%{joint_selected: 0})
+
+      state = State.select_next_joint(state)
+      assert state.joint_selected == 1
+
+      # Already at max (2 joints)
+      state = State.select_next_joint(state)
+      assert state.joint_selected == 1
+
+      state = State.select_prev_joint(state)
+      assert state.joint_selected == 0
+
+      # Already at 0
+      state = State.select_prev_joint(state)
+      assert state.joint_selected == 0
+    end
+
+    test "select_next_joint handles empty joints" do
+      state = Fixtures.sample_state(%{joints: %{}, joint_selected: 0})
+      state = State.select_next_joint(state)
+      assert state.joint_selected == 0
+    end
+  end
+
+  describe "set_joint_position/3" do
+    test "updates position for existing joint" do
+      state = Fixtures.sample_state()
+      state = State.set_joint_position(state, :shoulder, 1.5)
+      assert state.joints.shoulder.position == 1.5
+    end
+
+    test "ignores unknown joint name" do
+      state = Fixtures.sample_state()
+      original = state.joints
+      state = State.set_joint_position(state, :wrist, 1.0)
+      assert state.joints == original
+    end
+  end
+
+  describe "joint_step/1" do
+    test "computes step from limits" do
+      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      assert State.joint_step(joint) == 0.02
+    end
+
+    test "computes step from wide limits" do
+      joint = %{limit: %{lower: 0.0, upper: 100.0}}
+      assert State.joint_step(joint) == 1.0
+    end
+
+    test "returns default step for unlimited joints" do
+      joint = %{type: :continuous}
+      assert_in_delta State.joint_step(joint), :math.pi() / 50, 1.0e-10
+    end
+  end
+
+  describe "clamp_position/2" do
+    test "clamps above upper limit" do
+      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      assert State.clamp_position(2.0, joint) == 1.0
+    end
+
+    test "clamps below lower limit" do
+      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      assert State.clamp_position(-2.0, joint) == -1.0
+    end
+
+    test "passes through within limits" do
+      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      assert State.clamp_position(0.5, joint) == 0.5
+    end
+
+    test "passes through for unlimited joints" do
+      joint = %{type: :continuous}
+      assert State.clamp_position(99.0, joint) == 99.0
+    end
+  end
 end

@@ -33,24 +33,30 @@ defmodule BB.TUI.Panels.Help do
     Enter       Execute selected command
 
   Joints panel:
-    j / Down    Scroll down
-    k / Up      Scroll up
+    j / Down    Select next joint
+    k / Up      Select previous joint
+    l / Right   Increase position (1% step)
+    h / Left    Decrease position (1% step)
+    L           Increase position (10% step)
+    H           Decrease position (10% step)
 
-  Press any key to close\
+  [j/k] Scroll   [any other key] Close\
   """
 
   @doc """
-  Renders the help popup as a Popup widget.
+  Renders the help popup as a Popup widget with optional scroll offset.
 
   ## Examples
 
-      iex> %ExRatatui.Widgets.Popup{} = BB.TUI.Panels.Help.render()
+      iex> %ExRatatui.Widgets.Popup{} = BB.TUI.Panels.Help.render(0)
   """
-  @spec render() :: struct()
-  def render do
+  @spec render(non_neg_integer()) :: struct()
+  def render(scroll_offset \\ 0) do
     content = %Paragraph{
       text: @help_text,
-      style: %Style{fg: :white}
+      style: %Style{fg: :white},
+      wrap: true,
+      scroll: {scroll_offset, 0}
     }
 
     %Popup{

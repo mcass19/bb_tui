@@ -28,12 +28,14 @@ defmodule BB.TUI.State do
     active_panel: :safety,
     scroll_offset: 0,
     show_help: false,
+    help_scroll_offset: 0,
     confirm_force_disarm: false,
     throbber_step: 0,
     events_paused: false,
     command_selected: 0,
     command_result: nil,
-    executing_command: nil
+    executing_command: nil,
+    joint_selected: 0
   ]
 
   @type t :: %__MODULE__{
@@ -49,12 +51,14 @@ defmodule BB.TUI.State do
           active_panel: :safety | :commands | :joints | :events | :parameters,
           scroll_offset: non_neg_integer(),
           show_help: boolean(),
+          help_scroll_offset: non_neg_integer(),
           confirm_force_disarm: boolean(),
           throbber_step: non_neg_integer(),
           events_paused: boolean(),
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
-          executing_command: pid() | nil
+          executing_command: pid() | nil,
+          joint_selected: non_neg_integer()
         }
 
   @panels [:safety, :commands, :joints, :events, :parameters]
@@ -105,7 +109,39 @@ defmodule BB.TUI.State do
   """
   @spec toggle_help(t()) :: t()
   def toggle_help(%__MODULE__{} = state) do
-    %{state | show_help: !state.show_help}
+    %{state | show_help: !state.show_help, help_scroll_offset: 0}
+  end
+
+  @doc """
+  Scrolls the help popup down by one line.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{show_help: true, help_scroll_offset: 0}
+      iex> BB.TUI.State.scroll_help_down(state).help_scroll_offset
+      1
+  """
+  @spec scroll_help_down(t()) :: t()
+  def scroll_help_down(%__MODULE__{help_scroll_offset: offset} = state) do
+    %{state | help_scroll_offset: offset + 1}
+  end
+
+  @doc """
+  Scrolls the help popup up by one line.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{show_help: true, help_scroll_offset: 0}
+      iex> BB.TUI.State.scroll_help_up(state).help_scroll_offset
+      0
+
+      iex> state = %BB.TUI.State{show_help: true, help_scroll_offset: 5}
+      iex> BB.TUI.State.scroll_help_up(state).help_scroll_offset
+      4
+  """
+  @spec scroll_help_up(t()) :: t()
+  def scroll_help_up(%__MODULE__{help_scroll_offset: offset} = state) do
+    %{state | help_scroll_offset: max(offset - 1, 0)}
   end
 
   @doc """
@@ -354,4 +390,151 @@ defmodule BB.TUI.State do
   def start_command(%__MODULE__{} = state, pid) do
     %{state | executing_command: pid, command_result: nil}
   end
+
+  # ── Joint control ──────────────────────────────────────────
+
+  @doc """
+  Returns sorted joint names, matching the render order of the joints panel.
+
+  ## Examples
+
+      iex> joints = %{elbow: %{joint: %{}, position: 0.0}, shoulder: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: joints}
+      iex> BB.TUI.State.sorted_joint_names(state)
+      [:elbow, :shoulder]
+  """
+  @spec sorted_joint_names(t()) :: [atom()]
+  def sorted_joint_names(%__MODULE__{joints: joints}) do
+    joints |> Map.keys() |> Enum.sort()
+  end
+
+  @doc """
+  Returns the name of the currently selected joint, or nil if no joints exist.
+
+  ## Examples
+
+      iex> joints = %{elbow: %{joint: %{}, position: 0.0}, shoulder: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: joints, joint_selected: 1}
+      iex> BB.TUI.State.selected_joint_name(state)
+      :shoulder
+
+      iex> state = %BB.TUI.State{joints: %{}, joint_selected: 0}
+      iex> BB.TUI.State.selected_joint_name(state)
+      nil
+  """
+  @spec selected_joint_name(t()) :: atom() | nil
+  def selected_joint_name(%__MODULE__{} = state) do
+    Enum.at(sorted_joint_names(state), state.joint_selected)
+  end
+
+  @doc """
+  Selects the next joint in the sorted list.
+
+  ## Examples
+
+      iex> joints = %{a: %{joint: %{}, position: 0.0}, b: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: joints, joint_selected: 0}
+      iex> BB.TUI.State.select_next_joint(state).joint_selected
+      1
+
+      iex> joints = %{a: %{joint: %{}, position: 0.0}, b: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: joints, joint_selected: 1}
+      iex> BB.TUI.State.select_next_joint(state).joint_selected
+      1
+  """
+  @spec select_next_joint(t()) :: t()
+  def select_next_joint(%__MODULE__{joints: joints, joint_selected: idx} = state) do
+    max_idx = max(map_size(joints) - 1, 0)
+    %{state | joint_selected: min(idx + 1, max_idx)}
+  end
+
+  @doc """
+  Selects the previous joint in the sorted list.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{joints: %{a: %{joint: %{}, position: 0.0}}, joint_selected: 1}
+      iex> BB.TUI.State.select_prev_joint(state).joint_selected
+      0
+
+      iex> state = %BB.TUI.State{joints: %{a: %{joint: %{}, position: 0.0}}, joint_selected: 0}
+      iex> BB.TUI.State.select_prev_joint(state).joint_selected
+      0
+  """
+  @spec select_prev_joint(t()) :: t()
+  def select_prev_joint(%__MODULE__{joint_selected: idx} = state) do
+    %{state | joint_selected: max(idx - 1, 0)}
+  end
+
+  @doc """
+  Updates the position of a specific joint in state.
+
+  ## Examples
+
+      iex> joints = %{shoulder: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: joints}
+      iex> BB.TUI.State.set_joint_position(state, :shoulder, 1.5).joints.shoulder.position
+      1.5
+  """
+  @spec set_joint_position(t(), atom(), float()) :: t()
+  def set_joint_position(%__MODULE__{joints: joints} = state, name, position) do
+    case Map.fetch(joints, name) do
+      {:ok, joint_data} ->
+        %{state | joints: Map.put(joints, name, %{joint_data | position: position})}
+
+      :error ->
+        state
+    end
+  end
+
+  @doc """
+  Computes the step size for a joint based on its limits.
+
+  Returns `(upper - lower) / 100` for joints with limits, or a default
+  step of `π/50` (~3.6°) for unlimited joints.
+
+  ## Examples
+
+      iex> BB.TUI.State.joint_step(%{limit: %{lower: -1.0, upper: 1.0}})
+      0.02
+
+      iex> BB.TUI.State.joint_step(%{type: :continuous})
+      :math.pi() / 50
+  """
+  @spec joint_step(map()) :: float()
+  def joint_step(joint) do
+    case joint_limits(joint) do
+      {lower, upper} when upper > lower -> (upper - lower) / 100
+      _ -> :math.pi() / 50
+    end
+  end
+
+  @doc """
+  Clamps a position value within a joint's limits.
+
+  Returns the position unchanged if the joint has no limits.
+
+  ## Examples
+
+      iex> BB.TUI.State.clamp_position(2.0, %{limit: %{lower: -1.0, upper: 1.0}})
+      1.0
+
+      iex> BB.TUI.State.clamp_position(-2.0, %{limit: %{lower: -1.0, upper: 1.0}})
+      -1.0
+
+      iex> BB.TUI.State.clamp_position(99.0, %{type: :continuous})
+      99.0
+  """
+  @spec clamp_position(float(), map()) :: float()
+  def clamp_position(pos, joint) do
+    case joint_limits(joint) do
+      {lower, upper} -> max(lower, min(upper, pos))
+      _ -> pos
+    end
+  end
+
+  @doc false
+  @spec joint_limits(map()) :: {number(), number()} | nil
+  def joint_limits(%{limit: %{lower: lower, upper: upper}}), do: {lower, upper}
+  def joint_limits(_), do: nil
 end

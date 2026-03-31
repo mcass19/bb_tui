@@ -94,7 +94,7 @@ defmodule BB.TUI.Panels.StatusBarTest do
       state = Fixtures.sample_state(%{active_panel: :joints})
       widget = StatusBar.render(state)
 
-      assert widget.text =~ "[j/k]Scroll"
+      assert widget.text =~ "[j/k]Select"
     end
 
     test "shows no panel-specific hints for parameters" do

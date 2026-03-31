@@ -26,7 +26,7 @@ defmodule BB.TUI.Panels.StatusBar do
     robot_name = inspect(state.robot)
     safety = format_safety(state.safety_state)
     runtime = to_string(state.runtime_state)
-    panel_hints = panel_keys(state.active_panel)
+    panel_hints = panel_keys(state.active_panel, state.safety_state)
 
     text =
       " #{robot_name} | #{safety} | #{runtime} | [q]Quit [Tab]Panel [?]Help #{panel_hints}"
@@ -43,10 +43,14 @@ defmodule BB.TUI.Panels.StatusBar do
   defp format_safety(:error), do: "\u{2716} Error"
   defp format_safety(other), do: to_string(other)
 
-  defp panel_keys(:safety), do: "[a]Arm [d]Disarm"
-  defp panel_keys(:commands), do: "[Up/Down]Select [Enter]Execute"
-  defp panel_keys(:events), do: "[j/k]Scroll [p]Pause [c]Clear"
-  defp panel_keys(:joints), do: "[j/k]Scroll"
-  defp panel_keys(:parameters), do: ""
-  defp panel_keys(_), do: ""
+  defp panel_keys(:safety, _safety), do: "[a]Arm [d]Disarm"
+  defp panel_keys(:commands, _safety), do: "[Up/Down]Select [Enter]Execute"
+  defp panel_keys(:events, _safety), do: "[j/k]Scroll [p]Pause [c]Clear"
+
+  defp panel_keys(:joints, safety) when safety in [:armed, :disarming],
+    do: "[j/k]Select [h/l]Adj [H/L]Adj10x"
+
+  defp panel_keys(:joints, _safety), do: "[j/k]Select"
+  defp panel_keys(:parameters, _safety), do: ""
+  defp panel_keys(_, _safety), do: ""
 end

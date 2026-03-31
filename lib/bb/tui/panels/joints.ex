@@ -30,7 +30,7 @@ defmodule BB.TUI.Panels.Joints do
       ["Joint", "Type", "Position", "Range"]
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{joints: joints}, focused?) do
+  def render(%State{joints: joints, joint_selected: selected}, focused?) do
     rows =
       joints
       |> Enum.sort_by(fn {name, _} -> name end)
@@ -52,7 +52,9 @@ defmodule BB.TUI.Panels.Joints do
         {:percentage, 20},
         {:min, @bar_width + 2}
       ],
+      selected: if(focused? and rows != [], do: selected),
       highlight_style: Theme.highlight_style(),
+      highlight_symbol: "\u{25B6} ",
       block: %Block{
         title: " Joint Control ",
         borders: [:all],
