@@ -22,6 +22,8 @@ defmodule BB.TUI.AppTest do
       assert state.joints.elbow.position == 45.0
       assert state.events == []
       assert state.active_panel == :safety
+      assert state.events_paused == false
+      assert state.command_selected == 0
     end
 
     test "raises on invalid robot module" do
@@ -29,15 +31,33 @@ defmodule BB.TUI.AppTest do
         App.mount(robot: __MODULE__)
       end
     end
+
+    test "loads commands from BB.Dsl.Info" do
+      commands = [%{name: :home, allowed_states: [:idle]}]
+      Fixtures.stub_bb_modules()
+      Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> commands end)
+
+      assert {:ok, state} = App.mount(robot: BB.TUI.TestRobot)
+      assert state.commands == commands
+    end
+
+    test "handles BB.Dsl.Info.commands raising" do
+      Fixtures.stub_bb_modules()
+      Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> raise "boom" end)
+
+      assert {:ok, state} = App.mount(robot: BB.TUI.TestRobot)
+      assert state.commands == []
+    end
   end
 
   describe "render/2" do
     test "returns a list of widget-rect pairs" do
       state = Fixtures.sample_state()
-      frame = %ExRatatui.Frame{width: 80, height: 24}
+      frame = %ExRatatui.Frame{width: 120, height: 40}
 
       widgets = App.render(state, frame)
 
+      # safety, commands, joints, events, parameters, status_bar = 6
       assert is_list(widgets)
       assert length(widgets) == 6
 
@@ -49,7 +69,7 @@ defmodule BB.TUI.AppTest do
 
     test "includes help popup when show_help is true" do
       state = Fixtures.sample_state(%{show_help: true})
-      frame = %ExRatatui.Frame{width: 80, height: 24}
+      frame = %ExRatatui.Frame{width: 120, height: 40}
 
       widgets = App.render(state, frame)
 
@@ -58,11 +78,21 @@ defmodule BB.TUI.AppTest do
 
     test "includes force disarm popup when confirm_force_disarm is true" do
       state = Fixtures.sample_state(%{confirm_force_disarm: true})
-      frame = %ExRatatui.Frame{width: 80, height: 24}
+      frame = %ExRatatui.Frame{width: 120, height: 40}
 
       widgets = App.render(state, frame)
 
       assert length(widgets) == 7
+    end
+
+    test "popup is rendered last (on top)" do
+      state = Fixtures.sample_state(%{show_help: true})
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+
+      widgets = App.render(state, frame)
+
+      {last_widget, _rect} = List.last(widgets)
+      assert %ExRatatui.Widgets.Popup{} = last_widget
     end
   end
 
@@ -79,7 +109,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "tab", kind: "press"}
 
       assert {:noreply, new_state} = App.handle_event(event, state)
-      assert new_state.active_panel == :joints
+      assert new_state.active_panel == :commands
     end
 
     test "? key toggles help" do
@@ -160,6 +190,7 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, ^state} = App.handle_event(event, state)
     end
 
+    # Events panel keys
     test "j/down scrolls events when events panel is active" do
       events = Enum.map(1..5, &{DateTime.utc_now(), [:test], %{i: &1}})
       state = Fixtures.sample_state(%{active_panel: :events, events: events, scroll_offset: 0})
@@ -190,6 +221,210 @@ defmodule BB.TUI.AppTest do
     test "k/up scrolls events when events panel is active" do
       events = Enum.map(1..5, &{DateTime.utc_now(), [:test], %{i: &1}})
       state = Fixtures.sample_state(%{active_panel: :events, events: events, scroll_offset: 2})
+      event = %ExRatatui.Event.Key{code: "k", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.scroll_offset == 1
+    end
+
+    test "p key toggles events pause" do
+      state = Fixtures.sample_state(%{active_panel: :events, events_paused: false})
+      event = %ExRatatui.Event.Key{code: "p", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.events_paused
+    end
+
+    test "c key clears events" do
+      events = [{DateTime.utc_now(), [:test], %{}}]
+      state = Fixtures.sample_state(%{active_panel: :events, events: events})
+      event = %ExRatatui.Event.Key{code: "c", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.events == []
+    end
+
+    # Commands panel keys
+    test "j/down selects next command" do
+      commands = [%{name: :a}, %{name: :b}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :commands, commands: commands, command_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "j", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.command_selected == 1
+    end
+
+    test "k/up selects prev command" do
+      commands = [%{name: :a}, %{name: :b}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :commands, commands: commands, command_selected: 1})
+
+      event = %ExRatatui.Event.Key{code: "k", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.command_selected == 0
+    end
+
+    test "enter executes selected command" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        pid = spawn(fn -> :ok end)
+        {:ok, pid}
+      end)
+
+      commands = [%{name: :home, allowed_states: [:idle]}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: commands,
+          command_selected: 0,
+          runtime_state: :idle
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.executing_command != nil
+    end
+
+    test "enter does nothing for blocked command" do
+      commands = [%{name: :home, allowed_states: [:idle]}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: commands,
+          command_selected: 0,
+          runtime_state: :executing
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.executing_command == nil
+    end
+
+    test "enter does nothing with no commands" do
+      state = Fixtures.sample_state(%{active_panel: :commands, commands: []})
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, ^state} = App.handle_event(event, state)
+    end
+
+    test "enter does nothing when already executing" do
+      commands = [%{name: :home, allowed_states: [:idle]}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: commands,
+          command_selected: 0,
+          runtime_state: :idle,
+          executing_command: self()
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, ^state} = App.handle_event(event, state)
+    end
+
+    test "enter sends error result when execute fails" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        {:error, :not_allowed}
+      end)
+
+      commands = [%{name: :home, allowed_states: [:idle]}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: commands,
+          command_selected: 0,
+          runtime_state: :idle
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.executing_command != nil
+
+      # Wait for the spawn to send the error message
+      assert_receive {:command_result, {:error, :not_allowed}}, 1000
+    end
+
+    test "enter sends timeout result when command process hangs" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        pid = spawn(fn -> Process.sleep(:infinity) end)
+        {:ok, pid}
+      end)
+
+      commands = [%{name: :home, allowed_states: [:idle]}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: commands,
+          command_selected: 0,
+          runtime_state: :idle
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+
+      # With command_timeout set to 100ms in test config, this should fire quickly
+      assert_receive {:command_result, {:error, :timeout}}, 1000
+    end
+
+    test "enter sends error result when command process exits abnormally" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        pid = spawn(fn -> exit(:boom) end)
+        {:ok, pid}
+      end)
+
+      commands = [%{name: :home, allowed_states: [:idle]}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: commands,
+          command_selected: 0,
+          runtime_state: :idle
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+
+      # Wait for the spawn to send the error result
+      assert_receive {:command_result, {:error, :boom}}, 1000
+    end
+
+    # Joints panel keys
+    test "j/down scrolls joints" do
+      events = Enum.map(1..5, &{DateTime.utc_now(), [:test], %{i: &1}})
+      state = Fixtures.sample_state(%{active_panel: :joints, events: events, scroll_offset: 0})
+      event = %ExRatatui.Event.Key{code: "j", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.scroll_offset == 1
+    end
+
+    test "k/up scrolls joints" do
+      events = Enum.map(1..5, &{DateTime.utc_now(), [:test], %{i: &1}})
+      state = Fixtures.sample_state(%{active_panel: :joints, events: events, scroll_offset: 2})
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.handle_event(event, state)
@@ -264,6 +499,16 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.handle_info({:bb, [:unknown], msg}, state)
       assert length(new_state.events) == 1
+    end
+
+    test "command_result message sets result" do
+      state = Fixtures.sample_state(%{executing_command: self()})
+
+      assert {:noreply, new_state} =
+               App.handle_info({:command_result, {:ok, :completed}}, state)
+
+      assert new_state.command_result == {:ok, :completed}
+      assert new_state.executing_command == nil
     end
 
     test "non-bb messages are ignored" do

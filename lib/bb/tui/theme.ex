@@ -56,6 +56,28 @@ defmodule BB.TUI.Theme do
   def cyan, do: :cyan
 
   @doc """
+  Blue for interactive elements and paths.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.blue()
+      :blue
+  """
+  @spec blue() :: ExRatatui.Style.color()
+  def blue, do: :blue
+
+  @doc """
+  Magenta for parameter values and accents.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.magenta()
+      :magenta
+  """
+  @spec magenta() :: ExRatatui.Style.color()
+  def magenta, do: :magenta
+
+  @doc """
   Muted border color for inactive panels.
 
   ## Examples
@@ -183,4 +205,81 @@ defmodule BB.TUI.Theme do
   @spec border_style(boolean()) :: Style.t()
   def border_style(true), do: focused_border_style()
   def border_style(false), do: unfocused_border_style()
+
+  @doc """
+  Style for the gauge filled portion — green.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.gauge_filled_style().fg
+      :green
+  """
+  @spec gauge_filled_style() :: Style.t()
+  def gauge_filled_style, do: %Style{fg: green()}
+
+  @doc """
+  Style for the gauge unfilled portion — dark gray.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.gauge_unfilled_style().fg
+      :dark_gray
+  """
+  @spec gauge_unfilled_style() :: Style.t()
+  def gauge_unfilled_style, do: %Style{fg: dim_border()}
+
+  @doc """
+  Style for simulated joint indicators — yellow.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.sim_style().fg
+      :yellow
+  """
+  @spec sim_style() :: Style.t()
+  def sim_style, do: %Style{fg: yellow()}
+
+  @doc """
+  Style for event path labels — blue.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.path_style().fg
+      :blue
+  """
+  @spec path_style() :: Style.t()
+  def path_style, do: %Style{fg: blue()}
+
+  @doc """
+  Bold style for ready commands — green.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.ready_style().fg
+      :green
+  """
+  @spec ready_style() :: Style.t()
+  def ready_style, do: %Style{fg: green(), modifiers: [:bold]}
+
+  @doc """
+  Style for blocked commands — dark gray.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.blocked_style().fg
+      :dark_gray
+  """
+  @spec blocked_style() :: Style.t()
+  def blocked_style, do: %Style{fg: dim_text()}
+
+  @doc """
+  Style for parameter values — magenta.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.param_value_style().fg
+      :magenta
+  """
+  @spec param_value_style() :: Style.t()
+  def param_value_style, do: %Style{fg: magenta()}
 end

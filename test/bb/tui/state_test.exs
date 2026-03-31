@@ -5,9 +5,18 @@ defmodule BB.TUI.StateTest do
   alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
 
+  describe "panels/0" do
+    test "returns the ordered panel list" do
+      assert State.panels() == [:safety, :commands, :joints, :events, :parameters]
+    end
+  end
+
   describe "cycle_panel/1" do
     test "cycles through panels in order" do
       state = Fixtures.sample_state(%{active_panel: :safety})
+      state = State.cycle_panel(state)
+      assert state.active_panel == :commands
+
       state = State.cycle_panel(state)
       assert state.active_panel == :joints
 
@@ -15,7 +24,7 @@ defmodule BB.TUI.StateTest do
       assert state.active_panel == :events
 
       state = State.cycle_panel(state)
-      assert state.active_panel == :commands
+      assert state.active_panel == :parameters
 
       state = State.cycle_panel(state)
       assert state.active_panel == :safety
@@ -105,6 +114,13 @@ defmodule BB.TUI.StateTest do
 
       assert length(state.events) == 100
     end
+
+    test "does not append when paused" do
+      state = Fixtures.sample_state(%{events_paused: true})
+      state = State.append_event(state, [:test], %{})
+
+      assert state.events == []
+    end
   end
 
   describe "scroll_down/1 and scroll_up/1" do
@@ -142,9 +158,77 @@ defmodule BB.TUI.StateTest do
     end
   end
 
-  describe "panels/0" do
-    test "returns the ordered panel list" do
-      assert State.panels() == [:safety, :joints, :events, :commands]
+  describe "toggle_events_pause/1" do
+    test "toggles pause state" do
+      state = Fixtures.sample_state(%{events_paused: false})
+      state = State.toggle_events_pause(state)
+      assert state.events_paused
+
+      state = State.toggle_events_pause(state)
+      refute state.events_paused
+    end
+  end
+
+  describe "clear_events/1" do
+    test "clears events and resets scroll" do
+      events = [{DateTime.utc_now(), [:test], %{}}]
+      state = Fixtures.sample_state(%{events: events, scroll_offset: 3})
+      state = State.clear_events(state)
+
+      assert state.events == []
+      assert state.scroll_offset == 0
+    end
+  end
+
+  describe "select_next_command/1 and select_prev_command/1" do
+    test "navigates command selection" do
+      commands = [%{name: :a}, %{name: :b}, %{name: :c}]
+      state = Fixtures.sample_state(%{commands: commands, command_selected: 0})
+
+      state = State.select_next_command(state)
+      assert state.command_selected == 1
+
+      state = State.select_next_command(state)
+      assert state.command_selected == 2
+
+      state = State.select_next_command(state)
+      assert state.command_selected == 2
+
+      state = State.select_prev_command(state)
+      assert state.command_selected == 1
+
+      state = State.select_prev_command(state)
+      assert state.command_selected == 0
+
+      state = State.select_prev_command(state)
+      assert state.command_selected == 0
+    end
+
+    test "select_next_command handles empty commands" do
+      state = Fixtures.sample_state(%{commands: [], command_selected: 0})
+      state = State.select_next_command(state)
+      assert state.command_selected == 0
+    end
+  end
+
+  describe "set_command_result/2" do
+    test "sets result and clears executing pid" do
+      state = Fixtures.sample_state(%{executing_command: self()})
+      state = State.set_command_result(state, {:ok, :done})
+
+      assert state.command_result == {:ok, :done}
+      assert state.executing_command == nil
+    end
+  end
+
+  describe "start_command/2" do
+    test "sets executing pid and clears previous result" do
+      pid = self()
+      state = Fixtures.sample_state(%{command_result: {:ok, :old}})
+      state = State.start_command(state, pid)
+
+      assert state.executing_command == pid
+      assert state.command_result == nil
     end
   end
 end

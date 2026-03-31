@@ -14,20 +14,27 @@ defmodule BB.TUI.Panels.Help do
   BB TUI Dashboard - Keyboard Shortcuts
 
   Global:
-    q         Quit
-    Tab       Cycle active panel
-    ?         Toggle this help
-    a         Arm robot
-    d         Disarm robot
-    f         Force disarm (error state only)
+    q           Quit
+    Tab         Cycle active panel
+    ?           Toggle this help
+    a           Arm robot
+    d           Disarm robot
+    f           Force disarm (error state only)
 
   Events panel:
-    j / Down  Scroll down
-    k / Up    Scroll up
+    j / Down    Scroll down
+    k / Up      Scroll up
+    p           Pause / resume stream
+    c           Clear all events
 
   Commands panel:
-    Up/Down   Select command
-    Enter     Execute command
+    j / Down    Select next command
+    k / Up      Select previous command
+    Enter       Execute selected command
+
+  Joints panel:
+    j / Down    Scroll down
+    k / Up      Scroll up
 
   Press any key to close\
   """

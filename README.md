@@ -1,9 +1,9 @@
 # BB.TUI
 
-[![Hex.pm](https://img.shields.io/hexpm/v/bb_tui.svg)](https://hex.pm/packages/bb_tui)
-[![Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/bb_tui)
-[![CI](https://github.com/beam-bots/bb_tui/actions/workflows/ci.yml/badge.svg)](https://github.com/beam-bots/bb_tui/actions/workflows/ci.yml)
-[![License](https://img.shields.io/hexpm/l/bb_tui.svg)](https://github.com/beam-bots/bb_tui/blob/main/LICENSE)
+<!-- [![Hex.pm](https://img.shields.io/hexpm/v/bb_tui.svg)](https://hex.pm/packages/bb_tui) -->
+<!-- [![Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/bb_tui) -->
+<!-- [![CI](https://github.com/beam-bots/bb_tui/actions/workflows/ci.yml/badge.svg)](https://github.com/beam-bots/bb_tui/actions/workflows/ci.yml) -->
+<!-- [![License](https://img.shields.io/hexpm/l/bb_tui.svg)](https://github.com/beam-bots/bb_tui/blob/main/LICENSE) -->
 
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
 

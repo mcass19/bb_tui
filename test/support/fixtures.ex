@@ -18,7 +18,11 @@ defmodule BB.TUI.Test.Fixtures do
       scroll_offset: 0,
       show_help: false,
       confirm_force_disarm: false,
-      throbber_step: 0
+      throbber_step: 0,
+      events_paused: false,
+      command_selected: 0,
+      command_result: nil,
+      executing_command: nil
     }
 
     struct!(BB.TUI.State, Map.merge(defaults, overrides))
@@ -64,6 +68,16 @@ defmodule BB.TUI.Test.Fixtures do
   end
 
   @doc """
+  Returns sample commands for testing.
+  """
+  def sample_commands do
+    [
+      %{name: :home, allowed_states: [:idle], arguments: [], handler: SomeHandler},
+      %{name: :calibrate, allowed_states: [:idle, :armed], arguments: [], handler: SomeHandler}
+    ]
+  end
+
+  @doc """
   Sets up Mimic stubs for all BB modules with sensible defaults.
   Call this in test setup blocks.
   """
@@ -83,6 +97,7 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Robot.Runtime, :positions, fn _robot -> %{shoulder: 0.0, elbow: 45.0} end)
     Mimic.stub(BB.Robot.Runtime, :state, fn _robot -> runtime_state end)
     Mimic.stub(BB.Parameter, :list, fn _robot, _opts -> [] end)
+    Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> [] end)
 
     :ok
   end

@@ -53,11 +53,6 @@ defmodule Mix.Tasks.Bb.Tui do
 
     Mix.Task.run("app.start")
 
-    {:ok, pid} = BB.TUI.start(robot)
-    ref = Process.monitor(pid)
-
-    receive do
-      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
-    end
+    BB.TUI.run(robot)
   end
 end

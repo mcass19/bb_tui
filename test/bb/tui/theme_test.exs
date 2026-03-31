@@ -10,6 +10,8 @@ defmodule BB.TUI.ThemeTest do
       assert Theme.red() == :red
       assert Theme.yellow() == :yellow
       assert Theme.cyan() == :cyan
+      assert Theme.blue() == :blue
+      assert Theme.magenta() == :magenta
       assert Theme.dim_border() == :dark_gray
       assert Theme.dim_text() == :dark_gray
     end
@@ -43,6 +45,36 @@ defmodule BB.TUI.ThemeTest do
       style = Theme.highlight_style()
       assert style.fg == :cyan
       assert :bold in style.modifiers
+    end
+
+    test "gauge_filled_style is green" do
+      assert Theme.gauge_filled_style().fg == :green
+    end
+
+    test "gauge_unfilled_style is dark gray" do
+      assert Theme.gauge_unfilled_style().fg == :dark_gray
+    end
+
+    test "sim_style is yellow" do
+      assert Theme.sim_style().fg == :yellow
+    end
+
+    test "path_style is blue" do
+      assert Theme.path_style().fg == :blue
+    end
+
+    test "ready_style is bold green" do
+      style = Theme.ready_style()
+      assert style.fg == :green
+      assert :bold in style.modifiers
+    end
+
+    test "blocked_style is dim" do
+      assert Theme.blocked_style().fg == :dark_gray
+    end
+
+    test "param_value_style is magenta" do
+      assert Theme.param_value_style().fg == :magenta
     end
   end
 

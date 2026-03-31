@@ -1,7 +1,10 @@
 defmodule BB.TUI.Panels.Safety do
   @moduledoc """
-  Safety panel — displays the robot's safety state with visual indicators
-  and keyboard hints for arm/disarm controls.
+  Safety panel — displays safety state, runtime state, and control hints.
+
+  Combines safety status indicator, runtime state, and keyboard shortcuts
+  in a single left-sidebar panel. When the robot is disarming, shows a
+  throbber animation.
 
   Pure function — takes state, returns a widget struct.
   """
@@ -13,17 +16,17 @@ defmodule BB.TUI.Panels.Safety do
   alias ExRatatui.Widgets.Throbber
 
   @doc """
-  Renders the safety panel as a Paragraph widget.
+  Renders the safety panel with status indicator, runtime state, and key hints.
 
   When the robot is in the `:disarming` state, returns a Throbber widget
   instead to show the animated transition indicator.
 
   ## Examples
 
-      iex> state = %BB.TUI.State{safety_state: :armed}
+      iex> state = %BB.TUI.State{safety_state: :armed, runtime_state: :idle}
       iex> %ExRatatui.Widgets.Paragraph{} = BB.TUI.Panels.Safety.render(state, true)
 
-      iex> state = %BB.TUI.State{safety_state: :disarming, throbber_step: 0}
+      iex> state = %BB.TUI.State{safety_state: :disarming, runtime_state: :disarming, throbber_step: 0}
       iex> %ExRatatui.Widgets.Throbber{} = BB.TUI.Panels.Safety.render(state, false)
   """
   @spec render(State.t(), boolean()) :: struct()
@@ -38,16 +41,25 @@ defmodule BB.TUI.Panels.Safety do
     }
   end
 
-  def render(%State{safety_state: safety_state}, focused?) do
-    {symbol, label, style} = state_display(safety_state)
+  def render(%State{} = state, focused?) do
+    {symbol, label, style} = state_display(state.safety_state)
+    runtime_label = format_runtime(state.runtime_state)
 
     text = """
     #{symbol} #{label}
 
+    Runtime: #{runtime_label}
+
     [a] Arm
-    [d] Disarm
-    [f] Force Disarm\
+    [d] Disarm\
     """
+
+    text =
+      if state.safety_state == :error do
+        text <> "\n[f] Force Disarm"
+      else
+        text
+      end
 
     %Paragraph{
       text: text,
@@ -60,6 +72,12 @@ defmodule BB.TUI.Panels.Safety do
   defp state_display(:disarmed), do: {"\u{25CB}", "DISARMED", Theme.disarmed_style()}
   defp state_display(:error), do: {"\u{2716}", "ERROR", Theme.error_style()}
   defp state_display(_other), do: {"\u{25CB}", "UNKNOWN", Theme.disarmed_style()}
+
+  defp format_runtime(:idle), do: "Idle"
+  defp format_runtime(:executing), do: "Executing..."
+  defp format_runtime(:disarmed), do: "Disarmed"
+  defp format_runtime(:error), do: "Error"
+  defp format_runtime(other), do: to_string(other)
 
   defp block(focused?) do
     %Block{

@@ -7,5 +7,6 @@ Mimic.copy(BB.Robot.Joint)
 Mimic.copy(BB.Robot.Runtime)
 Mimic.copy(BB.PubSub)
 Mimic.copy(BB.Parameter)
+Mimic.copy(BB.Dsl.Info)
 
 ExUnit.start()

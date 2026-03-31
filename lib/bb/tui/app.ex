@@ -5,6 +5,22 @@ defmodule BB.TUI.App do
   Renders the dashboard layout and handles keyboard events and PubSub messages
   from the BB robot. All state transitions are delegated to `BB.TUI.State`.
 
+  ## Layout
+
+      ┌ Safety ────────┬─ Joint Control ──────────────────────────────┐
+      │ ● ARMED        │ Joint       Type  Position  Range           │
+      │ Runtime: Idle  │ elbow       rev   -63.8°    ████████░░░░░░  │
+      │ [a] Arm        │ gripper SIM pri    30.6mm   ███░░░░░░░░░░░  │
+      │ [d] Disarm     │ ...                                         │
+      ├ Commands ──────┤                                             │
+      │ ▶ home   Ready │                                             │
+      │   calibrate    │                                             │
+      ├ Events (47) ───┴── Parameters ───────────────────────────────┤
+      │ 18:23:12 sensor.sim  │ speed              100               │
+      │ 18:23:11 state_m...  │ controller.kp      0.5               │
+      └──────────────────────┴───────────────────────────────────────┘
+       Robot | ● Armed | idle | [q]Quit [Tab]Panel [?]Help
+
   ## Callbacks
 
     * `mount/1` — validates the robot module, subscribes to PubSub, snapshots ETS state
@@ -20,6 +36,8 @@ defmodule BB.TUI.App do
   alias BB.TUI.State
   alias ExRatatui.Layout
   alias ExRatatui.Layout.Rect
+
+  @command_timeout Application.compile_env(:bb_tui, :command_timeout, 30_000)
 
   # ── Callbacks ──────────────────────────────────────────────
 
@@ -46,6 +64,8 @@ defmodule BB.TUI.App do
       |> Enum.filter(&BB.Robot.Joint.movable?/1)
       |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0}})
 
+    commands = discover_commands(robot)
+
     state = %State{
       robot: robot,
       robot_struct: robot_struct,
@@ -54,7 +74,7 @@ defmodule BB.TUI.App do
       joints: joints,
       events: [],
       parameters: BB.Parameter.list(robot, []),
-      commands: [],
+      commands: commands,
       active_panel: :safety,
       scroll_offset: 0,
       show_help: false,
@@ -68,37 +88,51 @@ defmodule BB.TUI.App do
   def render(state, frame) do
     full = %Rect{x: 0, y: 0, width: frame.width, height: frame.height}
 
-    [top, bottom, status] =
+    # Main area + status bar
+    [main, status_bar_area] =
       Layout.split(full, :vertical, [
-        {:percentage, 40},
-        {:min, 5},
+        {:min, 0},
         {:length, 1}
       ])
 
-    [safety_area, runtime_area, joints_area] =
-      Layout.split(top, :horizontal, [
-        {:percentage, 20},
-        {:percentage, 20},
-        {:percentage, 60}
+    # Top section (60%) + bottom section (40%)
+    [top, bottom] =
+      Layout.split(main, :vertical, [
+        {:percentage, 60},
+        {:percentage, 40}
       ])
 
-    [events_area, commands_area] =
+    # Top: left sidebar (25%) + joints (75%)
+    [left_col, joints_area] =
+      Layout.split(top, :horizontal, [
+        {:percentage, 25},
+        {:percentage, 75}
+      ])
+
+    # Left sidebar: safety (55%) + commands (45%)
+    [safety_area, commands_area] =
+      Layout.split(left_col, :vertical, [
+        {:percentage, 55},
+        {:percentage, 45}
+      ])
+
+    # Bottom: events (55%) + parameters (45%)
+    [events_area, params_area] =
       Layout.split(bottom, :horizontal, [
-        {:percentage, 50},
-        {:percentage, 50}
+        {:percentage, 55},
+        {:percentage, 45}
       ])
 
     panels = [
       {Panels.Safety.render(state, state.active_panel == :safety), safety_area},
-      {Panels.Runtime.render(state), runtime_area},
+      {Panels.Commands.render(state, state.active_panel == :commands), commands_area},
       {Panels.Joints.render(state, state.active_panel == :joints), joints_area},
       {Panels.Events.render(state, state.active_panel == :events), events_area},
-      {Panels.Commands.render(state, state.active_panel == :commands), commands_area},
-      {Panels.StatusBar.render(state), status}
+      {Panels.Parameters.render(state, state.active_panel == :parameters), params_area},
+      {Panels.StatusBar.render(state), status_bar_area}
     ]
 
-    panels = maybe_add_popup(panels, state, full)
-    panels
+    maybe_add_popup(panels, state, full)
   end
 
   @impl true
@@ -157,7 +191,7 @@ defmodule BB.TUI.App do
     end
   end
 
-  # ── Panel-scoped keys ──────────────────────────────────────
+  # ── Events panel keys ──────────────────────────────────────
   def handle_event(
         %ExRatatui.Event.Key{code: code, kind: "press"},
         %{active_panel: :events} = state
@@ -174,6 +208,62 @@ defmodule BB.TUI.App do
     {:noreply, State.scroll_up(state)}
   end
 
+  def handle_event(
+        %ExRatatui.Event.Key{code: "p", kind: "press"},
+        %{active_panel: :events} = state
+      ) do
+    {:noreply, State.toggle_events_pause(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "c", kind: "press"},
+        %{active_panel: :events} = state
+      ) do
+    {:noreply, State.clear_events(state)}
+  end
+
+  # ── Commands panel keys ────────────────────────────────────
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :commands} = state
+      )
+      when code in ["j", "down"] do
+    {:noreply, State.select_next_command(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :commands} = state
+      )
+      when code in ["k", "up"] do
+    {:noreply, State.select_prev_command(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "enter", kind: "press"},
+        %{active_panel: :commands} = state
+      ) do
+    execute_selected_command(state)
+  end
+
+  # ── Joints panel keys ──────────────────────────────────────
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :joints} = state
+      )
+      when code in ["j", "down"] do
+    {:noreply, State.scroll_down(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :joints} = state
+      )
+      when code in ["k", "up"] do
+    {:noreply, State.scroll_up(state)}
+  end
+
+  # ── Catch-all ──────────────────────────────────────────────
   def handle_event(_event, state) do
     {:noreply, state}
   end
@@ -223,6 +313,10 @@ defmodule BB.TUI.App do
     {:noreply, State.append_event(state, path, msg)}
   end
 
+  def handle_info({:command_result, result}, state) do
+    {:noreply, State.set_command_result(state, result)}
+  end
+
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -233,12 +327,63 @@ defmodule BB.TUI.App do
   # ── Helpers ────────────────────────────────────────────────
 
   defp maybe_add_popup(panels, %{show_help: true}, full) do
-    [{Panels.Help.render(), full} | panels]
+    panels ++ [{Panels.Help.render(), full}]
   end
 
   defp maybe_add_popup(panels, %{confirm_force_disarm: true}, full) do
-    [{Panels.ForceDisarm.render(), full} | panels]
+    panels ++ [{Panels.ForceDisarm.render(), full}]
   end
 
   defp maybe_add_popup(panels, _state, _full), do: panels
+
+  defp discover_commands(robot) do
+    if Code.ensure_loaded?(BB.Dsl.Info) and function_exported?(BB.Dsl.Info, :commands, 1) do
+      BB.Dsl.Info.commands(robot)
+    else
+      []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp execute_selected_command(%State{commands: commands, command_selected: idx} = state) do
+    case Enum.at(commands, idx) do
+      nil ->
+        {:noreply, state}
+
+      cmd ->
+        if Panels.Commands.command_ready?(cmd, state.runtime_state) and
+             state.executing_command == nil do
+          tui_pid = self()
+
+          pid =
+            spawn(fn ->
+              result = BB.Robot.Runtime.execute(state.robot, cmd.name, %{})
+
+              case result do
+                {:ok, cmd_pid} ->
+                  ref = Process.monitor(cmd_pid)
+
+                  receive do
+                    {:DOWN, ^ref, :process, ^cmd_pid, :normal} ->
+                      send(tui_pid, {:command_result, {:ok, :completed}})
+
+                    {:DOWN, ^ref, :process, ^cmd_pid, reason} ->
+                      send(tui_pid, {:command_result, {:error, reason}})
+                  after
+                    @command_timeout ->
+                      send(tui_pid, {:command_result, {:error, :timeout}})
+                  end
+
+                {:error, reason} ->
+                  send(tui_pid, {:command_result, {:error, reason}})
+              end
+            end)
+
+          {:noreply, State.start_command(state, pid)}
+        else
+          {:noreply, state}
+        end
+    end
+  end
 end

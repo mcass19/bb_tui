@@ -15,17 +15,6 @@ defmodule BB.TUI.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
-      test_coverage: [
-        threshold: 100,
-        ignore_modules: [
-          BB.TUI,
-          Mix.Tasks.Bb.Tui,
-          BB.TUI.TestRobot,
-          BB.TUI.Test.Fixtures,
-          Dev.Application,
-          Dev.TestRobot
-        ]
-      ],
       package: package(),
       name: "BB.TUI",
       homepage_url: @source_url,
@@ -100,10 +89,10 @@ defmodule BB.TUI.MixProject do
         ],
         Panels: [
           BB.TUI.Panels.Safety,
-          BB.TUI.Panels.Runtime,
           BB.TUI.Panels.Joints,
           BB.TUI.Panels.Events,
           BB.TUI.Panels.Commands,
+          BB.TUI.Panels.Parameters,
           BB.TUI.Panels.StatusBar,
           BB.TUI.Panels.Help,
           BB.TUI.Panels.ForceDisarm

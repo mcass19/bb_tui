@@ -12,7 +12,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, true)
 
       assert %Table{} = widget
-      assert widget.header == ["Joint", "Position", "Min", "Max"]
+      assert widget.header == ["Joint", "Type", "Position", "Range"]
       assert length(widget.rows) == 2
     end
 
@@ -24,34 +24,12 @@ defmodule BB.TUI.Panels.JointsTest do
       assert hd(first_row) == "elbow"
     end
 
-    test "formats positions with two decimals" do
-      state = Fixtures.sample_state()
-      widget = Joints.render(state, false)
-
-      elbow_row = Enum.find(widget.rows, &(hd(&1) == "elbow"))
-      assert Enum.at(elbow_row, 1) == "45.00"
-    end
-
-    test "shows limits from joint data" do
-      state = Fixtures.sample_state()
-      widget = Joints.render(state, false)
-
-      shoulder_row = Enum.find(widget.rows, &(hd(&1) == "shoulder"))
-      assert Enum.at(shoulder_row, 2) == "-90.00"
-      assert Enum.at(shoulder_row, 3) == "90.00"
-    end
-
-    test "focused panel gets highlighted border" do
-      state = Fixtures.sample_state()
-      widget = Joints.render(state, true)
-      assert widget.block.border_style.fg == :cyan
-    end
-
-    test "handles joints without limits" do
+    test "formats revolute positions in degrees" do
+      # 45.0 radians in the fixture is the raw value; let's use a known radian
       joints = %{
-        wrist: %{
-          joint: %{name: :wrist, type: :revolute},
-          position: 10.0
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.57, upper: 1.57}},
+          position: :math.pi() / 2
         }
       }
 
@@ -59,15 +37,15 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 2) == "-"
-      assert Enum.at(row, 3) == "-"
+      assert Enum.at(row, 1) == "rev"
+      assert Enum.at(row, 2) == "90.0\u00B0"
     end
 
-    test "formats integer positions" do
+    test "formats prismatic positions in millimeters" do
       joints = %{
-        wrist: %{
-          joint: %{name: :wrist, type: :revolute, limit: %{lower: 0, upper: 100}},
-          position: 42
+        gripper: %{
+          joint: %{name: :gripper, type: :prismatic, limit: %{lower: 0.015, upper: 0.037}},
+          position: 0.030
         }
       }
 
@@ -75,7 +53,66 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 1) == "42"
+      assert Enum.at(row, 1) == "pri"
+      assert Enum.at(row, 2) == "30.0 mm"
+    end
+
+    test "shows position bar for joints with limits" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.57, upper: 1.57}},
+          position: 0.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      bar = Enum.at(row, 3)
+      assert String.length(bar) == 16
+      assert bar =~ "\u{2588}"
+      assert bar =~ "\u{2591}"
+    end
+
+    test "shows SIM tag for simulated joints" do
+      joints = %{
+        wrist: %{
+          joint: %{
+            name: :wrist,
+            type: :revolute,
+            actuator: nil,
+            limit: %{lower: -1.0, upper: 1.0}
+          },
+          position: 0.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert hd(row) == "wrist SIM"
+    end
+
+    test "does not show SIM tag for joints with actuator" do
+      joints = %{
+        wrist: %{
+          joint: %{
+            name: :wrist,
+            type: :revolute,
+            actuator: :some_actuator,
+            limit: %{lower: -1.0, upper: 1.0}
+          },
+          position: 0.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert hd(row) == "wrist"
     end
 
     test "handles nil position" do
@@ -90,7 +127,91 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 1) == "-"
+      assert Enum.at(row, 2) == "N/A"
+      assert Enum.at(row, 3) == ""
+    end
+
+    test "handles continuous joints without bar" do
+      joints = %{
+        wheel: %{
+          joint: %{name: :wheel, type: :continuous},
+          position: 3.14
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert Enum.at(row, 1) == "con"
+      assert Enum.at(row, 3) == ""
+    end
+
+    test "handles joints without limits" do
+      joints = %{
+        wrist: %{
+          joint: %{name: :wrist, type: :revolute},
+          position: 1.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert Enum.at(row, 3) == ""
+    end
+
+    test "focused panel gets highlighted border" do
+      state = Fixtures.sample_state()
+      widget = Joints.render(state, true)
+      assert widget.block.border_style.fg == :cyan
+    end
+
+    test "handles integer position for revolute joints" do
+      joints = %{
+        wrist: %{
+          joint: %{name: :wrist, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          position: 0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert Enum.at(row, 2) == "0.0\u00B0"
+    end
+
+    test "handles integer position for prismatic joints" do
+      joints = %{
+        gripper: %{
+          joint: %{name: :gripper, type: :prismatic, limit: %{lower: 0, upper: 1}},
+          position: 0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert Enum.at(row, 2) == "0.0 mm"
+    end
+  end
+
+  describe "format_type/1" do
+    test "handles unknown joint type" do
+      assert Joints.format_type(%{}) == "-"
+    end
+
+    test "handles fixed joints" do
+      assert Joints.format_type(%{type: :fixed}) == "fix"
+    end
+  end
+
+  describe "format_name/2" do
+    test "does not show SIM when no actuator key exists" do
+      assert Joints.format_name(:wrist, %{name: :wrist, type: :revolute}) == "wrist"
     end
   end
 end

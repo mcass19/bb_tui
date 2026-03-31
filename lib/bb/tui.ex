@@ -8,8 +8,8 @@ defmodule BB.TUI do
 
   ## Usage
 
-      # Programmatic — from IEx when robot is already running
-      BB.TUI.start(MyApp.Robot)
+      # Interactive — from IEx when robot is already running
+      BB.TUI.run(MyApp.Robot)
 
       # Supervised — add to your app's supervision tree
       children = [
@@ -23,10 +23,36 @@ defmodule BB.TUI do
   """
 
   @doc """
-  Starts the TUI dashboard for the given robot module.
+  Runs the TUI dashboard interactively, blocking until the user quits.
 
-  The robot must already be supervised and running. This function
-  starts the TUI as a linked process.
+  Use this from IEx or scripts. The terminal is taken over for the
+  duration and restored when the TUI exits (press `q` to quit).
+
+  ## Options
+
+    * `:test_mode` - `{width, height}` tuple for headless testing (optional)
+
+  """
+  @spec run(module(), keyword()) :: :ok | {:error, term()}
+  def run(robot, opts \\ []) when is_atom(robot) do
+    case start(robot, opts) do
+      {:ok, pid} ->
+        ref = Process.monitor(pid)
+
+        receive do
+          {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+        end
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc """
+  Starts the TUI dashboard as a linked process.
+
+  Use `run/2` for interactive use from IEx. Use `start/2` or the
+  child spec when adding to a supervision tree.
 
   ## Options
 

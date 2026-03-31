@@ -29,7 +29,11 @@ defmodule BB.TUI.State do
     scroll_offset: 0,
     show_help: false,
     confirm_force_disarm: false,
-    throbber_step: 0
+    throbber_step: 0,
+    events_paused: false,
+    command_selected: 0,
+    command_result: nil,
+    executing_command: nil
   ]
 
   @type t :: %__MODULE__{
@@ -42,14 +46,18 @@ defmodule BB.TUI.State do
           parameters: [{list(), term()}],
           commands: [term()],
           command_input: reference() | nil,
-          active_panel: :safety | :joints | :events | :commands,
+          active_panel: :safety | :commands | :joints | :events | :parameters,
           scroll_offset: non_neg_integer(),
           show_help: boolean(),
           confirm_force_disarm: boolean(),
-          throbber_step: non_neg_integer()
+          throbber_step: non_neg_integer(),
+          events_paused: boolean(),
+          command_selected: non_neg_integer(),
+          command_result: {:ok, term()} | {:error, term()} | nil,
+          executing_command: pid() | nil
         }
 
-  @panels [:safety, :joints, :events, :commands]
+  @panels [:safety, :commands, :joints, :events, :parameters]
 
   @doc """
   Returns the ordered list of panel names for tab cycling.
@@ -57,7 +65,7 @@ defmodule BB.TUI.State do
   ## Examples
 
       iex> BB.TUI.State.panels()
-      [:safety, :joints, :events, :commands]
+      [:safety, :commands, :joints, :events, :parameters]
   """
   @spec panels() :: [atom()]
   def panels, do: @panels
@@ -69,9 +77,9 @@ defmodule BB.TUI.State do
 
       iex> state = %BB.TUI.State{active_panel: :safety}
       iex> BB.TUI.State.cycle_panel(state).active_panel
-      :joints
+      :commands
 
-      iex> state = %BB.TUI.State{active_panel: :commands}
+      iex> state = %BB.TUI.State{active_panel: :parameters}
       iex> BB.TUI.State.cycle_panel(state).active_panel
       :safety
   """
@@ -187,9 +195,11 @@ defmodule BB.TUI.State do
   Appends an event to the event list, capping at #{@max_events}.
 
   Events are prepended (newest first) and the list is trimmed to
-  #{@max_events} entries.
+  #{@max_events} entries. When events are paused, the event is not appended.
   """
   @spec append_event(t(), list(), term()) :: t()
+  def append_event(%__MODULE__{events_paused: true} = state, _path, _message), do: state
+
   def append_event(%__MODULE__{events: events} = state, path, message) do
     event = {DateTime.utc_now(), path, message}
     %{state | events: Enum.take([event | events], @max_events)}
@@ -241,5 +251,107 @@ defmodule BB.TUI.State do
   @spec tick_throbber(t()) :: t()
   def tick_throbber(%__MODULE__{throbber_step: step} = state) do
     %{state | throbber_step: step + 1}
+  end
+
+  @doc """
+  Toggles the event stream pause state.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{events_paused: false}
+      iex> BB.TUI.State.toggle_events_pause(state).events_paused
+      true
+
+      iex> state = %BB.TUI.State{events_paused: true}
+      iex> BB.TUI.State.toggle_events_pause(state).events_paused
+      false
+  """
+  @spec toggle_events_pause(t()) :: t()
+  def toggle_events_pause(%__MODULE__{} = state) do
+    %{state | events_paused: !state.events_paused}
+  end
+
+  @doc """
+  Clears all events and resets scroll offset.
+
+  ## Examples
+
+      iex> events = [{~U[2026-01-01 00:00:00Z], [:test], %{}}]
+      iex> state = %BB.TUI.State{events: events, scroll_offset: 5}
+      iex> new_state = BB.TUI.State.clear_events(state)
+      iex> {new_state.events, new_state.scroll_offset}
+      {[], 0}
+  """
+  @spec clear_events(t()) :: t()
+  def clear_events(%__MODULE__{} = state) do
+    %{state | events: [], scroll_offset: 0}
+  end
+
+  @doc """
+  Selects the next command in the list.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{command_selected: 0, commands: [%{name: :a}, %{name: :b}]}
+      iex> BB.TUI.State.select_next_command(state).command_selected
+      1
+
+      iex> state = %BB.TUI.State{command_selected: 1, commands: [%{name: :a}, %{name: :b}]}
+      iex> BB.TUI.State.select_next_command(state).command_selected
+      1
+  """
+  @spec select_next_command(t()) :: t()
+  def select_next_command(%__MODULE__{command_selected: idx, commands: cmds} = state) do
+    max_idx = max(length(cmds) - 1, 0)
+    %{state | command_selected: min(idx + 1, max_idx)}
+  end
+
+  @doc """
+  Selects the previous command in the list.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{command_selected: 1}
+      iex> BB.TUI.State.select_prev_command(state).command_selected
+      0
+
+      iex> state = %BB.TUI.State{command_selected: 0}
+      iex> BB.TUI.State.select_prev_command(state).command_selected
+      0
+  """
+  @spec select_prev_command(t()) :: t()
+  def select_prev_command(%__MODULE__{command_selected: idx} = state) do
+    %{state | command_selected: max(idx - 1, 0)}
+  end
+
+  @doc """
+  Sets the command execution result.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{command_result: nil, executing_command: self()}
+      iex> new_state = BB.TUI.State.set_command_result(state, {:ok, :done})
+      iex> {new_state.command_result, new_state.executing_command}
+      {{:ok, :done}, nil}
+  """
+  @spec set_command_result(t(), {:ok, term()} | {:error, term()}) :: t()
+  def set_command_result(%__MODULE__{} = state, result) do
+    %{state | command_result: result, executing_command: nil}
+  end
+
+  @doc """
+  Marks a command as currently executing.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{executing_command: nil, command_result: {:ok, :old}}
+      iex> pid = self()
+      iex> new_state = BB.TUI.State.start_command(state, pid)
+      iex> {new_state.executing_command, new_state.command_result}
+      {pid, nil}
+  """
+  @spec start_command(t(), pid()) :: t()
+  def start_command(%__MODULE__{} = state, pid) do
+    %{state | executing_command: pid, command_result: nil}
   end
 end
