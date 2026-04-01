@@ -23,11 +23,11 @@ defmodule BB.TUI.Panels.Joints do
 
   ## Examples
 
-      iex> joints = %{shoulder: %{joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.57, upper: 1.57}}, position: 0.0}}
+      iex> joints = %{shoulder: %{joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}}, position: 0.0}}
       iex> state = %BB.TUI.State{joints: joints}
       iex> %ExRatatui.Widgets.Table{header: header} = BB.TUI.Panels.Joints.render(state, false)
       iex> header
-      ["Joint", "Type", "Position", "Range"]
+      ["Joint", "Type", "Position", "Target"]
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{joints: joints, joint_selected: selected}, focused?) do
@@ -45,12 +45,12 @@ defmodule BB.TUI.Panels.Joints do
 
     %Table{
       rows: rows,
-      header: ["Joint", "Type", "Position", "Range"],
+      header: ["Joint", "Type", "Position", "Target"],
       widths: [
-        {:percentage, 25},
-        {:percentage, 10},
         {:percentage, 20},
-        {:min, @bar_width + 2}
+        {:percentage, 8},
+        {:percentage, 15},
+        {:min, @bar_width + 14}
       ],
       selected: if(focused? and rows != [], do: selected),
       highlight_style: Theme.highlight_style(),
@@ -67,27 +67,22 @@ defmodule BB.TUI.Panels.Joints do
   @doc """
   Formats a joint name, appending SIM tag for simulated joints.
 
+  A joint is simulated when it has an empty actuators list.
+
   ## Examples
 
-      iex> BB.TUI.Panels.Joints.format_name(:elbow, %{actuator: nil})
+      iex> BB.TUI.Panels.Joints.format_name(:elbow, %{actuators: []})
       "elbow SIM"
 
-      iex> BB.TUI.Panels.Joints.format_name(:elbow, %{actuator: :some_actuator})
+      iex> BB.TUI.Panels.Joints.format_name(:elbow, %{actuators: [:motor]})
       "elbow"
 
       iex> BB.TUI.Panels.Joints.format_name(:elbow, %{})
       "elbow"
   """
   @spec format_name(atom(), map()) :: String.t()
-  def format_name(name, joint) do
-    base = to_string(name)
-
-    if Map.get(joint, :actuator) == nil and Map.has_key?(joint, :actuator) do
-      base <> " SIM"
-    else
-      base
-    end
-  end
+  def format_name(name, %{actuators: []}), do: to_string(name) <> " SIM"
+  def format_name(name, _joint), do: to_string(name)
 
   @doc """
   Formats the joint type as a short label.
@@ -146,14 +141,17 @@ defmodule BB.TUI.Panels.Joints do
   end
 
   @doc """
-  Builds a text-based position bar showing where the joint is within its limits.
+  Builds a text-based position bar with limit labels showing where the joint
+  is within its range. Format: `lower_label bar upper_label`
 
   ## Examples
 
-      iex> joint = %{type: :revolute, limit: %{lower: -1.5708, upper: 1.5708}}
+      iex> joint = %{type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}}
       iex> bar = BB.TUI.Panels.Joints.position_bar(0.0, joint)
-      iex> String.length(bar)
-      16
+      iex> bar =~ "\u{25CF}"
+      true
+      iex> bar =~ "-90"
+      true
 
       iex> BB.TUI.Panels.Joints.position_bar(0.0, %{type: :continuous})
       ""
@@ -167,16 +165,51 @@ defmodule BB.TUI.Panels.Joints do
       {lower, upper} when upper > lower ->
         ratio = (pos - lower) / (upper - lower)
         ratio = max(0.0, min(1.0, ratio))
-        filled = round(ratio * @bar_width)
-        unfilled = @bar_width - filled
-        String.duplicate("\u{2588}", filled) <> String.duplicate("\u{2591}", unfilled)
+        marker_pos = round(ratio * (@bar_width - 1))
+
+        bar =
+          String.duplicate("\u{2500}", marker_pos) <>
+            "\u{25CF}" <>
+            String.duplicate("\u{2500}", @bar_width - 1 - marker_pos)
+
+        low_label = format_limit(lower, joint)
+        high_label = format_limit(upper, joint)
+        "#{low_label} #{bar} #{high_label}"
 
       _ ->
         ""
     end
   end
 
-  defp get_limits(%{limit: %{lower: lower, upper: upper}}), do: {lower, upper}
+  @doc """
+  Formats a joint limit value in human-readable units (degrees or mm).
+
+  ## Examples
+
+      iex> BB.TUI.Panels.Joints.format_limit(1.5708, %{type: :revolute})
+      "90"
+
+      iex> BB.TUI.Panels.Joints.format_limit(-1.5708, %{type: :revolute})
+      "-90"
+
+      iex> BB.TUI.Panels.Joints.format_limit(0.037, %{type: :prismatic})
+      "37"
+  """
+  @spec format_limit(number(), map()) :: String.t()
+  def format_limit(val, %{type: :prismatic}) do
+    mm = round(val * 1000)
+    Integer.to_string(mm)
+  end
+
+  def format_limit(val, _joint) do
+    degrees = round(val * 180.0 / :math.pi())
+    Integer.to_string(degrees)
+  end
+
+  defp get_limits(%{limits: %{lower: lower, upper: upper}})
+       when not is_nil(lower) and not is_nil(upper),
+       do: {lower, upper}
+
   defp get_limits(_), do: nil
 
   defp float_to_str(val) when is_float(val), do: :erlang.float_to_binary(val, decimals: 1)

@@ -29,11 +29,24 @@ defmodule Mix.Tasks.Bb.Tui do
 
     * `j` / `Down` — scroll down
     * `k` / `Up` — scroll up
+    * `Enter` — show event details
+    * `p` — pause / resume stream
+    * `c` — clear events
 
   ### Commands panel
 
-    * `Up` / `Down` — select command
-    * `Enter` — execute command
+    * `j` / `Down` — select next command
+    * `k` / `Up` — select previous command
+    * `Enter` — execute selected command
+
+  ### Joints panel
+
+    * `j` / `Down` — select next joint
+    * `k` / `Up` — select previous joint
+    * `l` / `Right` — increase position (1% step)
+    * `h` / `Left` — decrease position (1% step)
+    * `L` — increase position (10% step)
+    * `H` — decrease position (10% step)
   """
 
   use Mix.Task

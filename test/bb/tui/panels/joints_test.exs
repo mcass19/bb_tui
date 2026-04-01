@@ -12,7 +12,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, true)
 
       assert %Table{} = widget
-      assert widget.header == ["Joint", "Type", "Position", "Range"]
+      assert widget.header == ["Joint", "Type", "Position", "Target"]
       assert length(widget.rows) == 2
     end
 
@@ -28,7 +28,7 @@ defmodule BB.TUI.Panels.JointsTest do
       # 45.0 radians in the fixture is the raw value; let's use a known radian
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.57, upper: 1.57}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}},
           position: :math.pi() / 2
         }
       }
@@ -44,7 +44,7 @@ defmodule BB.TUI.Panels.JointsTest do
     test "formats prismatic positions in millimeters" do
       joints = %{
         gripper: %{
-          joint: %{name: :gripper, type: :prismatic, limit: %{lower: 0.015, upper: 0.037}},
+          joint: %{name: :gripper, type: :prismatic, limits: %{lower: 0.015, upper: 0.037}},
           position: 0.030
         }
       }
@@ -60,7 +60,7 @@ defmodule BB.TUI.Panels.JointsTest do
     test "shows position bar for joints with limits" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.57, upper: 1.57}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}},
           position: 0.0
         }
       }
@@ -70,9 +70,11 @@ defmodule BB.TUI.Panels.JointsTest do
 
       row = hd(widget.rows)
       bar = Enum.at(row, 3)
-      assert String.length(bar) == 16
-      assert bar =~ "\u{2588}"
-      assert bar =~ "\u{2591}"
+      # Marker and line chars with limit labels
+      assert bar =~ "\u{25CF}"
+      assert bar =~ "\u{2500}"
+      assert bar =~ "-90"
+      assert bar =~ "90"
     end
 
     test "shows SIM tag for simulated joints" do
@@ -81,8 +83,8 @@ defmodule BB.TUI.Panels.JointsTest do
           joint: %{
             name: :wrist,
             type: :revolute,
-            actuator: nil,
-            limit: %{lower: -1.0, upper: 1.0}
+            actuators: [],
+            limits: %{lower: -1.0, upper: 1.0}
           },
           position: 0.0
         }
@@ -101,8 +103,8 @@ defmodule BB.TUI.Panels.JointsTest do
           joint: %{
             name: :wrist,
             type: :revolute,
-            actuator: :some_actuator,
-            limit: %{lower: -1.0, upper: 1.0}
+            actuators: [:some_actuator],
+            limits: %{lower: -1.0, upper: 1.0}
           },
           position: 0.0
         }
@@ -196,7 +198,7 @@ defmodule BB.TUI.Panels.JointsTest do
     test "handles integer position for revolute joints" do
       joints = %{
         wrist: %{
-          joint: %{name: :wrist, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :wrist, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0
         }
       }
@@ -211,7 +213,7 @@ defmodule BB.TUI.Panels.JointsTest do
     test "handles integer position for prismatic joints" do
       joints = %{
         gripper: %{
-          joint: %{name: :gripper, type: :prismatic, limit: %{lower: 0, upper: 1}},
+          joint: %{name: :gripper, type: :prismatic, limits: %{lower: 0, upper: 1}},
           position: 0
         }
       }

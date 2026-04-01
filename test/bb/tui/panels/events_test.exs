@@ -103,4 +103,50 @@ defmodule BB.TUI.Panels.EventsTest do
       assert result == ":raw_atom"
     end
   end
+
+  describe "format_event_details/1" do
+    test "formats struct payload with type and fields" do
+      # Use a standard library struct to test the struct payload path
+      uri = %URI{scheme: "https", host: "example.com"}
+
+      event = {~U[2026-01-15 18:23:12.000Z], [:test], %{payload: uri}}
+
+      details = Events.format_event_details(event)
+
+      assert is_list(details)
+      # type line with module name
+      assert Enum.any?(details, &(&1 =~ "URI"))
+      # field lines
+      assert Enum.any?(details, &(&1 =~ "scheme"))
+      assert Enum.any?(details, &(&1 =~ "host"))
+    end
+
+    test "formats plain map payload" do
+      event = {~U[2026-01-15 18:23:12.000Z], [:test], %{payload: %{foo: 1, bar: 2}}}
+      details = Events.format_event_details(event)
+
+      assert is_list(details)
+      assert Enum.any?(details, &(&1 =~ "bar"))
+      assert Enum.any?(details, &(&1 =~ "foo"))
+    end
+
+    test "formats non-map message" do
+      event = {~U[2026-01-15 18:23:12.000Z], [:test], :raw_atom}
+      details = Events.format_event_details(event)
+
+      assert is_list(details)
+      assert Enum.any?(details, &(&1 =~ "raw_atom"))
+    end
+
+    test "formats list values inside payload" do
+      event =
+        {~U[2026-01-15 18:23:12.000Z], [:test],
+         %{payload: %{positions: [1.5, 2.3], names: [:a, :b]}}}
+
+      details = Events.format_event_details(event)
+
+      assert Enum.any?(details, &(&1 =~ "1.500"))
+      assert Enum.any?(details, &(&1 =~ ":a"))
+    end
+  end
 end

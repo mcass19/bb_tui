@@ -36,8 +36,8 @@ defmodule BB.TUI.Test.Fixtures do
     %{
       name: BB.TUI.TestRobot,
       joints: [
-        %{name: :shoulder, type: :revolute, limit: %{lower: -90.0, upper: 90.0}},
-        %{name: :elbow, type: :revolute, limit: %{lower: 0.0, upper: 135.0}}
+        %{name: :shoulder, type: :revolute, limits: %{lower: -90.0, upper: 90.0}},
+        %{name: :elbow, type: :revolute, limits: %{lower: 0.0, upper: 135.0}}
       ]
     }
   end
@@ -48,11 +48,11 @@ defmodule BB.TUI.Test.Fixtures do
   def sample_joints do
     %{
       shoulder: %{
-        joint: %{name: :shoulder, type: :revolute, limit: %{lower: -90.0, upper: 90.0}},
+        joint: %{name: :shoulder, type: :revolute, limits: %{lower: -90.0, upper: 90.0}},
         position: 0.0
       },
       elbow: %{
-        joint: %{name: :elbow, type: :revolute, limit: %{lower: 0.0, upper: 135.0}},
+        joint: %{name: :elbow, type: :revolute, limits: %{lower: 0.0, upper: 135.0}},
         position: 45.0
       }
     }
@@ -63,8 +63,8 @@ defmodule BB.TUI.Test.Fixtures do
   """
   def sample_joint_list do
     [
-      %{name: :shoulder, type: :revolute, limit: %{lower: -90.0, upper: 90.0}},
-      %{name: :elbow, type: :revolute, limit: %{lower: 0.0, upper: 135.0}}
+      %{name: :shoulder, type: :revolute, limits: %{lower: -90.0, upper: 90.0}},
+      %{name: :elbow, type: :revolute, limits: %{lower: 0.0, upper: 135.0}}
     ]
   end
 

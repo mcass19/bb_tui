@@ -307,12 +307,12 @@ defmodule BB.TUI.StateTest do
 
   describe "joint_step/1" do
     test "computes step from limits" do
-      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
       assert State.joint_step(joint) == 0.02
     end
 
     test "computes step from wide limits" do
-      joint = %{limit: %{lower: 0.0, upper: 100.0}}
+      joint = %{limits: %{lower: 0.0, upper: 100.0}}
       assert State.joint_step(joint) == 1.0
     end
 
@@ -324,17 +324,17 @@ defmodule BB.TUI.StateTest do
 
   describe "clamp_position/2" do
     test "clamps above upper limit" do
-      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
       assert State.clamp_position(2.0, joint) == 1.0
     end
 
     test "clamps below lower limit" do
-      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
       assert State.clamp_position(-2.0, joint) == -1.0
     end
 
     test "passes through within limits" do
-      joint = %{limit: %{lower: -1.0, upper: 1.0}}
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
       assert State.clamp_position(0.5, joint) == 0.5
     end
 

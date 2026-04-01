@@ -32,6 +32,7 @@ defmodule BB.TUI.State do
     confirm_force_disarm: false,
     throbber_step: 0,
     events_paused: false,
+    show_event_detail: false,
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
@@ -55,6 +56,7 @@ defmodule BB.TUI.State do
           confirm_force_disarm: boolean(),
           throbber_step: non_neg_integer(),
           events_paused: boolean(),
+          show_event_detail: boolean(),
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
           executing_command: pid() | nil,
@@ -324,6 +326,52 @@ defmodule BB.TUI.State do
   end
 
   @doc """
+  Toggles the event detail popup for the currently selected event.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{show_event_detail: false}
+      iex> BB.TUI.State.toggle_event_detail(state).show_event_detail
+      true
+  """
+  @spec toggle_event_detail(t()) :: t()
+  def toggle_event_detail(%__MODULE__{} = state) do
+    %{state | show_event_detail: !state.show_event_detail}
+  end
+
+  @doc """
+  Dismisses the event detail popup.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{show_event_detail: true}
+      iex> BB.TUI.State.dismiss_event_detail(state).show_event_detail
+      false
+  """
+  @spec dismiss_event_detail(t()) :: t()
+  def dismiss_event_detail(%__MODULE__{} = state) do
+    %{state | show_event_detail: false}
+  end
+
+  @doc """
+  Returns the currently selected event, or nil if no events.
+
+  ## Examples
+
+      iex> events = [{~U[2026-01-01 00:00:00Z], [:test], %{payload: :ok}}]
+      iex> state = %BB.TUI.State{events: events, scroll_offset: 0}
+      iex> {_, [:test], _} = BB.TUI.State.selected_event(state)
+
+      iex> state = %BB.TUI.State{events: [], scroll_offset: 0}
+      iex> BB.TUI.State.selected_event(state)
+      nil
+  """
+  @spec selected_event(t()) :: {DateTime.t(), list(), term()} | nil
+  def selected_event(%__MODULE__{events: events, scroll_offset: offset}) do
+    Enum.at(events, offset)
+  end
+
+  @doc """
   Selects the next command in the list.
 
   ## Examples
@@ -495,7 +543,7 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> BB.TUI.State.joint_step(%{limit: %{lower: -1.0, upper: 1.0}})
+      iex> BB.TUI.State.joint_step(%{limits: %{lower: -1.0, upper: 1.0}})
       0.02
 
       iex> BB.TUI.State.joint_step(%{type: :continuous})
@@ -516,10 +564,10 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> BB.TUI.State.clamp_position(2.0, %{limit: %{lower: -1.0, upper: 1.0}})
+      iex> BB.TUI.State.clamp_position(2.0, %{limits: %{lower: -1.0, upper: 1.0}})
       1.0
 
-      iex> BB.TUI.State.clamp_position(-2.0, %{limit: %{lower: -1.0, upper: 1.0}})
+      iex> BB.TUI.State.clamp_position(-2.0, %{limits: %{lower: -1.0, upper: 1.0}})
       -1.0
 
       iex> BB.TUI.State.clamp_position(99.0, %{type: :continuous})
@@ -535,6 +583,9 @@ defmodule BB.TUI.State do
 
   @doc false
   @spec joint_limits(map()) :: {number(), number()} | nil
-  def joint_limits(%{limit: %{lower: lower, upper: upper}}), do: {lower, upper}
+  def joint_limits(%{limits: %{lower: lower, upper: upper}})
+      when not is_nil(lower) and not is_nil(upper),
+      do: {lower, upper}
+
   def joint_limits(_), do: nil
 end

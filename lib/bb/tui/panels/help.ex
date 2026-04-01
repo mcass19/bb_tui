@@ -24,6 +24,7 @@ defmodule BB.TUI.Panels.Help do
   Events panel:
     j / Down    Scroll down
     k / Up      Scroll up
+    Enter       Show event details
     p           Pause / resume stream
     c           Clear all events
 

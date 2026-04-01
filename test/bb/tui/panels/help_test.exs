@@ -26,5 +26,11 @@ defmodule BB.TUI.Panels.HelpTest do
       widget = Help.render()
       assert widget.block.title == " Help "
     end
+
+    test "accepts scroll offset" do
+      widget = Help.render(5)
+      assert %Popup{} = widget
+      assert widget.content.scroll == {5, 0}
+    end
   end
 end

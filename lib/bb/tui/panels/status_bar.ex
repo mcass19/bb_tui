@@ -45,7 +45,7 @@ defmodule BB.TUI.Panels.StatusBar do
 
   defp panel_keys(:safety, _safety), do: "[a]Arm [d]Disarm"
   defp panel_keys(:commands, _safety), do: "[Up/Down]Select [Enter]Execute"
-  defp panel_keys(:events, _safety), do: "[j/k]Scroll [p]Pause [c]Clear"
+  defp panel_keys(:events, _safety), do: "[j/k]Scroll [Enter]Detail [p]Pause [c]Clear"
 
   defp panel_keys(:joints, safety) when safety in [:armed, :disarming],
     do: "[j/k]Select [h/l]Adj [H/L]Adj10x"

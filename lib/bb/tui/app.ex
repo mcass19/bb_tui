@@ -176,6 +176,10 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
+  def handle_event(%ExRatatui.Event.Key{kind: "press"}, %{show_event_detail: true} = state) do
+    {:noreply, State.dismiss_event_detail(state)}
+  end
+
   # ── Global keys ─────────────────────────────────────────────
   def handle_event(%ExRatatui.Event.Key{code: "q", kind: "press"}, state) do
     {:stop, state}
@@ -236,6 +240,17 @@ defmodule BB.TUI.App do
         %{active_panel: :events} = state
       ) do
     {:noreply, State.clear_events(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "enter", kind: "press"},
+        %{active_panel: :events} = state
+      ) do
+    if State.selected_event(state) do
+      {:noreply, State.toggle_event_detail(state)}
+    else
+      {:noreply, state}
+    end
   end
 
   # ── Commands panel keys ────────────────────────────────────
@@ -378,6 +393,13 @@ defmodule BB.TUI.App do
 
   defp maybe_add_popup(panels, %{confirm_force_disarm: true}, full) do
     panels ++ [{Panels.ForceDisarm.render(), full}]
+  end
+
+  defp maybe_add_popup(panels, %{show_event_detail: true} = state, full) do
+    case State.selected_event(state) do
+      nil -> panels
+      event -> panels ++ [{Panels.EventDetail.render(event), full}]
+    end
   end
 
   defp maybe_add_popup(panels, _state, _full), do: panels

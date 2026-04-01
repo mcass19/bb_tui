@@ -94,6 +94,26 @@ defmodule BB.TUI.AppTest do
       {last_widget, _rect} = List.last(widgets)
       assert %ExRatatui.Widgets.Popup{} = last_widget
     end
+
+    test "includes event detail popup when show_event_detail is true" do
+      events = [
+        {~U[2026-03-30 12:00:00Z], [:state_machine], %{payload: %{from: :disarmed, to: :armed}}}
+      ]
+
+      state =
+        Fixtures.sample_state(%{
+          show_event_detail: true,
+          events: events,
+          scroll_offset: 0
+        })
+
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+      widgets = App.render(state, frame)
+
+      assert length(widgets) == 7
+      {last_widget, _rect} = List.last(widgets)
+      assert %ExRatatui.Widgets.Popup{} = last_widget
+    end
   end
 
   describe "handle_event/2" do
@@ -125,12 +145,42 @@ defmodule BB.TUI.AppTest do
       assert new_state.show_help
     end
 
+    test "j/down scrolls help overlay down" do
+      state = Fixtures.sample_state(%{show_help: true, help_scroll_offset: 0})
+      event = %ExRatatui.Event.Key{code: "j", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.help_scroll_offset == 1
+      assert new_state.show_help
+    end
+
+    test "k/up scrolls help overlay up" do
+      state = Fixtures.sample_state(%{show_help: true, help_scroll_offset: 3})
+      event = %ExRatatui.Event.Key{code: "k", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.help_scroll_offset == 2
+      assert new_state.show_help
+    end
+
     test "any key dismisses help overlay" do
       state = Fixtures.sample_state(%{show_help: true})
       event = %ExRatatui.Event.Key{code: "x", kind: "press"}
 
       assert {:noreply, new_state} = App.handle_event(event, state)
       refute new_state.show_help
+    end
+
+    test "any key dismisses event detail popup" do
+      events = [{~U[2026-03-30 12:00:00Z], [:test], %{payload: :data}}]
+
+      state =
+        Fixtures.sample_state(%{show_event_detail: true, events: events, scroll_offset: 0})
+
+      event = %ExRatatui.Event.Key{code: "x", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      refute new_state.show_event_detail
     end
 
     test "a key calls BB.Safety.arm" do
@@ -247,6 +297,26 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.handle_event(event, state)
       assert new_state.events == []
+    end
+
+    test "enter key opens event detail when events panel is active" do
+      events = [{~U[2026-03-30 12:00:00Z], [:test], %{payload: :data}}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :events, events: events, scroll_offset: 0})
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.show_event_detail
+    end
+
+    test "enter key does nothing when events panel is empty" do
+      state = Fixtures.sample_state(%{active_panel: :events, events: []})
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      refute Map.get(new_state, :show_event_detail)
     end
 
     # Commands panel keys
@@ -454,7 +524,7 @@ defmodule BB.TUI.AppTest do
     test "l/right increases simulated joint position when armed" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }
@@ -476,7 +546,7 @@ defmodule BB.TUI.AppTest do
     test "h/left decreases simulated joint position when armed" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }
@@ -498,7 +568,7 @@ defmodule BB.TUI.AppTest do
     test "right arrow adjusts simulated joint position" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }
@@ -520,7 +590,7 @@ defmodule BB.TUI.AppTest do
     test "L key increases position by 10x step" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }
@@ -548,7 +618,7 @@ defmodule BB.TUI.AppTest do
     test "H key decreases position by 10x step" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }
@@ -576,7 +646,7 @@ defmodule BB.TUI.AppTest do
     test "position is clamped to joint limits" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.99
         }
       }
@@ -599,7 +669,7 @@ defmodule BB.TUI.AppTest do
     test "joint control does nothing when not armed" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }
@@ -621,7 +691,7 @@ defmodule BB.TUI.AppTest do
     test "joint control does nothing with nil position" do
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: nil
         }
       }
@@ -665,7 +735,7 @@ defmodule BB.TUI.AppTest do
 
       joints = %{
         shoulder: %{
-          joint: %{name: :shoulder, type: :revolute, limit: %{lower: -1.0, upper: 1.0}},
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
           position: 0.0
         }
       }

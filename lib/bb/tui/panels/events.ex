@@ -3,7 +3,8 @@ defmodule BB.TUI.Panels.Events do
   Events panel — displays a scrollable list of recent robot messages with
   formatted timestamps, color-coded paths, message types, and summaries.
 
-  Supports pause/resume (`p`) and clear (`c`) when focused.
+  Press Enter on a selected event to open a detail popup showing the full
+  message payload. Supports pause/resume (`p`) and clear (`c`) when focused.
 
   Pure function — takes state, returns a widget struct.
   """
@@ -84,6 +85,77 @@ defmodule BB.TUI.Panels.Events do
 
     "#{time} #{path_str} #{summary}"
   end
+
+  @doc """
+  Formats the detail lines for an expanded event.
+
+  Returns a list of indented strings showing the message type and payload fields.
+
+  ## Examples
+
+      iex> ts = ~U[2026-01-15 18:23:12.000Z]
+      iex> event = {ts, [:sensor, :simulated], %{payload: %{names: [:elbow], positions: [0.5], velocities: [0.0], efforts: [0.0]}}}
+      iex> details = BB.TUI.Panels.Events.format_event_details(event)
+      iex> hd(details) =~ "efforts"
+      true
+  """
+  @spec format_event_details({DateTime.t(), list(), term()}) :: [String.t()]
+  def format_event_details({_timestamp, _path, message}) do
+    payload = extract_payload(message)
+    format_payload_lines(payload)
+  end
+
+  defp extract_payload(%{payload: %{__struct__: _} = payload}), do: payload
+  defp extract_payload(%{payload: payload}) when is_map(payload), do: payload
+  defp extract_payload(other), do: other
+
+  defp format_payload_lines(%{__struct__: mod} = payload) do
+    type_line = "  \u{250C} #{inspect(mod)}"
+
+    fields =
+      payload
+      |> Map.from_struct()
+      |> Enum.sort_by(fn {k, _} -> to_string(k) end)
+
+    field_lines =
+      fields
+      |> Enum.with_index()
+      |> Enum.map(fn {{key, val}, idx} ->
+        prefix = if idx == length(fields) - 1, do: "\u{2514}", else: "\u{2502}"
+        label = to_string(key) |> String.pad_trailing(14)
+        "  #{prefix} #{label}#{format_value(val)}"
+      end)
+
+    [type_line | field_lines]
+  end
+
+  defp format_payload_lines(payload) when is_map(payload) do
+    fields = Enum.sort_by(payload, fn {k, _} -> to_string(k) end)
+
+    fields
+    |> Enum.with_index()
+    |> Enum.map(fn {{key, val}, idx} ->
+      prefix = if idx == length(fields) - 1, do: "\u{2514}", else: "\u{2502}"
+      label = to_string(key) |> String.pad_trailing(14)
+      "  #{prefix} #{label}#{format_value(val)}"
+    end)
+  end
+
+  defp format_payload_lines(other) do
+    ["  \u{2514} #{inspect(other, pretty: false, limit: 50)}"]
+  end
+
+  defp format_value(list) when is_list(list) do
+    items =
+      Enum.map(list, fn
+        f when is_float(f) -> :erlang.float_to_binary(f, decimals: 3)
+        other -> inspect(other)
+      end)
+
+    "[#{Enum.join(items, ", ")}]"
+  end
+
+  defp format_value(other), do: inspect(other)
 
   @doc """
   Produces a short summary string for an event based on its path and payload.

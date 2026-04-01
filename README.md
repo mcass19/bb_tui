@@ -1,37 +1,42 @@
 # BB.TUI
 
-<!-- [![Hex.pm](https://img.shields.io/hexpm/v/bb_tui.svg)](https://hex.pm/packages/bb_tui) -->
-<!-- [![Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/bb_tui) -->
-<!-- [![CI](https://github.com/beam-bots/bb_tui/actions/workflows/ci.yml/badge.svg)](https://github.com/beam-bots/bb_tui/actions/workflows/ci.yml) -->
-<!-- [![License](https://img.shields.io/hexpm/l/bb_tui.svg)](https://github.com/beam-bots/bb_tui/blob/main/LICENSE) -->
+> **Proposal** — This package is a proposal and has **not** been reviewed or accepted by the author of [Beam Bots](https://github.com/beam-bots). It is published here for discussion and feedback.
 
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
 
-Provides core dashboard functionality — safety controls, runtime state, joint positions, event stream, and command display — within terminal environments: over SSH, on headless systems, or in low-bandwidth scenarios.
+Provides a full-featured dashboard — safety controls, joint control with direct position adjustment, real-time event stream, command execution, parameter monitoring, and a consistent theme — within terminal environments: over SSH, on headless systems, or in low-bandwidth scenarios.
 
 ## Features
 
-- Safety controls (arm / disarm / force disarm)
-- Real-time joint position table
-- Scrollable event stream
-- Available commands display
-- Runtime state monitoring
-- Keyboard-driven panel navigation
-- Help overlay with keybinding reference
-- Force disarm confirmation popup
-- Mix task for standalone launch
-- Headless test suite with Mimic + ExRatatui test backend
+- **Safety controls** — arm / disarm / force disarm with confirmation popup
+- **Joint control panel** — position table with type (revolute/prismatic/continuous), units (degrees/mm), visual range bars, target tracking, simulated joint markers, and direct position adjustment via keyboard (1% and 10% steps)
+- **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload
+- **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state; select and execute directly from the TUI
+- **Parameters panel** — live parameter table grouped by path with real-time updates
+- **Runtime state monitoring** — safety state and runtime state displayed in the sidebar
+- **Status bar** — robot name, safety indicator, runtime state, and key hints
+- **Help overlay** — scrollable popup with full keybinding reference
+- **Theme system** — consistent color palette with semantic styles (safety colors, focus borders, panel headers)
+- **Keyboard-driven navigation** — Tab to cycle panels, vim-style j/k/h/l within panels
+- **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
+- **Headless test suite** — full coverage using Mimic + ExRatatui test backend
 
 ## Layout
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ Safety (20%)     │ Runtime (20%)    │ Joints (60%)      │  40% height
-├─────────────────────────────────────────────────────────┤
-│ Events (50%)                  │ Commands (50%)          │  remaining
-├─────────────────────────────────────────────────────────┤
-│ Status Bar                                              │  1 line
-└─────────────────────────────────────────────────────────┘
+┌ Safety ────────┬─ Joint Control ──────────────────────────────┐
+│ ● ARMED        │ Joint       Type  Position  Target           │
+│ Runtime: Idle  │ elbow       rev   -63.8°    ████████░░░░░░   │  60%
+│ [a] Arm        │ gripper SIM pri    30.6mm   ███░░░░░░░░░░░   │  height
+│ [d] Disarm     │ ...                                          │
+├ Commands ──────┤                                              │
+│ ▶ home   Ready │                                              │
+│   calibrate    │                                              │
+├ Events (47) ───┴── Parameters ────────────────────────────────┤
+│ 18:23:12 sensor.sim  │ speed              100                 │  40%
+│ 18:23:11 state_m...  │ controller.kp      0.5                 │  height
+└──────────────────────┴────────────────────────────────────────┘
+ Robot | ● Armed | idle | [q]Quit [Tab]Panel [?]Help               1 line
 ```
 
 ## Installation
@@ -84,21 +89,38 @@ children = [
 
 ### Events panel
 
-| Key          | Action      |
-|--------------|-------------|
-| `j` / `Down` | Scroll down |
-| `k` / `Up`   | Scroll up   |
+| Key          | Action              |
+|--------------|---------------------|
+| `j` / `Down` | Scroll down         |
+| `k` / `Up`   | Scroll up           |
+| `Enter`      | Show event details  |
+| `p`          | Pause / resume      |
+| `c`          | Clear events        |
 
 ### Commands panel
 
 | Key           | Action         |
 |---------------|----------------|
-| `Up` / `Down` | Select command |
+| `j` / `Down`  | Select next    |
+| `k` / `Up`    | Select previous|
 | `Enter`       | Execute        |
+
+### Joints panel
+
+| Key            | Action                       |
+|----------------|------------------------------|
+| `j` / `Down`   | Select next joint            |
+| `k` / `Up`     | Select previous joint        |
+| `l` / `Right`  | Increase position (1% step)  |
+| `h` / `Left`   | Decrease position (1% step)  |
+| `L`            | Increase position (10% step) |
+| `H`            | Decrease position (10% step) |
 
 ## How It Works
 
-BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly. No optimistic updates — the TUI is a faithful reflection of the robot's actual state.
+BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly (safety, actuator, command execution). No optimistic updates — the TUI is a faithful reflection of the robot's actual state.
+
+All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — making the dashboard easy to test headlessly.
 
 ## Development
 
