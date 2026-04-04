@@ -25,11 +25,10 @@ defmodule BB.TUI.Panels.JointsTest do
     end
 
     test "formats revolute positions in degrees" do
-      # 45.0 radians in the fixture is the raw value; let's use a known radian
       joints = %{
         shoulder: %{
           joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}},
-          position: :math.pi() / 2
+          position: 0.5
         }
       }
 
@@ -38,7 +37,7 @@ defmodule BB.TUI.Panels.JointsTest do
 
       row = hd(widget.rows)
       assert Enum.at(row, 1) == "rev"
-      assert Enum.at(row, 2) == "90.0\u00B0"
+      assert Enum.at(row, 2) == "28.6\u00B0"
     end
 
     test "formats prismatic positions in millimeters" do
@@ -222,7 +221,93 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 2) == "0.0 mm"
+      # At lower limit, position gets danger suffix
+      assert Enum.at(row, 2) == "0.0 mm !!"
+    end
+  end
+
+  describe "limit warnings" do
+    test "shows warning suffix when near limit" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 1.4
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      # Position text should have warning suffix
+      assert Enum.at(row, 2) =~ " !"
+    end
+
+    test "shows danger suffix when at limit" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 1.55
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert Enum.at(row, 2) =~ " !!"
+    end
+
+    test "uses warning marker in position bar when near limit" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 1.4
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      bar = Enum.at(row, 3)
+      # Warning marker ◆ instead of normal ●
+      assert bar =~ "\u{25C6}"
+      refute bar =~ "\u{25CF}"
+    end
+
+    test "uses danger marker in position bar at limit" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 1.55
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      bar = Enum.at(row, 3)
+      # Danger marker ◉ instead of normal ●
+      assert bar =~ "\u{25C9}"
+      refute bar =~ "\u{25CF}"
+    end
+
+    test "no warning for position well within limits" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 0.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      refute Enum.at(row, 2) =~ "!"
+      assert Enum.at(row, 3) =~ "\u{25CF}"
     end
   end
 

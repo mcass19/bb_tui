@@ -35,11 +35,13 @@ defmodule BB.TUI.Panels.Joints do
       joints
       |> Enum.sort_by(fn {name, _} -> name end)
       |> Enum.map(fn {name, %{position: pos, joint: joint}} ->
+        proximity = State.limit_proximity(pos, joint)
+
         [
           format_name(name, joint),
           format_type(joint),
-          format_position(pos, joint),
-          position_bar(pos, joint)
+          format_position(pos, joint) <> proximity_suffix(proximity),
+          position_bar(pos, joint, proximity)
         ]
       end)
 
@@ -156,20 +158,22 @@ defmodule BB.TUI.Panels.Joints do
       iex> BB.TUI.Panels.Joints.position_bar(0.0, %{type: :continuous})
       ""
   """
-  @spec position_bar(number() | nil, map()) :: String.t()
-  def position_bar(nil, _joint), do: ""
-  def position_bar(_pos, %{type: :continuous}), do: ""
+  @spec position_bar(number() | nil, map(), atom()) :: String.t()
+  def position_bar(pos, joint, proximity \\ :normal)
+  def position_bar(nil, _joint, _proximity), do: ""
+  def position_bar(_pos, %{type: :continuous}, _proximity), do: ""
 
-  def position_bar(pos, joint) do
+  def position_bar(pos, joint, proximity) do
     case get_limits(joint) do
       {lower, upper} when upper > lower ->
         ratio = (pos - lower) / (upper - lower)
         ratio = max(0.0, min(1.0, ratio))
         marker_pos = round(ratio * (@bar_width - 1))
+        marker = marker_char(proximity)
 
         bar =
           String.duplicate("\u{2500}", marker_pos) <>
-            "\u{25CF}" <>
+            marker <>
             String.duplicate("\u{2500}", @bar_width - 1 - marker_pos)
 
         low_label = format_limit(lower, joint)
@@ -211,6 +215,14 @@ defmodule BB.TUI.Panels.Joints do
        do: {lower, upper}
 
   defp get_limits(_), do: nil
+
+  defp marker_char(:normal), do: "\u{25CF}"
+  defp marker_char(:warning), do: "\u{25C6}"
+  defp marker_char(:danger), do: "\u{25C9}"
+
+  defp proximity_suffix(:normal), do: ""
+  defp proximity_suffix(:warning), do: " !"
+  defp proximity_suffix(:danger), do: " !!"
 
   defp float_to_str(val) when is_float(val), do: :erlang.float_to_binary(val, decimals: 1)
   defp float_to_str(val) when is_integer(val), do: "#{val}.0"

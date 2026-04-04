@@ -324,6 +324,60 @@ defmodule BB.TUI.App do
     adjust_selected_joint(state, :decrease, 10)
   end
 
+  # ── Parameters panel keys ───────────────────────────────────
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :parameters} = state
+      )
+      when code in ["j", "down"] do
+    {:noreply, State.select_next_param(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :parameters} = state
+      )
+      when code in ["k", "up"] do
+    {:noreply, State.select_prev_param(state)}
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :parameters} = state
+      )
+      when code in ["l", "right"] do
+    adjust_selected_param(state, :increase, 1)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: code, kind: "press"},
+        %{active_panel: :parameters} = state
+      )
+      when code in ["h", "left"] do
+    adjust_selected_param(state, :decrease, 1)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "L", kind: "press"},
+        %{active_panel: :parameters} = state
+      ) do
+    adjust_selected_param(state, :increase, 10)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "H", kind: "press"},
+        %{active_panel: :parameters} = state
+      ) do
+    adjust_selected_param(state, :decrease, 10)
+  end
+
+  def handle_event(
+        %ExRatatui.Event.Key{code: "enter", kind: "press"},
+        %{active_panel: :parameters} = state
+      ) do
+    toggle_selected_param(state)
+  end
+
   # ── Catch-all ──────────────────────────────────────────────
   def handle_event(_event, state) do
     {:noreply, state}
@@ -473,6 +527,36 @@ defmodule BB.TUI.App do
   end
 
   defp find_actuator_for_joint(_, _joint_name), do: nil
+
+  defp adjust_selected_param(state, direction, multiplier) do
+    case State.selected_param(state) do
+      {path, value} when is_integer(value) ->
+        step = multiplier
+        new_value = if direction == :increase, do: value + step, else: value - step
+        BB.Parameter.set(state.robot, path, new_value)
+        {:noreply, state}
+
+      {path, value} when is_float(value) ->
+        step = 0.1 * multiplier
+        new_value = if direction == :increase, do: value + step, else: value - step
+        BB.Parameter.set(state.robot, path, new_value)
+        {:noreply, state}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  defp toggle_selected_param(state) do
+    case State.selected_param(state) do
+      {path, value} when is_boolean(value) ->
+        BB.Parameter.set(state.robot, path, !value)
+        {:noreply, state}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
 
   defp execute_selected_command(%State{commands: commands, command_selected: idx} = state) do
     case Enum.at(commands, idx) do

@@ -28,7 +28,7 @@ defmodule BB.TUI.Panels.Parameters do
       [["No parameters defined", ""]]
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{parameters: parameters}, focused?) do
+  def render(%State{parameters: parameters, param_selected: selected}, focused?) do
     rows =
       case parameters do
         [] ->
@@ -38,7 +38,7 @@ defmodule BB.TUI.Panels.Parameters do
           params
           |> Enum.sort_by(fn {path, _} -> path end)
           |> Enum.map(fn {path, value} ->
-            [format_path(path), format_value(value)]
+            [format_path(path), format_value(value) <> edit_hint(value)]
           end)
       end
 
@@ -49,7 +49,9 @@ defmodule BB.TUI.Panels.Parameters do
         {:percentage, 55},
         {:percentage, 45}
       ],
+      selected: if(focused? and parameters != [], do: selected),
       highlight_style: Theme.highlight_style(),
+      highlight_symbol: "\u{25B6} ",
       block: %Block{
         title: title(length(parameters)),
         borders: [:all],
@@ -58,6 +60,28 @@ defmodule BB.TUI.Panels.Parameters do
       }
     }
   end
+
+  @doc """
+  Returns an edit hint suffix indicating how a parameter can be edited.
+
+  ## Examples
+
+      iex> BB.TUI.Panels.Parameters.edit_hint(42)
+      " [h/l]"
+
+      iex> BB.TUI.Panels.Parameters.edit_hint(3.14)
+      " [h/l]"
+
+      iex> BB.TUI.Panels.Parameters.edit_hint(true)
+      " [enter]"
+
+      iex> BB.TUI.Panels.Parameters.edit_hint(:fast)
+      ""
+  """
+  @spec edit_hint(term()) :: String.t()
+  def edit_hint(val) when is_number(val), do: " [h/l]"
+  def edit_hint(val) when is_boolean(val), do: " [enter]"
+  def edit_hint(_val), do: ""
 
   @doc """
   Builds the panel title with parameter count.

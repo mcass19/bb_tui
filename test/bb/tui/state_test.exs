@@ -322,6 +322,92 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "select_next_param/1 and select_prev_param/1" do
+    test "navigates parameter selection" do
+      params = [{[:a], 1}, {[:b], 2}, {[:c], 3}]
+      state = Fixtures.sample_state(%{parameters: params, param_selected: 0})
+
+      state = State.select_next_param(state)
+      assert state.param_selected == 1
+
+      state = State.select_next_param(state)
+      assert state.param_selected == 2
+
+      # At max
+      state = State.select_next_param(state)
+      assert state.param_selected == 2
+
+      state = State.select_prev_param(state)
+      assert state.param_selected == 1
+
+      state = State.select_prev_param(state)
+      assert state.param_selected == 0
+
+      # At min
+      state = State.select_prev_param(state)
+      assert state.param_selected == 0
+    end
+
+    test "handles empty parameters" do
+      state = Fixtures.sample_state(%{parameters: [], param_selected: 0})
+      state = State.select_next_param(state)
+      assert state.param_selected == 0
+    end
+  end
+
+  describe "selected_param/1" do
+    test "returns the parameter at the selected index (sorted by path)" do
+      params = [{[:z], 99}, {[:a], 1}, {[:m], 50}]
+      state = Fixtures.sample_state(%{parameters: params, param_selected: 0})
+      assert State.selected_param(state) == {[:a], 1}
+
+      state = %{state | param_selected: 2}
+      assert State.selected_param(state) == {[:z], 99}
+    end
+
+    test "returns nil for empty parameters" do
+      state = Fixtures.sample_state(%{parameters: [], param_selected: 0})
+      assert State.selected_param(state) == nil
+    end
+  end
+
+  describe "limit_proximity/2" do
+    test "returns :normal when well within limits" do
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      assert State.limit_proximity(0.0, joint) == :normal
+      assert State.limit_proximity(0.5, joint) == :normal
+    end
+
+    test "returns :warning when within 15% of a limit" do
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      # 0.85 is at 92.5% of range, 7.5% from upper limit
+      assert State.limit_proximity(0.85, joint) == :warning
+      # -0.85 is 7.5% from lower limit
+      assert State.limit_proximity(-0.85, joint) == :warning
+    end
+
+    test "returns :danger when within 5% of a limit" do
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      assert State.limit_proximity(0.96, joint) == :danger
+      assert State.limit_proximity(-0.96, joint) == :danger
+    end
+
+    test "returns :danger at exact limit" do
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      assert State.limit_proximity(1.0, joint) == :danger
+      assert State.limit_proximity(-1.0, joint) == :danger
+    end
+
+    test "returns :normal for joints without limits" do
+      assert State.limit_proximity(99.0, %{type: :continuous}) == :normal
+    end
+
+    test "returns :normal for nil position" do
+      joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      assert State.limit_proximity(nil, joint) == :normal
+    end
+  end
+
   describe "clamp_position/2" do
     test "clamps above upper limit" do
       joint = %{limits: %{lower: -1.0, upper: 1.0}}

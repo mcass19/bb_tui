@@ -36,7 +36,8 @@ defmodule BB.TUI.State do
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
-    joint_selected: 0
+    joint_selected: 0,
+    param_selected: 0
   ]
 
   @type t :: %__MODULE__{
@@ -60,7 +61,8 @@ defmodule BB.TUI.State do
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
           executing_command: pid() | nil,
-          joint_selected: non_neg_integer()
+          joint_selected: non_neg_integer(),
+          param_selected: non_neg_integer()
         }
 
   @panels [:safety, :commands, :joints, :events, :parameters]
@@ -578,6 +580,122 @@ defmodule BB.TUI.State do
     case joint_limits(joint) do
       {lower, upper} -> max(lower, min(upper, pos))
       _ -> pos
+    end
+  end
+
+  # ── Parameter navigation ───────────────────────────────────
+
+  @doc """
+  Selects the next parameter in the sorted list.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: [{[:a], 1}, {[:b], 2}], param_selected: 0}
+      iex> BB.TUI.State.select_next_param(state).param_selected
+      1
+
+      iex> state = %BB.TUI.State{parameters: [{[:a], 1}, {[:b], 2}], param_selected: 1}
+      iex> BB.TUI.State.select_next_param(state).param_selected
+      1
+  """
+  @spec select_next_param(t()) :: t()
+  def select_next_param(%__MODULE__{param_selected: idx, parameters: params} = state) do
+    max_idx = max(length(params) - 1, 0)
+    %{state | param_selected: min(idx + 1, max_idx)}
+  end
+
+  @doc """
+  Selects the previous parameter in the sorted list.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: [{[:a], 1}], param_selected: 1}
+      iex> BB.TUI.State.select_prev_param(state).param_selected
+      0
+
+      iex> state = %BB.TUI.State{parameters: [{[:a], 1}], param_selected: 0}
+      iex> BB.TUI.State.select_prev_param(state).param_selected
+      0
+  """
+  @spec select_prev_param(t()) :: t()
+  def select_prev_param(%__MODULE__{param_selected: idx} = state) do
+    %{state | param_selected: max(idx - 1, 0)}
+  end
+
+  @doc """
+  Returns the currently selected parameter as `{path, value}`, or nil.
+
+  Parameters are sorted by path to match the render order.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: [{[:b], 2}, {[:a], 1}], param_selected: 0}
+      iex> BB.TUI.State.selected_param(state)
+      {[:a], 1}
+
+      iex> state = %BB.TUI.State{parameters: [], param_selected: 0}
+      iex> BB.TUI.State.selected_param(state)
+      nil
+  """
+  @spec selected_param(t()) :: {list(), term()} | nil
+  def selected_param(%__MODULE__{parameters: params, param_selected: idx}) do
+    params
+    |> Enum.sort_by(fn {path, _} -> path end)
+    |> Enum.at(idx)
+  end
+
+  # ── Joint limit proximity ────────────────────────────────────
+
+  @warning_threshold 0.15
+  @danger_threshold 0.05
+
+  @doc """
+  Returns the proximity of a joint position to its nearest limit.
+
+  Returns `:danger` when within #{@danger_threshold * 100}% of a limit,
+  `:warning` when within #{@warning_threshold * 100}% of a limit,
+  or `:normal` otherwise.
+
+  Joints without limits always return `:normal`.
+
+  ## Examples
+
+      iex> joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      iex> BB.TUI.State.limit_proximity(0.0, joint)
+      :normal
+
+      iex> joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      iex> BB.TUI.State.limit_proximity(0.75, joint)
+      :warning
+
+      iex> joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      iex> BB.TUI.State.limit_proximity(0.96, joint)
+      :danger
+
+      iex> joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      iex> BB.TUI.State.limit_proximity(-0.96, joint)
+      :danger
+
+      iex> BB.TUI.State.limit_proximity(99.0, %{type: :continuous})
+      :normal
+  """
+  @spec limit_proximity(number() | nil, map()) :: :normal | :warning | :danger
+  def limit_proximity(nil, _joint), do: :normal
+
+  def limit_proximity(pos, joint) do
+    case joint_limits(joint) do
+      {lower, upper} when upper > lower ->
+        range = upper - lower
+        dist_to_nearest = min((pos - lower) / range, (upper - pos) / range)
+
+        cond do
+          dist_to_nearest <= @danger_threshold -> :danger
+          dist_to_nearest <= @warning_threshold -> :warning
+          true -> :normal
+        end
+
+      _ ->
+        :normal
     end
   end
 

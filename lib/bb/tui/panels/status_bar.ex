@@ -51,6 +51,6 @@ defmodule BB.TUI.Panels.StatusBar do
     do: "[j/k]Select [h/l]Adj [H/L]Adj10x"
 
   defp panel_keys(:joints, _safety), do: "[j/k]Select"
-  defp panel_keys(:parameters, _safety), do: ""
+  defp panel_keys(:parameters, _safety), do: "[j/k]Select [h/l]Adj [Enter]Toggle"
   defp panel_keys(_, _safety), do: ""
 end

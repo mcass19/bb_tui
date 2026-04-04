@@ -41,6 +41,15 @@ defmodule BB.TUI.Panels.Help do
     L           Increase position (10% step)
     H           Decrease position (10% step)
 
+  Parameters panel:
+    j / Down    Select next parameter
+    k / Up      Select previous parameter
+    l / Right   Increase value (+1 int, +0.1 float)
+    h / Left    Decrease value (-1 int, -0.1 float)
+    L           Increase value x10
+    H           Decrease value x10
+    Enter       Toggle boolean parameter
+
   [j/k] Scroll   [any other key] Close\
   """
 

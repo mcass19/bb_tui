@@ -23,7 +23,8 @@ defmodule BB.TUI.Test.Fixtures do
       command_selected: 0,
       command_result: nil,
       executing_command: nil,
-      joint_selected: 0
+      joint_selected: 0,
+      param_selected: 0
     }
 
     struct!(BB.TUI.State, Map.merge(defaults, overrides))
@@ -100,6 +101,7 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Robot.Runtime, :positions, fn _robot -> %{shoulder: 0.0, elbow: 45.0} end)
     Mimic.stub(BB.Robot.Runtime, :state, fn _robot -> runtime_state end)
     Mimic.stub(BB.Parameter, :list, fn _robot, _opts -> [] end)
+    Mimic.stub(BB.Parameter, :set, fn _robot, _path, _value -> :ok end)
     Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> [] end)
 
     :ok
