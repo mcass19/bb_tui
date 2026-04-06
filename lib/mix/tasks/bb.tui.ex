@@ -47,6 +47,16 @@ defmodule Mix.Tasks.Bb.Tui do
     * `h` / `Left` — decrease position (1% step)
     * `L` — increase position (10% step)
     * `H` — decrease position (10% step)
+
+  ### Parameters panel
+
+    * `j` / `Down` — select next parameter
+    * `k` / `Up` — select previous parameter
+    * `l` / `Right` — increase value (+1 int, +0.1 float)
+    * `h` / `Left` — decrease value (-1 int, -0.1 float)
+    * `L` — increase value x10
+    * `H` — decrease value x10
+    * `Enter` — toggle boolean parameter
   """
 
   use Mix.Task

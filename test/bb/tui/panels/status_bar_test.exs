@@ -97,12 +97,13 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert widget.text =~ "[j/k]Select"
     end
 
-    test "shows no panel-specific hints for parameters" do
+    test "shows panel-specific hints for parameters" do
       state = Fixtures.sample_state(%{active_panel: :parameters})
       widget = StatusBar.render(state)
 
-      # Just global hints, no panel-specific
-      assert widget.text =~ "[q]Quit"
+      assert widget.text =~ "[j/k]Select"
+      assert widget.text =~ "[h/l]Adj"
+      assert widget.text =~ "[Enter]Toggle"
     end
 
     test "shows disarmed safety state" do

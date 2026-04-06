@@ -23,6 +23,23 @@ defmodule BB.TUI do
   """
 
   @doc """
+  Returns a child specification for supervision trees.
+
+  ## Examples
+
+      iex> %{id: BB.TUI, start: {BB.TUI, :start, _}} = BB.TUI.child_spec(robot: MyApp.Robot)
+
+  """
+  def child_spec(opts) when is_list(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start, [opts[:robot], Keyword.delete(opts, :robot)]},
+      type: :worker,
+      restart: :temporary
+    }
+  end
+
+  @doc """
   Runs the TUI dashboard interactively, blocking until the user quits.
 
   Use this from IEx or scripts. The terminal is taken over for the

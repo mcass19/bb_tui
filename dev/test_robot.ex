@@ -14,6 +14,29 @@ defmodule Dev.TestRobot do
     name(:test_robot)
   end
 
+  parameters do
+    group :motion do
+      param(:max_speed, type: :float, default: 1.0, min: 0.0, max: 5.0)
+      param(:acceleration, type: :float, default: 0.5, min: 0.0, max: 2.0)
+    end
+
+    group :controller do
+      param(:kp, type: :float, default: 1.0, min: 0.0, max: 10.0)
+      param(:ki, type: :float, default: 0.1, min: 0.0, max: 5.0)
+      param(:kd, type: :float, default: 0.05, min: 0.0, max: 2.0)
+    end
+
+    group :safety do
+      param(:collision_distance, type: :float, default: 0.3, min: 0.05, max: 1.0)
+      param(:enabled, type: :boolean, default: true)
+    end
+
+    group :grip do
+      param(:force, type: :integer, default: 50, min: 0, max: 100)
+      param(:grip_speed, type: :integer, default: 75, min: 1, max: 100)
+    end
+  end
+
   topology do
     link :base_link do
       visual do

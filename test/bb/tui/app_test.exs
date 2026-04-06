@@ -1,6 +1,7 @@
 defmodule BB.TUI.AppTest do
   use ExUnit.Case, async: false
   use Mimic
+  doctest BB.TUI
 
   alias BB.TUI.App
   alias BB.TUI.Test.Fixtures
@@ -759,6 +760,231 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} = App.handle_event(event, state)
       # Position NOT updated locally for real actuators — waits for sensor feedback
       assert new_state.joints.shoulder.position == 0.0
+    end
+
+    # Parameters panel keys — navigation
+    test "j/down selects next parameter" do
+      params = [{[:a], 1}, {[:b], 2}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "j", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.param_selected == 1
+    end
+
+    test "down arrow selects next parameter" do
+      params = [{[:a], 1}, {[:b], 2}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "down", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.param_selected == 1
+    end
+
+    test "k/up selects previous parameter" do
+      params = [{[:a], 1}, {[:b], 2}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 1})
+
+      event = %ExRatatui.Event.Key{code: "k", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.param_selected == 0
+    end
+
+    test "up arrow selects previous parameter" do
+      params = [{[:a], 1}, {[:b], 2}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 1})
+
+      event = %ExRatatui.Event.Key{code: "up", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      assert new_state.param_selected == 0
+    end
+
+    # Parameters panel keys — value editing
+    test "l/right increases integer parameter" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 2 -> :ok end)
+
+      params = [{[:count], 1}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "h/left decreases integer parameter" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 9 -> :ok end)
+
+      params = [{[:count], 10}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "right arrow increases float parameter by 0.1" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:kp], val ->
+        assert_in_delta val, 1.1, 0.001
+        :ok
+      end)
+
+      params = [{[:kp], 1.0}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "right", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "left arrow decreases float parameter by 0.1" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:kp], val ->
+        assert_in_delta val, 0.9, 0.001
+        :ok
+      end)
+
+      params = [{[:kp], 1.0}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "left", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "L key increases integer parameter by 10" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 15 -> :ok end)
+
+      params = [{[:count], 5}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "H key decreases integer parameter by 10" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], -5 -> :ok end)
+
+      params = [{[:count], 5}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "H", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "L key increases float parameter by 1.0" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:kp], val ->
+        assert_in_delta val, 3.5, 0.001
+        :ok
+      end)
+
+      params = [{[:kp], 2.5}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "enter toggles boolean parameter" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:enabled], false -> :ok end)
+
+      params = [{[:enabled], true}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "enter toggles boolean parameter from false to true" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:enabled], true -> :ok end)
+
+      params = [{[:enabled], false}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, _new_state} = App.handle_event(event, state)
+    end
+
+    test "enter does nothing for non-boolean parameter" do
+      params = [{[:count], 42}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, ^state} = App.handle_event(event, state)
+    end
+
+    test "parameter adjustment does nothing for atom values" do
+      params = [{[:mode], :fast}]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: params, param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, ^state} = App.handle_event(event, state)
+    end
+
+    test "parameter adjustment does nothing with empty parameters" do
+      state =
+        Fixtures.sample_state(%{active_panel: :parameters, parameters: [], param_selected: 0})
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, ^state} = App.handle_event(event, state)
     end
 
     test "ignores unknown events" do

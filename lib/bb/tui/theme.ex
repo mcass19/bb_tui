@@ -271,15 +271,4 @@ defmodule BB.TUI.Theme do
   """
   @spec blocked_style() :: Style.t()
   def blocked_style, do: %Style{fg: dim_text()}
-
-  @doc """
-  Style for parameter values — magenta.
-
-  ## Examples
-
-      iex> BB.TUI.Theme.param_value_style().fg
-      :magenta
-  """
-  @spec param_value_style() :: Style.t()
-  def param_value_style, do: %Style{fg: magenta()}
 end

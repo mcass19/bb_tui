@@ -72,10 +72,6 @@ defmodule BB.TUI.ThemeTest do
     test "blocked_style is dim" do
       assert Theme.blocked_style().fg == :dark_gray
     end
-
-    test "param_value_style is magenta" do
-      assert Theme.param_value_style().fg == :magenta
-    end
   end
 
   describe "border_style/1" do

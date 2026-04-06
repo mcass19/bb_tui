@@ -116,6 +116,18 @@ children = [
 | `L`            | Increase position (10% step) |
 | `H`            | Decrease position (10% step) |
 
+### Parameters panel
+
+| Key            | Action                                   |
+|----------------|------------------------------------------|
+| `j` / `Down`   | Select next parameter                    |
+| `k` / `Up`     | Select previous parameter                |
+| `l` / `Right`  | Increase value (+1 int, +0.1 float)      |
+| `h` / `Left`   | Decrease value (-1 int, -0.1 float)      |
+| `L`            | Increase value x10                        |
+| `H`            | Decrease value x10                        |
+| `Enter`        | Toggle boolean parameter                  |
+
 ## How It Works
 
 BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly (safety, actuator, command execution). No optimistic updates — the TUI is a faithful reflection of the robot's actual state.
