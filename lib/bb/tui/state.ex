@@ -21,8 +21,8 @@ defmodule BB.TUI.State do
     :safety_state,
     :runtime_state,
     :joints,
-    :parameters,
     :commands,
+    parameters: [],
     events: [],
     active_panel: :safety,
     scroll_offset: 0,
@@ -216,17 +216,31 @@ defmodule BB.TUI.State do
   end
 
   @doc """
-  Updates parameters from a parameter change message.
+  Updates parameters from a parameter list.
+
+  `BB.Parameter.list/2` returns `{path, metadata}` tuples where metadata is a
+  map with a `:value` key.  We extract the plain value so the rest of the TUI
+  works with simple `{path, value}` tuples.
 
   ## Examples
 
       iex> state = %BB.TUI.State{parameters: []}
-      iex> BB.TUI.State.update_parameters(state, [{[:speed], 100}]).parameters
+      iex> BB.TUI.State.update_parameters(state, [{[:speed], %{value: 100}}]).parameters
       [{[:speed], 100}]
+
+      iex> state = %BB.TUI.State{parameters: []}
+      iex> BB.TUI.State.update_parameters(state, [{[:speed], 42}]).parameters
+      [{[:speed], 42}]
   """
   @spec update_parameters(t(), [{list(), term()}]) :: t()
   def update_parameters(%__MODULE__{} = state, parameters) do
-    %{state | parameters: parameters}
+    params =
+      Enum.map(parameters, fn
+        {path, %{value: value}} -> {path, value}
+        {path, value} -> {path, value}
+      end)
+
+    %{state | parameters: params}
   end
 
   @doc """

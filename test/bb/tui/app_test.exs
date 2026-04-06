@@ -49,6 +49,24 @@ defmodule BB.TUI.AppTest do
       assert {:ok, state} = App.mount(robot: BB.TUI.TestRobot)
       assert state.commands == []
     end
+
+    test "extracts parameter values from BB.Parameter.list metadata" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.stub(BB.Parameter, :list, fn _robot, _opts ->
+        [
+          {[:controller, :kp], %{value: 1.0, type: :float, default: 1.0, doc: "gain"}},
+          {[:grip, :force], %{value: 50, type: :integer, default: 50, doc: "force"}}
+        ]
+      end)
+
+      assert {:ok, state} = App.mount(robot: BB.TUI.TestRobot)
+
+      assert state.parameters == [
+               {[:controller, :kp], 1.0},
+               {[:grip, :force], 50}
+             ]
+    end
   end
 
   describe "render/2" do

@@ -66,20 +66,21 @@ defmodule BB.TUI.App do
 
     commands = discover_commands(robot)
 
-    state = %State{
-      robot: robot,
-      robot_struct: robot_struct,
-      safety_state: BB.Safety.state(robot),
-      runtime_state: BB.Robot.Runtime.state(robot),
-      joints: joints,
-      events: [],
-      parameters: BB.Parameter.list(robot, []),
-      commands: commands,
-      active_panel: :safety,
-      scroll_offset: 0,
-      show_help: false,
-      confirm_force_disarm: false
-    }
+    state =
+      %State{
+        robot: robot,
+        robot_struct: robot_struct,
+        safety_state: BB.Safety.state(robot),
+        runtime_state: BB.Robot.Runtime.state(robot),
+        joints: joints,
+        events: [],
+        commands: commands,
+        active_panel: :safety,
+        scroll_offset: 0,
+        show_help: false,
+        confirm_force_disarm: false
+      }
+      |> State.update_parameters(BB.Parameter.list(robot, []))
 
     {:ok, state}
   end
