@@ -4,8 +4,6 @@
 
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
 
-Provides a full-featured dashboard — safety controls, joint control with direct position adjustment, real-time event stream, command execution, parameter monitoring, and a consistent theme — within terminal environments: over SSH, on headless systems, or in low-bandwidth scenarios.
-
 ## Features
 
 - **Safety controls** — arm / disarm / force disarm with confirmation popup
@@ -76,14 +74,7 @@ children = [
 
 ### Remote attach (distribution)
 
-When the robot is running on a different BEAM node — e.g. a Nerves
-device on the network — you can render the dashboard on your local dev
-terminal while pulling all data from the robot node. The TUI process,
-keyboard input, and rendering live locally; every BB call is routed
-across distribution via `:rpc.call/4`, and PubSub messages are relayed
-back through a small process spawned on the remote node.
-
-There are two equivalent entry points.
+When the robot is running on a different BEAM node, you can render the dashboard on the robot terminal, or on your local terminal while pulling all data from the robot node.
 
 **1. Spawn the TUI on the robot node (renders on the robot's terminal):**
 
@@ -92,21 +83,17 @@ There are two equivalent entry points.
 :rpc.call(:"robot@192.168.1.42", BB.TUI, :run, [MyApp.Robot])
 ```
 
-This is the simplest variant — the entire TUI runs on the robot node
-and binds to whatever stdio that node has. Useful when you SSH into the
-device.
+This is the simplest variant — the entire TUI runs on the robot node and binds to whatever stdio that node has.
 
-**2. Spawn the TUI locally and pull data from the robot node (renders here):**
+**2. Spawn the TUI locally and pull data from the robot node (renders local):**
 
 ```elixir
 # On the dev node, after Node.connect/1
 BB.TUI.run(MyApp.Robot, node: :"robot@192.168.1.42")
 ```
 
-This renders on your local terminal but every robot call goes to the
-remote node. The dev node needs `bb_tui` (and the BB modules it depends
-on) loaded so the rendering layer has its types available, but no robot
-supervision tree is started locally.
+This renders on local terminal but every robot call goes to the remote node. The dev node needs `bb_tui` (and the BB modules it depends
+on) loaded so the rendering layer has its types available, but no robot supervision tree is started locally.
 
 The same `--node` flag is available on the mix task:
 
@@ -115,12 +102,7 @@ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
     --robot MyApp.Robot --node robot@192.168.1.42
 ```
 
-These two approaches are the **first starting point** for distributing
-the dashboard. A proper SSH transport — where ExRatatui itself binds
-crossterm to an SSH channel instead of local stdio — is being explored
-in [ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33) and
-will eventually replace the relay-based path for production use on
-Nerves devices.
+These two approaches are the **first starting point** for distributing the dashboard. A proper SSH transport — where ExRatatui itself binds crossterm to an SSH channel instead of local stdio — is being explored in [ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33).
 
 ## Keybindings
 
@@ -178,7 +160,7 @@ Nerves devices.
 
 ## How It Works
 
-BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly (safety, actuator, command execution). No optimistic updates — the TUI is a faithful reflection of the robot's actual state.
+BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly (safety, actuator, command execution). No optimistic updates, the TUI is a faithful reflection of the robot's actual state.
 
 All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — making the dashboard easy to test headlessly.
 

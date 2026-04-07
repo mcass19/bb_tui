@@ -9,7 +9,10 @@ defmodule BB.TUI.Robot do
   that decides where each call goes:
 
     * `node == nil` — call the local `BB.*` module directly.
-    * `node` is a connected remote node atom — call via `:rpc.call/4`.
+    * `node` is a connected remote node atom — call via `BB.TUI.Rpc`,
+      a thin wrapper over `:rpc.call/4` that exists so the cross-node
+      paths can be mocked in tests (`:rpc` itself is a sticky kernel
+      module that cannot be replaced at runtime).
 
   ## PubSub across nodes
 
@@ -49,7 +52,7 @@ defmodule BB.TUI.Robot do
   def subscribe(robot, paths, node) when is_list(paths) and is_atom(node) do
     parent = self()
 
-    Node.spawn_link(node, fn ->
+    BB.TUI.Rpc.spawn_link(node, fn ->
       Enum.each(paths, &BB.subscribe(robot, &1))
       relay_loop(parent)
     end)
@@ -111,7 +114,7 @@ defmodule BB.TUI.Robot do
   end
 
   def discover_commands(robot, node) do
-    case :rpc.call(node, BB.Dsl.Info, :commands, [robot]) do
+    case BB.TUI.Rpc.call(node, BB.Dsl.Info, :commands, [robot]) do
       {:badrpc, _} -> []
       result when is_list(result) -> result
       _ -> []
@@ -182,7 +185,7 @@ defmodule BB.TUI.Robot do
   # ── Internal ───────────────────────────────────────────────
 
   defp rpc(node, mod, fun, args) do
-    case :rpc.call(node, mod, fun, args) do
+    case BB.TUI.Rpc.call(node, mod, fun, args) do
       {:badrpc, reason} ->
         raise "BB.TUI.Robot: remote call #{inspect(mod)}.#{fun}/#{length(args)} " <>
                 "on #{inspect(node)} failed: #{inspect(reason)}"

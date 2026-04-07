@@ -97,6 +97,21 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert widget.text =~ "[j/k]Select"
     end
 
+    test "shows joint adjustment hints when armed" do
+      state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :armed})
+      widget = StatusBar.render(state)
+
+      assert widget.text =~ "[h/l]Adj"
+      assert widget.text =~ "[H/L]Adj10x"
+    end
+
+    test "shows joint adjustment hints when disarming" do
+      state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :disarming})
+      widget = StatusBar.render(state)
+
+      assert widget.text =~ "[h/l]Adj"
+    end
+
     test "shows panel-specific hints for parameters" do
       state = Fixtures.sample_state(%{active_panel: :parameters})
       widget = StatusBar.render(state)

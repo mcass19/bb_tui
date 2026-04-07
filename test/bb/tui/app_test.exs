@@ -133,6 +133,21 @@ defmodule BB.TUI.AppTest do
       {last_widget, _rect} = List.last(widgets)
       assert %ExRatatui.Widgets.Popup{} = last_widget
     end
+
+    test "skips the event detail popup when show_event_detail is set but no event is selected" do
+      state =
+        Fixtures.sample_state(%{
+          show_event_detail: true,
+          events: [],
+          scroll_offset: 0
+        })
+
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+      widgets = App.render(state, frame)
+
+      # No popup added — just the 7 base panels.
+      assert length(widgets) == 7
+    end
   end
 
   describe "handle_event/2" do
@@ -778,6 +793,39 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} = App.handle_event(event, state)
       # Position NOT updated locally for real actuators — waits for sensor feedback
       assert new_state.joints.shoulder.position == 0.0
+    end
+
+    test "l key publishes simulated state when robot has actuators map but no match for joint" do
+      Fixtures.stub_bb_modules(safety_state: :armed)
+
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      # Robot has actuators, but none of them are linked to :shoulder.
+      # This exercises the `nil -> nil` branch in find_actuator_for_joint/2.
+      robot_struct =
+        Map.put(Fixtures.sample_robot_struct(), :actuators, %{
+          gripper_motor: %{joint: :gripper}
+        })
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed,
+          robot_struct: robot_struct
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.handle_event(event, state)
+      # No matching actuator → simulated path → local position updated
+      assert new_state.joints.shoulder.position > 0.0
     end
 
     # Parameters panel keys — navigation
