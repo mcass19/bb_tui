@@ -11,7 +11,7 @@ defmodule BB.TUI.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
-      dialyzer: [plt_add_apps: [:mix], ignore_warnings: ".dialyzer_ignore.exs"]
+      dialyzer: [plt_add_apps: [:mix]]
     ]
   end
 

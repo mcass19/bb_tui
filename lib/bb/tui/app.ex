@@ -33,6 +33,7 @@ defmodule BB.TUI.App do
   use ExRatatui.App
 
   alias BB.TUI.Panels
+  alias BB.TUI.Robot
   alias BB.TUI.State
   alias ExRatatui.Layout
   alias ExRatatui.Layout.Rect
@@ -44,6 +45,7 @@ defmodule BB.TUI.App do
   @impl true
   def mount(opts) do
     robot = Keyword.fetch!(opts, :robot)
+    node = Keyword.get(opts, :node)
 
     unless Code.ensure_loaded?(robot) and
              function_exported?(robot, :robot, 0) and
@@ -51,12 +53,10 @@ defmodule BB.TUI.App do
       raise ArgumentError, "#{inspect(robot)} is not a valid BB robot module"
     end
 
-    BB.subscribe(robot, [:state_machine])
-    BB.subscribe(robot, [:sensor])
-    BB.subscribe(robot, [:param])
+    Robot.subscribe(robot, [[:state_machine], [:sensor], [:param]], node)
 
-    robot_struct = BB.Robot.Runtime.get_robot(robot)
-    positions = BB.Robot.Runtime.positions(robot)
+    robot_struct = Robot.get_robot(robot, node)
+    positions = Robot.positions(robot, node)
 
     joints =
       robot_struct
@@ -64,14 +64,15 @@ defmodule BB.TUI.App do
       |> Enum.filter(&BB.Robot.Joint.movable?/1)
       |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0}})
 
-    commands = discover_commands(robot)
+    commands = Robot.discover_commands(robot, node)
 
     state =
       %State{
         robot: robot,
         robot_struct: robot_struct,
-        safety_state: BB.Safety.state(robot),
-        runtime_state: BB.Robot.Runtime.state(robot),
+        node: node,
+        safety_state: Robot.safety_state(robot, node),
+        runtime_state: Robot.runtime_state(robot, node),
         joints: joints,
         events: [],
         commands: commands,
@@ -80,7 +81,7 @@ defmodule BB.TUI.App do
         show_help: false,
         confirm_force_disarm: false
       }
-      |> State.update_parameters(BB.Parameter.list(robot, []))
+      |> State.update_parameters(Robot.list_parameters(robot, [], node))
 
     {:ok, state}
   end
@@ -164,7 +165,7 @@ defmodule BB.TUI.App do
         %ExRatatui.Event.Key{code: "y", kind: "press"},
         %{confirm_force_disarm: true} = state
       ) do
-    BB.Safety.force_disarm(state.robot)
+    Robot.force_disarm(state.robot, state.node)
     {:noreply, State.dismiss_force_disarm(state)}
   end
 
@@ -197,12 +198,12 @@ defmodule BB.TUI.App do
   end
 
   def handle_event(%ExRatatui.Event.Key{code: "a", kind: "press"}, state) do
-    BB.Safety.arm(state.robot)
+    Robot.arm(state.robot, state.node)
     {:noreply, state}
   end
 
   def handle_event(%ExRatatui.Event.Key{code: "d", kind: "press"}, state) do
-    BB.Safety.disarm(state.robot)
+    Robot.disarm(state.robot, state.node)
     {:noreply, state}
   end
 
@@ -390,8 +391,8 @@ defmodule BB.TUI.App do
 
   @impl true
   def handle_info({:bb, [:state_machine | _] = path, msg}, state) do
-    safety_state = BB.Safety.state(state.robot)
-    runtime_state = BB.Robot.Runtime.state(state.robot)
+    safety_state = Robot.safety_state(state.robot, state.node)
+    runtime_state = Robot.runtime_state(state.robot, state.node)
 
     state =
       state
@@ -417,7 +418,7 @@ defmodule BB.TUI.App do
   end
 
   def handle_info({:bb, [:param | _] = path, msg}, state) do
-    parameters = BB.Parameter.list(state.robot, [])
+    parameters = Robot.list_parameters(state.robot, [], state.node)
 
     state =
       state
@@ -461,16 +462,6 @@ defmodule BB.TUI.App do
 
   defp maybe_add_popup(panels, _state, _full), do: panels
 
-  defp discover_commands(robot) do
-    if Code.ensure_loaded?(BB.Dsl.Info) and function_exported?(BB.Dsl.Info, :commands, 1) do
-      BB.Dsl.Info.commands(robot)
-    else
-      []
-    end
-  rescue
-    _ -> []
-  end
-
   defp adjust_selected_joint(state, _direction, _multiplier)
        when state.safety_state not in [:armed, :disarming] do
     {:noreply, state}
@@ -499,16 +490,16 @@ defmodule BB.TUI.App do
         actuator = find_actuator_for_joint(state.robot_struct, name)
 
         if actuator do
-          BB.Actuator.set_position!(state.robot, actuator, new_pos)
+          Robot.set_actuator(state.robot, actuator, new_pos, state.node)
           {:noreply, state}
         else
-          publish_simulated_position(state.robot, name, new_pos)
+          publish_simulated_position(state.robot, name, new_pos, state.node)
           {:noreply, State.set_joint_position(state, name, new_pos)}
         end
     end
   end
 
-  defp publish_simulated_position(robot, joint_name, position) do
+  defp publish_simulated_position(robot, joint_name, position, node) do
     {:ok, msg} =
       BB.Message.new(BB.Message.Sensor.JointState, :simulated,
         names: [joint_name],
@@ -517,7 +508,7 @@ defmodule BB.TUI.App do
         efforts: [0.0]
       )
 
-    BB.publish(robot, [:sensor, :simulated], msg)
+    Robot.publish(robot, [:sensor, :simulated], msg, node)
   end
 
   defp find_actuator_for_joint(%{actuators: actuators}, joint_name) do
@@ -536,13 +527,13 @@ defmodule BB.TUI.App do
       {path, value} when is_integer(value) ->
         step = multiplier
         new_value = if direction == :increase, do: value + step, else: value - step
-        BB.Parameter.set(state.robot, path, new_value)
+        Robot.set_parameter(state.robot, path, new_value, state.node)
         {:noreply, state}
 
       {path, value} when is_float(value) ->
         step = 0.1 * multiplier
         new_value = if direction == :increase, do: value + step, else: value - step
-        BB.Parameter.set(state.robot, path, new_value)
+        Robot.set_parameter(state.robot, path, new_value, state.node)
         {:noreply, state}
 
       _ ->
@@ -553,7 +544,7 @@ defmodule BB.TUI.App do
   defp toggle_selected_param(state) do
     case State.selected_param(state) do
       {path, value} when is_boolean(value) ->
-        BB.Parameter.set(state.robot, path, !value)
+        Robot.set_parameter(state.robot, path, !value, state.node)
         {:noreply, state}
 
       _ ->
@@ -573,7 +564,7 @@ defmodule BB.TUI.App do
 
           pid =
             spawn(fn ->
-              result = BB.Robot.Runtime.execute(state.robot, cmd.name, %{})
+              result = Robot.execute_command(state.robot, cmd.name, %{}, state.node)
 
               case result do
                 {:ok, cmd_pid} ->

@@ -12,7 +12,21 @@ defmodule Mix.Tasks.Bb.Tui do
 
   ## Options
 
-    * `--robot` - (required) The robot module to connect to.
+    * `--robot` — (required) The robot module to connect to.
+    * `--node` — (optional) Connected remote node atom. When set, the
+      TUI renders on the local terminal but pulls all data and dispatches
+      all commands across distribution. The dev node must already be
+      connected to the remote node (e.g. via `--sname`/`--name` and
+      `Node.connect/1`).
+
+  ## Examples
+
+      # Local
+      $ mix bb.tui --robot MyApp.Robot
+
+      # Remote — render here, data from there
+      $ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \\
+          --robot MyApp.Robot --node robot@192.168.1.42
 
   ## Keybindings
 
@@ -63,7 +77,7 @@ defmodule Mix.Tasks.Bb.Tui do
 
   @impl true
   def run(args) do
-    {opts, _rest} = OptionParser.parse!(args, strict: [robot: :string])
+    {opts, _rest} = OptionParser.parse!(args, strict: [robot: :string, node: :string])
 
     robot =
       case Keyword.get(opts, :robot) do
@@ -74,8 +88,14 @@ defmodule Mix.Tasks.Bb.Tui do
           Module.concat([module_str])
       end
 
+    tui_opts =
+      case Keyword.get(opts, :node) do
+        nil -> []
+        node_str -> [node: String.to_atom(node_str)]
+      end
+
     Mix.Task.run("app.start")
 
-    BB.TUI.run(robot)
+    BB.TUI.run(robot, tui_opts)
   end
 end

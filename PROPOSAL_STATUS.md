@@ -119,15 +119,46 @@ In a released system, bb_tui would only run if a user explicitly invokes it.
 
 ### 2. "Attach remotely via distribution"
 
-**Current status:** Not implemented yet.
+**Current status:** Working — distribution is supported as a first
+starting point. SSH transport is the planned next iteration in
+ExRatatui itself.
 
-**Short-term option:** Use `:rpc.call(robot_node, BB.TUI, :run, [MyRobot])` where the TUI renders on the *calling* node's terminal. This should work if the caller has a real PTY, but needs testing.
+bb_tui now supports two equivalent entry points for cross-node use,
+both validated against a `dev@` ↔ `robot@` setup:
 
-**Long-term option:** SSH transport in ExRatatui. Instead of reading/writing to local stdio, the TUI connects to an SSH channel. The rendering engine and application code stay the same — only the I/O transport changes. This is tracked in [ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33).
+1. **Spawn the TUI on the robot node** — `:rpc.call(robot_node, BB.TUI, :run, [MyRobot])`.
+   The entire TUI runs on the robot, binding to whatever stdio that
+   node has (works great over SSH, where the SSH session *is* the
+   stdio).
+2. **Render locally, data over distribution** — `BB.TUI.run(MyRobot, node: :"robot@host")`.
+   The TUI process and rendering live on the dev node. Every BB call
+   is routed via `:rpc.call/4` through `BB.TUI.Robot`, and PubSub
+   messages are relayed back through a small process spawned on the
+   remote node via `Node.spawn_link/2`.
 
-The transport layer is planned as a behaviour in ExRatatui, so adding new transports (SSH, distribution, websocket) is just implementing the behaviour.
+The `--node` flag is also wired into the mix task:
 
-**Question for James:** Which approach does he prefer? Is remote distribution the priority, or is SSH-based access more aligned with the Nerves use case?
+```sh
+iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
+    --robot MyRobot --node robot@192.168.1.42
+```
+
+**Long-term option:** SSH transport in ExRatatui ([ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33)).
+Instead of reading/writing to local stdio, ExRatatui would bind
+crossterm to an SSH channel. The rendering engine and application code
+stay the same — only the I/O transport changes. Once that lands,
+production Nerves access can use SSH directly without the relay-based
+fallback path.
+
+The transport layer is planned as a behaviour in ExRatatui, so adding
+new transports (SSH, distribution, websocket) is just implementing the
+behaviour.
+
+**Open question for James:** Both approaches now work. The remote-data
+path is "good enough" for dev iteration; SSH transport is the natural
+fit for production access on Nerves. Confirm that prioritizing the SSH
+work in ExRatatui (rather than further hardening distribution) matches
+his preference.
 
 ### 3. "Rust CLI with erl_rpc (like neonfs-cli)"
 
@@ -149,42 +180,63 @@ This section outlines how to explore and prototype the remote TUI attachment app
 
 Enable `BB.TUI` to render on a developer's local terminal while the robot runs on a different BEAM node (e.g. a Nerves device on the network).
 
-### Approach 1: `:rpc.call` (quick experiment)
+### Approach 1: distribution (`:rpc.call` and remote PubSub) — IMPLEMENTED
 
-The simplest thing to try first. The hypothesis is that if the calling node has a real PTY, `ExRatatui` will bind to *that* node's stdio.
+Both variants now work and are documented in the README. They are the
+recommended first starting point for cross-machine use.
 
-**Steps to explore:**
+**Setup — start two nodes connected via distribution:**
 
-1. **Start two nodes** — a "robot" node and a "dev" node connected via distribution:
-   ```
-   # Terminal 1 — robot node (could be Nerves, or just a local node)
-   iex --name robot@127.0.0.1 --cookie secret -S mix
+```sh
+# Terminal 1 — robot node (could be Nerves, or just a local node)
+iex --name robot@127.0.0.1 --cookie secret -S mix
 
-   # Terminal 2 — dev node (your laptop terminal)
-   iex --name dev@127.0.0.1 --cookie secret
-   ```
+# Terminal 2 — dev node (must have bb_tui loaded)
+iex --name dev@127.0.0.1 --cookie secret -S mix
+```
 
-2. **Connect the nodes:**
-   ```elixir
-   # On the dev node
-   Node.connect(:"robot@127.0.0.1")
-   ```
+```elixir
+# On the dev node
+Node.connect(:"robot@127.0.0.1")
+```
 
-3. **Try the naive RPC call:**
-   ```elixir
-   # On the dev node — does the TUI render HERE or on the robot node?
-   :rpc.call(:"robot@127.0.0.1", BB.TUI, :run, [Dev.TestRobot])
-   ```
+**Variant A — TUI runs on the robot node:**
 
-4. **Observe:** Does the TUI render on the dev terminal? Does input work? Does PubSub data flow across nodes? This will likely fail because ExRatatui's NIF binds to the stdio of the node where the NIF is loaded — i.e. the robot node's stdio, not the caller's.
+```elixir
+:rpc.call(:"robot@127.0.0.1", BB.TUI, :run, [Dev.TestRobot])
+```
 
-5. **If RPC fails (expected):** Try spawning the TUI process on the *dev* node but subscribing to PubSub on the *robot* node:
-   ```elixir
-   # On the dev node — TUI runs locally, but data comes from the remote robot
-   # This requires the dev node to have bb_tui as a dependency
-   BB.TUI.run(Dev.TestRobot, node: :"robot@127.0.0.1")
-   ```
-   This would need a small change to `BB.TUI.App` to subscribe to the remote node's PubSub. The key question: can `Phoenix.PubSub` subscribe across nodes? (Yes — PubSub uses `pg` which is distribution-aware.)
+The TUI binds to the robot node's stdio. Most useful when you SSH into
+the device and want a dashboard for the robot you're sshed into. No
+library changes were needed for this variant — the rpc call simply
+spawns the TUI on the remote node and waits for it to exit.
+
+**Variant B — TUI runs locally, data comes from the remote robot:**
+
+```elixir
+BB.TUI.run(Dev.TestRobot, node: :"robot@127.0.0.1")
+```
+
+The TUI process, rendering, and keyboard input live on the dev node.
+Every BB call (`BB.Safety.state/1`, `BB.Parameter.list/2`,
+`BB.Robot.Runtime.execute/3`, etc.) is routed via `:rpc.call/4` through
+the new `BB.TUI.Robot` module. PubSub is bridged by spawning a tiny
+relay process on the remote node via `Node.spawn_link/2`: the relay
+calls `BB.subscribe/2` locally there and forwards every `{:bb, _, _}`
+message back to the TUI process on the dev node.
+
+The relay exists because `BB.PubSub` is built on `Registry`, which is
+node-local — you cannot subscribe to a remote registry directly. The
+relay is the only "process with a runtime reason" introduced by this
+path; it gives us a place to receive messages on the remote node and
+fault isolation if the remote node disconnects.
+
+The same option is available on the mix task:
+
+```sh
+iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
+    --robot Dev.TestRobot --node robot@127.0.0.1
+```
 
 ### Approach 2: SSH transport (ex_ratatui level)
 
@@ -238,8 +290,12 @@ This is a standalone Rust binary — completely decoupled from the BEAM.
 
 ### Recommended exploration order
 
-1. **Start with Approach 1** — 30 minutes to validate whether cross-node PubSub + local TUI rendering works. This gives remote access with zero changes to ExRatatui.
-2. **If Approach 1 works**, ship it as the "dev mode" remote solution.
-3. **In parallel, prototype Approach 2** for the production/Nerves use case where SSH is the natural access method.
-4. **Defer Approach 3** unless James has a strong preference for a standalone binary.
+1. **Approach 1 — done.** Both variants ship in bb_tui as the "dev mode"
+   remote solution. See the README's "Remote attach (distribution)"
+   section for usage and `BB.TUI.Robot` for the routing layer.
+2. **Prototype Approach 2** for the production/Nerves use case where
+   SSH is the natural access method. This is the next iteration and is
+   tracked in [ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33).
+3. **Defer Approach 3** unless James has a strong preference for a
+   standalone binary.
 

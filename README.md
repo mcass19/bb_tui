@@ -74,6 +74,54 @@ children = [
 ]
 ```
 
+### Remote attach (distribution)
+
+When the robot is running on a different BEAM node — e.g. a Nerves
+device on the network — you can render the dashboard on your local dev
+terminal while pulling all data from the robot node. The TUI process,
+keyboard input, and rendering live locally; every BB call is routed
+across distribution via `:rpc.call/4`, and PubSub messages are relayed
+back through a small process spawned on the remote node.
+
+There are two equivalent entry points.
+
+**1. Spawn the TUI on the robot node (renders on the robot's terminal):**
+
+```elixir
+# On the dev node, after Node.connect/1
+:rpc.call(:"robot@192.168.1.42", BB.TUI, :run, [MyApp.Robot])
+```
+
+This is the simplest variant — the entire TUI runs on the robot node
+and binds to whatever stdio that node has. Useful when you SSH into the
+device.
+
+**2. Spawn the TUI locally and pull data from the robot node (renders here):**
+
+```elixir
+# On the dev node, after Node.connect/1
+BB.TUI.run(MyApp.Robot, node: :"robot@192.168.1.42")
+```
+
+This renders on your local terminal but every robot call goes to the
+remote node. The dev node needs `bb_tui` (and the BB modules it depends
+on) loaded so the rendering layer has its types available, but no robot
+supervision tree is started locally.
+
+The same `--node` flag is available on the mix task:
+
+```sh
+iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
+    --robot MyApp.Robot --node robot@192.168.1.42
+```
+
+These two approaches are the **first starting point** for distributing
+the dashboard. A proper SSH transport — where ExRatatui itself binds
+crossterm to an SSH channel instead of local stdio — is being explored
+in [ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33) and
+will eventually replace the relay-based path for production use on
+Nerves devices.
+
 ## Keybindings
 
 ### Global

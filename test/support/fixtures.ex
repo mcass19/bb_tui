@@ -8,6 +8,7 @@ defmodule BB.TUI.Test.Fixtures do
     defaults = %{
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
+      node: nil,
       safety_state: :disarmed,
       runtime_state: :disarmed,
       joints: sample_joints(),

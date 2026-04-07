@@ -20,6 +20,17 @@ defmodule BB.TUI do
       # Mix task — standalone
       $ mix bb.tui --robot MyApp.Robot
 
+  ## Remote attach
+
+  When the robot is running on a different BEAM node — for example a
+  Nerves device on the network — pass the `:node` option so the TUI
+  renders on the local terminal but pulls all data and dispatches all
+  commands across distribution:
+
+      # On the dev node, after Node.connect/1 with the robot node
+      BB.TUI.run(MyApp.Robot, node: :"robot@192.168.1.42")
+
+  See `BB.TUI.Robot` for the routing layer that backs this option.
   """
 
   @doc """
@@ -47,7 +58,21 @@ defmodule BB.TUI do
 
   ## Options
 
-    * `:test_mode` - `{width, height}` tuple for headless testing (optional)
+    * `:node` — connected remote node atom. When set, all robot data is
+      fetched from that node via `:rpc.call/4` and PubSub messages are
+      relayed back to the local TUI. The dev node must be connected to
+      the remote node first via `Node.connect/1`.
+    * `:test_mode` — `{width, height}` tuple for headless testing
+      (optional).
+
+  ## Examples
+
+      # Local
+      BB.TUI.run(MyApp.Robot)
+
+      # Remote — render here, data from there
+      Node.connect(:"robot@192.168.1.42")
+      BB.TUI.run(MyApp.Robot, node: :"robot@192.168.1.42")
 
   """
   @spec run(module(), keyword()) :: :ok | {:error, term()}
@@ -73,7 +98,9 @@ defmodule BB.TUI do
 
   ## Options
 
-    * `:test_mode` - `{width, height}` tuple for headless testing (optional)
+    * `:node` — connected remote node atom (see `run/2`).
+    * `:test_mode` — `{width, height}` tuple for headless testing
+      (optional).
 
   """
   @spec start(module(), keyword()) :: {:ok, pid()} | {:error, term()}
