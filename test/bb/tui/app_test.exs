@@ -76,9 +76,9 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      # safety, commands, joints, events, parameters, status_bar = 6
+      # title_bar, safety, commands, joints, events, parameters, status_bar = 7
       assert is_list(widgets)
-      assert length(widgets) == 6
+      assert length(widgets) == 7
 
       Enum.each(widgets, fn {widget, rect} ->
         assert is_struct(widget)
@@ -92,7 +92,7 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 7
+      assert length(widgets) == 8
     end
 
     test "includes force disarm popup when confirm_force_disarm is true" do
@@ -101,7 +101,7 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 7
+      assert length(widgets) == 8
     end
 
     test "popup is rendered last (on top)" do
@@ -129,7 +129,7 @@ defmodule BB.TUI.AppTest do
       frame = %ExRatatui.Frame{width: 120, height: 40}
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 7
+      assert length(widgets) == 8
       {last_widget, _rect} = List.last(widgets)
       assert %ExRatatui.Widgets.Popup{} = last_widget
     end

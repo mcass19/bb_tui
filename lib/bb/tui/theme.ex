@@ -271,4 +271,29 @@ defmodule BB.TUI.Theme do
   """
   @spec blocked_style() :: Style.t()
   def blocked_style, do: %Style{fg: dim_text()}
+
+  @doc """
+  Deep Elixir/BB violet used as the title bar background.
+
+  The hue is inspired by the Elixir logo and the Beam Bots
+  hexdocs "purple" badge.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.title_bg()
+      {:rgb, 78, 42, 90}
+  """
+  @spec title_bg() :: ExRatatui.Style.color()
+  def title_bg, do: {:rgb, 78, 42, 90}
+
+  @doc """
+  Light lavender foreground used on top of the title bar background.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.title_fg()
+      {:rgb, 230, 210, 245}
+  """
+  @spec title_fg() :: ExRatatui.Style.color()
+  def title_fg, do: {:rgb, 230, 210, 245}
 end

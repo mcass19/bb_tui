@@ -89,9 +89,10 @@ defmodule BB.TUI.App do
   def render(state, frame) do
     full = %Rect{x: 0, y: 0, width: frame.width, height: frame.height}
 
-    # Main area + status bar
-    [main, status_bar_area] =
+    # Title bar + main area + status bar
+    [title_bar_area, main, status_bar_area] =
       Layout.split(full, :vertical, [
+        {:length, 1},
         {:min, 0},
         {:length, 1}
       ])
@@ -125,6 +126,7 @@ defmodule BB.TUI.App do
       ])
 
     panels = [
+      {Panels.TitleBar.render(state), title_bar_area},
       {Panels.Safety.render(state, state.active_panel == :safety), safety_area},
       {Panels.Commands.render(state, state.active_panel == :commands), commands_area},
       {Panels.Joints.render(state, state.active_panel == :joints), joints_area},
