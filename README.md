@@ -16,6 +16,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Help overlay** — scrollable popup with full keybinding reference
 - **Theme system** — consistent color palette with semantic styles (safety colors, focus borders, panel headers)
 - **Keyboard-driven navigation** — Tab to cycle panels, vim-style j/k/h/l within panels
+- **SSH transport** — serve the dashboard over SSH; multiple operators can connect simultaneously, each with their own isolated session
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
 - **Headless test suite** — full coverage using Mimic + ExRatatui test backend
 
@@ -102,7 +103,78 @@ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
     --robot MyApp.Robot --node robot@192.168.1.42
 ```
 
-These two approaches are the **first starting point** for distributing the dashboard. A proper SSH transport — where ExRatatui itself binds crossterm to an SSH channel instead of local stdio — is being explored in [ex_ratatui#33](https://github.com/mcass19/ex_ratatui/issues/33).
+### SSH transport
+
+When the robot runs on a headless device (Nerves board, container, remote host), serve the dashboard over SSH so any SSH client can connect — no local Elixir node or distribution needed on the client side.
+
+Each SSH client gets its own isolated session with independent panel selection, scroll positions, and event streams. Multiple operators can monitor the same robot simultaneously.
+
+**1. Supervised (production):**
+
+```elixir
+children = [
+  {BB.Supervisor, MyApp.Robot},
+  {BB.TUI, robot: MyApp.Robot, transport: :ssh, port: 2222,
+   auto_host_key: true, auth_methods: ~c"password",
+   user_passwords: [{~c"admin", ~c"s3cret"}]}
+]
+```
+
+Then from any machine with an SSH client:
+
+```sh
+ssh admin@robot.local -p 2222
+```
+
+**2. Programmatic:**
+
+```elixir
+BB.TUI.start_ssh(MyApp.Robot,
+  port: 2222,
+  auto_host_key: true,
+  auth_methods: ~c"password",
+  user_passwords: [{~c"admin", ~c"s3cret"}]
+)
+```
+
+**3. Mix task:**
+
+```sh
+# Start SSH daemon with defaults (port 2222, admin/admin)
+mix bb.tui --robot MyApp.Robot --ssh
+
+# Custom port
+mix bb.tui --robot MyApp.Robot --ssh --port 3333
+```
+
+**4. Nerves subsystem (plugging into existing `nerves_ssh`):**
+
+If the device already runs `nerves_ssh`, plug into its daemon instead of starting a second one:
+
+```elixir
+# config/runtime.exs
+import Config
+
+if Application.spec(:nerves_ssh) do
+  config :nerves_ssh,
+    subsystems: [
+      :ssh_sftpd.subsystem_spec(cwd: ~c"/"),
+      BB.TUI.subsystem(MyApp.Robot)
+    ]
+end
+```
+
+Then connect with:
+
+```sh
+ssh -t nerves.local -s Elixir.BB.TUI.App
+```
+
+The `-t` flag is required — it forces PTY allocation, which the TUI needs for interactive input.
+
+> **Why `runtime.exs`?** Mix evaluates compile-time configs before it builds deps for the target, so `ExRatatui.SSH` isn't on the code path yet. `runtime.exs` runs at device boot after all beam files are loaded. The `Application.spec(:nerves_ssh)` guard keeps host builds silent.
+
+See `ExRatatui.SSH.Daemon` for the full list of SSH options (authentication, host keys, idle timeout, max sessions, etc.).
 
 ## Keybindings
 
@@ -164,6 +236,8 @@ BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to 
 
 All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — making the dashboard easy to test headlessly.
 
+The SSH transport is built on OTP's `:ssh` module. `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isolated `ExRatatui.SSH` channel process per client. Each channel owns an in-memory `ExRatatui.Session` (backed by a Rust VTE parser) and a linked server running `BB.TUI.App`. The `mount/render/handle_event/handle_info` callbacks are completely transport-agnostic — the same code path serves both local and SSH sessions.
+
 ## Development
 
 The project ships a simulated WidowX-200 robot arm that starts automatically in dev:
@@ -184,6 +258,42 @@ Or via the mix task:
 ```sh
 mix bb.tui --robot Dev.TestRobot
 ```
+
+### Testing SSH locally
+
+Start the SSH daemon against the simulated robot:
+
+```sh
+mix bb.tui --robot Dev.TestRobot --ssh
+```
+
+This starts a daemon on port 2222 with auto-generated host keys and default credentials (`admin` / `admin`). Then from another terminal:
+
+```sh
+ssh admin@localhost -p 2222
+```
+
+To use a custom port:
+
+```sh
+mix bb.tui --robot Dev.TestRobot --ssh --port 3333
+ssh admin@localhost -p 3333
+```
+
+Or from IEx for more control:
+
+```elixir
+BB.TUI.start_ssh(Dev.TestRobot,
+  port: 2222,
+  auto_host_key: true,
+  auth_methods: ~c"password",
+  user_passwords: [{~c"dev", ~c"dev"}]
+)
+```
+
+Then connect from another terminal. You can open multiple SSH sessions simultaneously — each gets its own independent dashboard.
+
+> **Tip:** If you see a host key warning on reconnect (after recompiling), remove the old key with `ssh-keygen -R "[localhost]:2222"`.
 
 ## License
 

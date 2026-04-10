@@ -20,7 +20,7 @@ defmodule BB.TUI do
       # Mix task — standalone
       $ mix bb.tui --robot MyApp.Robot
 
-  ## Remote attach
+  ## Remote attach (distribution)
 
   When the robot is running on a different BEAM node — for example a
   Nerves device on the network — pass the `:node` option so the TUI
@@ -31,14 +31,49 @@ defmodule BB.TUI do
       BB.TUI.run(MyApp.Robot, node: :"robot@192.168.1.42")
 
   See `BB.TUI.Robot` for the routing layer that backs this option.
+
+  ## SSH transport
+
+  When the robot runs on a headless device (Nerves board, container, remote
+  host), you can serve the dashboard over SSH so any SSH client can connect
+  without a local Elixir node or distribution setup on the client side:
+
+      # In the robot's supervision tree
+      children = [
+        {BB.Supervisor, MyApp.Robot},
+        {BB.TUI, robot: MyApp.Robot, transport: :ssh, port: 2222,
+         auto_host_key: true, auth_methods: ~c"password",
+         user_passwords: [{~c"admin", ~c"s3cret"}]}
+      ]
+
+  Then from any machine:
+
+      ssh admin@robot.local -p 2222
+
+  Each SSH client gets its own isolated session with independent panel
+  selection, scroll positions, and event streams. Multiple operators can
+  monitor the same robot simultaneously.
+
+  For Nerves devices already running `nerves_ssh`, plug into the existing
+  daemon as a subsystem instead — see `subsystem/1`.
+
+  See `ExRatatui.SSH.Daemon` for the full list of SSH options.
   """
 
   @doc """
   Returns a child specification for supervision trees.
 
+  Accepts all options supported by `start/2` and `start_ssh/2`. When
+  `transport: :ssh` is present, the spec starts an SSH daemon instead
+  of a local terminal.
+
   ## Examples
 
       iex> %{id: BB.TUI, start: {BB.TUI, :start, _}} = BB.TUI.child_spec(robot: MyApp.Robot)
+
+      iex> spec = BB.TUI.child_spec(robot: MyApp.Robot, transport: :ssh, port: 2222)
+      iex> spec.id
+      BB.TUI
 
   """
   def child_spec(opts) when is_list(opts) do
@@ -53,8 +88,10 @@ defmodule BB.TUI do
   @doc """
   Runs the TUI dashboard interactively, blocking until the user quits.
 
-  Use this from IEx or scripts. The terminal is taken over for the
-  duration and restored when the TUI exits (press `q` to quit).
+  Use this from IEx or scripts. For local transport, the terminal is
+  taken over for the duration and restored when the TUI exits (press
+  `q` to quit). For SSH transport, the daemon runs until the process
+  is stopped.
 
   ## Options
 
@@ -62,6 +99,9 @@ defmodule BB.TUI do
       fetched from that node via `:rpc.call/4` and PubSub messages are
       relayed back to the local TUI. The dev node must be connected to
       the remote node first via `Node.connect/1`.
+    * `:transport` — `:local` (default) for the OS terminal, or `:ssh`
+      to start an SSH daemon. When `:ssh`, all `ExRatatui.SSH.Daemon`
+      options (`:port`, `:system_dir`, etc.) are accepted.
     * `:test_mode` — `{width, height}` tuple for headless testing
       (optional).
 
@@ -93,18 +133,151 @@ defmodule BB.TUI do
   @doc """
   Starts the TUI dashboard as a linked process.
 
+  When `transport: :ssh` is set in `opts`, starts an SSH daemon that
+  serves the dashboard to connecting SSH clients. Otherwise starts a
+  local terminal session.
+
   Use `run/2` for interactive use from IEx. Use `start/2` or the
   child spec when adding to a supervision tree.
 
   ## Options
 
     * `:node` — connected remote node atom (see `run/2`).
+    * `:transport` — `:local` (default) or `:ssh`. When `:ssh`, all
+      `ExRatatui.SSH.Daemon` options are accepted (`:port`,
+      `:system_dir`, `:auto_host_key`, etc.).
     * `:test_mode` — `{width, height}` tuple for headless testing
       (optional).
+
+  ## Examples
+
+      # Local terminal
+      BB.TUI.start(MyApp.Robot)
+
+      # SSH daemon on port 2222
+      BB.TUI.start(MyApp.Robot, transport: :ssh, port: 2222, auto_host_key: true)
 
   """
   @spec start(module(), keyword()) :: {:ok, pid()} | {:error, term()}
   def start(robot, opts \\ []) when is_atom(robot) do
-    BB.TUI.App.start_link(Keyword.put(opts, :robot, robot))
+    case Keyword.get(opts, :transport) do
+      :ssh ->
+        opts
+        |> wrap_app_opts(robot)
+        |> BB.TUI.App.start_link()
+
+      _ ->
+        BB.TUI.App.start_link(Keyword.put(opts, :robot, robot))
+    end
+  end
+
+  @doc """
+  Starts the TUI dashboard as an SSH daemon.
+
+  Convenience wrapper around `start/2` that sets `transport: :ssh`
+  automatically. Each connecting SSH client gets its own isolated
+  dashboard session.
+
+  ## Options
+
+  Accepts all `ExRatatui.SSH.Daemon` options:
+
+    * `:port` — TCP port to listen on (default `2222`).
+    * `:auto_host_key` — auto-generate an RSA host key on first boot
+      (default `false`).
+    * `:system_dir` — host key directory (alternative to
+      `:auto_host_key`).
+    * `:auth_methods` — e.g. `~c"password"` or `~c"publickey"`.
+    * `:user_passwords` — `[{~c"user", ~c"pass"}]` pairs.
+    * `:node` — remote BEAM node atom, forwarded to each client's
+      `mount/1`.
+
+  All other OTP `:ssh.daemon/2` options are forwarded as-is.
+
+  ## Examples
+
+      # Auto-generated host key, password auth
+      BB.TUI.start_ssh(MyApp.Robot,
+        port: 2222,
+        auto_host_key: true,
+        auth_methods: ~c"password",
+        user_passwords: [{~c"admin", ~c"s3cret"}]
+      )
+
+      # In a supervision tree
+      children = [
+        {BB.Supervisor, MyApp.Robot},
+        %{
+          id: BB.TUI.SSH,
+          start: {BB.TUI, :start_ssh, [MyApp.Robot, [port: 2222, auto_host_key: true]]}
+        }
+      ]
+
+  """
+  @spec start_ssh(module(), keyword()) :: {:ok, pid()} | {:error, term()}
+  def start_ssh(robot, opts \\ []) when is_atom(robot) do
+    opts
+    |> Keyword.put(:transport, :ssh)
+    |> wrap_app_opts(robot)
+    |> BB.TUI.App.start_link()
+  end
+
+  @doc """
+  Returns a subsystem tuple for plugging into an existing SSH daemon.
+
+  Use this when the robot already runs `nerves_ssh` (or any OTP
+  `:ssh.daemon/2`) and you want to add the dashboard as an SSH
+  subsystem instead of spinning up a separate daemon.
+
+  ## Nerves example
+
+      # config/runtime.exs
+      import Config
+
+      if Application.spec(:nerves_ssh) do
+        config :nerves_ssh,
+          subsystems: [
+            :ssh_sftpd.subsystem_spec(cwd: ~c"/"),
+            BB.TUI.subsystem(MyApp.Robot)
+          ]
+      end
+
+  Then connect with:
+
+      ssh -t nerves.local -s Elixir.BB.TUI.App
+
+  The `-t` flag is required — it forces PTY allocation, which the TUI
+  needs for interactive input.
+
+  ## Examples
+
+      iex> {name, {mod, args}} = BB.TUI.subsystem(SomeRobot)
+      iex> name
+      ~c"Elixir.BB.TUI.App"
+      iex> mod
+      ExRatatui.SSH
+      iex> Keyword.fetch!(args, :subsystem)
+      true
+
+  """
+  @spec subsystem(module()) :: {charlist(), {module(), keyword()}}
+  def subsystem(robot) when is_atom(robot) do
+    {name, {mod, args}} = ExRatatui.SSH.subsystem(BB.TUI.App)
+    args = Keyword.update(args, :app_opts, [robot: robot], &Keyword.put(&1, :robot, robot))
+    {name, {mod, args}}
+  end
+
+  # Moves :robot and :node into :app_opts so they reach each SSH
+  # client's mount/1 via the daemon. The daemon passes :app_opts to
+  # every spawned channel's Server, which forwards them to mount/1.
+  defp wrap_app_opts(opts, robot) do
+    {node, opts} = Keyword.pop(opts, :node)
+
+    app_opts =
+      Keyword.get(opts, :app_opts, [])
+      |> Keyword.put(:robot, robot)
+      |> then(fn ao -> if node, do: Keyword.put(ao, :node, node), else: ao end)
+
+    Keyword.put(opts, :app_opts, app_opts)
   end
 end

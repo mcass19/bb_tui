@@ -27,6 +27,21 @@ defmodule BB.TUITest do
       {BB.TUI, :start, [BB.TUI.TestRobot, opts]} = spec.start
       assert opts[:node] == :"robot@127.0.0.1"
     end
+
+    test "passes transport: :ssh through to start/2" do
+      spec =
+        BB.TUI.child_spec(
+          robot: BB.TUI.TestRobot,
+          transport: :ssh,
+          port: 3333,
+          auto_host_key: true
+        )
+
+      {BB.TUI, :start, [BB.TUI.TestRobot, opts]} = spec.start
+      assert opts[:transport] == :ssh
+      assert opts[:port] == 3333
+      assert opts[:auto_host_key] == true
+    end
   end
 
   describe "start/2" do
@@ -76,6 +91,92 @@ defmodule BB.TUITest do
 
       Process.unlink(pid)
       Process.exit(pid, :kill)
+    end
+
+    test "wraps :robot into :app_opts when transport is :ssh" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:transport] == :ssh
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        refute Keyword.has_key?(opts, :robot)
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, transport: :ssh, port: 0)
+    end
+
+    test "wraps :node into :app_opts when transport is :ssh" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        assert opts[:app_opts][:node] == :"robot@127.0.0.1"
+        refute Keyword.has_key?(opts, :node)
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start(BB.TUI.TestRobot,
+                 transport: :ssh,
+                 port: 0,
+                 node: :"robot@127.0.0.1"
+               )
+    end
+  end
+
+  describe "start_ssh/2" do
+    test "sets transport: :ssh and wraps :robot into :app_opts" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:transport] == :ssh
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        assert opts[:port] == 4444
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start_ssh(BB.TUI.TestRobot, port: 4444)
+    end
+
+    test "forwards :node into :app_opts" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:app_opts][:node] == :"robot@127.0.0.1"
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start_ssh(BB.TUI.TestRobot,
+                 port: 0,
+                 node: :"robot@127.0.0.1"
+               )
+    end
+
+    test "merges caller-supplied :app_opts with :robot" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        assert opts[:app_opts][:custom] == :value
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start_ssh(BB.TUI.TestRobot, port: 0, app_opts: [custom: :value])
+    end
+
+    test "defaults opts to []" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:transport] == :ssh
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start_ssh(BB.TUI.TestRobot)
+    end
+  end
+
+  describe "subsystem/1" do
+    test "returns a subsystem tuple for BB.TUI.App" do
+      {name, {mod, args}} = BB.TUI.subsystem(BB.TUI.TestRobot)
+
+      assert name == ~c"Elixir.BB.TUI.App"
+      assert mod == ExRatatui.SSH
+      assert Keyword.fetch!(args, :subsystem) == true
+      assert Keyword.fetch!(args, :mod) == BB.TUI.App
+      assert args[:app_opts][:robot] == BB.TUI.TestRobot
     end
   end
 

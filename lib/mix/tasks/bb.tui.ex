@@ -18,6 +18,11 @@ defmodule Mix.Tasks.Bb.Tui do
       all commands across distribution. The dev node must already be
       connected to the remote node (e.g. via `--sname`/`--name` and
       `Node.connect/1`).
+    * `--ssh` — (optional) Start an SSH daemon instead of a local
+      terminal. Each connecting SSH client gets its own isolated
+      dashboard session.
+    * `--port` — (optional) TCP port for the SSH daemon (default 2222).
+      Ignored unless `--ssh` is set.
 
   ## Examples
 
@@ -27,6 +32,10 @@ defmodule Mix.Tasks.Bb.Tui do
       # Remote — render here, data from there
       $ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \\
           --robot MyApp.Robot --node robot@192.168.1.42
+
+      # SSH daemon — accessible from any SSH client
+      $ mix bb.tui --robot MyApp.Robot --ssh
+      $ mix bb.tui --robot MyApp.Robot --ssh --port 3333
 
   ## Keybindings
 
@@ -77,7 +86,10 @@ defmodule Mix.Tasks.Bb.Tui do
 
   @impl true
   def run(args) do
-    {opts, _rest} = OptionParser.parse!(args, strict: [robot: :string, node: :string])
+    {opts, _rest} =
+      OptionParser.parse!(args,
+        strict: [robot: :string, node: :string, ssh: :boolean, port: :integer]
+      )
 
     robot =
       case Keyword.get(opts, :robot) do
@@ -94,7 +106,31 @@ defmodule Mix.Tasks.Bb.Tui do
         node_str -> [node: String.to_atom(node_str)]
       end
 
+    tui_opts =
+      if Keyword.get(opts, :ssh, false) do
+        port = Keyword.get(opts, :port, 2222)
+
+        tui_opts
+        |> Keyword.put(:transport, :ssh)
+        |> Keyword.put(:port, port)
+        |> Keyword.put(:auto_host_key, true)
+        |> Keyword.put(:auth_methods, ~c"password")
+        |> Keyword.put(:user_passwords, [{~c"admin", ~c"admin"}])
+      else
+        tui_opts
+      end
+
     Mix.Task.run("app.start")
+
+    if Keyword.get(opts, :ssh, false) do
+      Mix.shell().info("SSH daemon listening on port #{Keyword.get(tui_opts, :port, 2222)}")
+
+      Mix.shell().info(
+        "Connect with: ssh admin@localhost -p #{Keyword.get(tui_opts, :port, 2222)}"
+      )
+
+      Mix.shell().info("Default credentials: admin / admin")
+    end
 
     BB.TUI.run(robot, tui_opts)
   end

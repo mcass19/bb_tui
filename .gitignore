@@ -24,3 +24,6 @@ bb_tui-*.tar
 
 # Dialyzer PLTs
 /plts/
+
+# Auto-generated SSH host keys (from --ssh / auto_host_key: true)
+/priv/ssh/
