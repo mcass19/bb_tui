@@ -27,3 +27,6 @@ bb_tui-*.tar
 
 # Auto-generated SSH host keys (from --ssh / auto_host_key: true)
 /priv/ssh/
+
+# mise
+mise.toml

@@ -52,7 +52,7 @@ defmodule BB.TUITest do
       assert Process.alive?(pid)
 
       Process.unlink(pid)
-      Process.exit(pid, :kill)
+      GenServer.stop(pid)
     end
 
     test "start/1 defaults opts to []" do
@@ -90,7 +90,7 @@ defmodule BB.TUITest do
       assert state.user_state.node == :"robot@127.0.0.1"
 
       Process.unlink(pid)
-      Process.exit(pid, :kill)
+      GenServer.stop(pid)
     end
 
     test "wraps :robot into :app_opts when transport is :ssh" do

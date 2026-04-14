@@ -17,8 +17,10 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Theme system** — consistent color palette with semantic styles (safety colors, focus borders, panel headers)
 - **Keyboard-driven navigation** — Tab to cycle panels, vim-style j/k/h/l within panels
 - **SSH transport** — serve the dashboard over SSH; multiple operators can connect simultaneously, each with their own isolated session
+- **Distribution attach** — run the TUI on the robot node and attach a thin renderer from any connected BEAM node (built on ExRatatui v0.7's `:distributed` transport)
+- **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime` — useful for debugging SSH sessions you can't otherwise peek into
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
-- **Headless test suite** — full coverage using Mimic + ExRatatui test backend
+- **Headless test suite** — full coverage using Mimic + ExRatatui test backend, including end-to-end tests that drive a real server with `ExRatatui.Runtime.inject_event/2`
 
 ## Layout
 
@@ -102,6 +104,39 @@ The same `--node` flag is available on the mix task:
 iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
     --robot MyApp.Robot --node robot@192.168.1.42
 ```
+
+### Distribution attach (renderer-only local node)
+
+An alternative to the `--node` / `:node` option: run the TUI _on the robot node_ and attach to it from any connected BEAM node. The remote node runs the app callbacks (mount/render/handle_event); your local node only renders the widgets it receives and forwards terminal events back. No robot code required on the local node.
+
+**1. On the robot node**, add the listener to the supervision tree:
+
+```elixir
+children = [
+  {BB.Supervisor, MyApp.Robot},
+  ExRatatui.Distributed.Listener
+]
+```
+
+**2. From any connected node**:
+
+```elixir
+iex --name dev@127.0.0.1 --cookie secret -S mix
+iex> Node.connect(:"robot@192.168.1.42")
+iex> ExRatatui.Distributed.attach(:"robot@192.168.1.42", BB.TUI.App)
+```
+
+**`:node` option vs `Distributed.attach/3`**
+
+| Concern                       | `:node` option      | `Distributed.attach/3` |
+|-------------------------------|---------------------|------------------------|
+| Where app callbacks run       | Local node          | Remote node            |
+| Where robot code is needed    | Both nodes          | Remote node only       |
+| Transport                     | Ad-hoc `:rpc.call`  | Erlang distribution    |
+| Reconnect on remote crash     | Manual              | Monitor-driven cleanup |
+| Good for                      | Dev/ops workstations that already run `bb_tui` | Thin clients attaching to long-running robots |
+
+Both require Erlang distribution (same cookie, reachable EPMD/ports). See `ExRatatui.Distributed` for the full transport reference.
 
 ### SSH transport
 
@@ -294,6 +329,70 @@ BB.TUI.start_ssh(Dev.TestRobot,
 Then connect from another terminal. You can open multiple SSH sessions simultaneously — each gets its own independent dashboard.
 
 > **Tip:** If you see a host key warning on reconnect (after recompiling), remove the old key with `ssh-keygen -R "[localhost]:2222"`.
+
+### Testing distribution locally
+
+The dev application ([`dev/application.ex`](dev/application.ex)) also supervises an `ExRatatui.Distributed.Listener` wired to `BB.TUI.App` with `Dev.TestRobot` as the robot, so no further setup is needed on the "robot" side — just boot two named BEAM nodes sharing a cookie.
+
+**Terminal 1 — robot node (app + listener, no terminal takeover):**
+
+```sh
+iex --sname robot --cookie demo -S mix
+```
+
+`Dev.Application` starts `BB.Supervisor` with the simulated robot and registers `ExRatatui.Distributed.Listener` under its default name. The shell stays idle.
+
+**Terminal 2 — client node (renders + forwards input):**
+
+```sh
+iex --sname dev --cookie demo -S mix
+```
+
+```elixir
+iex> Node.connect(:"robot@<your-hostname>")
+iex> ExRatatui.Distributed.attach(:"robot@<your-hostname>", BB.TUI.App)
+```
+
+Terminal 2 takes over with the dashboard while `mount/render/handle_event/handle_info` run on the robot node. Press `q` to disconnect — monitors fire on both sides and the local terminal is restored.
+
+## Runtime inspection
+
+The running `BB.TUI.App` pid (local, SSH, or distributed) exposes debugging hooks via `ExRatatui.Runtime`. Handy for peeking into SSH sessions, asserting against a running TUI from tests, or tracing transitions when a panel misbehaves:
+
+```elixir
+# Headless-or-not check plus dimensions, render count, subscriptions, etc.
+ExRatatui.Runtime.snapshot(pid)
+
+# Record the last N state transitions in memory — each event / info message,
+# render, command dispatch, and subscription firing gets a trace record.
+ExRatatui.Runtime.enable_trace(pid, limit: 200)
+ExRatatui.Runtime.trace_events(pid)
+ExRatatui.Runtime.disable_trace(pid)
+
+# Deterministically drive input — works under test_mode where live polling
+# is disabled. See test/bb/tui/integration_test.exs for end-to-end examples.
+ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "press"})
+```
+
+## Planned: reducer runtime migration
+
+`BB.TUI.App` currently uses the ExRatatui **callback runtime** (`use ExRatatui.App` with the default `runtime: :callbacks`), which behaves like a GenServer (`mount/1`, `render/2`, `handle_event/2`, `handle_info/2`). ExRatatui v0.7 shipped an Elm-style **reducer runtime** (`use ExRatatui.App, runtime: :reducer`) that is planned as the next step for this dashboard.
+
+**Why migrate?**
+
+- **Side effects become data.** Commands like "execute this robot action and route the result back" become `ExRatatui.Command` values returned from `update/2`. The runtime supervises the async task, handles cancellation, and surfaces results via a unified `{:msg, _}` path — replacing the mount-owned `Task.Supervisor` + hand-rolled `send/2` pattern in `execute_selected_command/1`.
+- **Subscriptions replace ad-hoc timers.** The throbber step, command timeouts, and any periodic ETS polling would be declared in a single `subscriptions/1` callback and diffed by the runtime, instead of being scattered across `Process.send_after/3` calls.
+- **A single update arrow is easier to reason about and trace.** Pure state transitions already live in [`BB.TUI.State`](lib/bb/tui/state.ex); the reducer migration removes the impedance mismatch between those pure functions and the GenServer-shaped callback module. Combined with `ExRatatui.Runtime.enable_trace/2`, the dashboard becomes introspectable down to every message and command.
+- **Cleaner multi-transport story.** The same reducer can be driven by local, SSH, or distributed transports without any per-transport wiring changes — ExRatatui v0.7 already handles that, but the reducer shape keeps our surface area smaller.
+
+References:
+
+- `ExRatatui.App` — both runtime entrypoints
+- `ExRatatui.Command` — declarative side effects (message, async, batch, send_after)
+- `ExRatatui.Subscription` — interval / once / none declarations
+- `ExRatatui.Runtime` — snapshot / trace / inject_event, unchanged across runtimes
+
+The pure `BB.TUI.State` module is already shaped for this — most transitions are `state -> state` or `state -> {state, effect}` today, so the migration is mostly re-routing effects from `BB.TUI.App.handle_event/2` into `update/2` returning `{state, Command.t()}`.
 
 ## License
 

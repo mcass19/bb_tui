@@ -11,8 +11,10 @@ defmodule BB.TUI.Panels.Events do
 
   alias BB.TUI.State
   alias BB.TUI.Theme
+  alias ExRatatui.Layout.Rect
   alias ExRatatui.Widgets.Block
   alias ExRatatui.Widgets.List, as: WidgetList
+  alias ExRatatui.Widgets.Scrollbar
 
   @doc """
   Renders the events panel as a List widget with formatted event entries.
@@ -40,6 +42,63 @@ defmodule BB.TUI.Panels.Events do
         border_style: Theme.border_style(focused?)
       }
     }
+  end
+
+  @doc """
+  Renders the events panel as a list of `{widget, rect}` panes: the events
+  list plus an overlay Scrollbar pinned to the right-hand side.
+
+  The scrollbar rect is inset by one cell so it appears inside the panel's
+  rounded border rather than on top of it. When there are no events, only
+  the list pane is returned — a scrollbar with zero content would render
+  a track with no thumb, which is visually noisy.
+
+  ## Examples
+
+      iex> rect = %ExRatatui.Layout.Rect{x: 0, y: 0, width: 40, height: 10}
+      iex> state = %BB.TUI.State{events: [], scroll_offset: 0, events_paused: false}
+      iex> panes = BB.TUI.Panels.Events.render_panes(state, false, rect)
+      iex> length(panes)
+      1
+
+      iex> rect = %ExRatatui.Layout.Rect{x: 0, y: 0, width: 40, height: 10}
+      iex> ts = ~U[2026-01-15 18:23:12.000Z]
+      iex> events = [{ts, [:state_machine], %{payload: %{from: :disarmed, to: :armed}}}]
+      iex> state = %BB.TUI.State{events: events, scroll_offset: 0, events_paused: false}
+      iex> [{_list, _list_rect}, {scrollbar, _bar_rect}] =
+      ...>   BB.TUI.Panels.Events.render_panes(state, true, rect)
+      iex> scrollbar.content_length
+      1
+  """
+  @spec render_panes(State.t(), boolean(), Rect.t()) :: [{struct(), Rect.t()}]
+  def render_panes(%State{events: []} = state, focused?, %Rect{} = rect) do
+    [{render(state, focused?), rect}]
+  end
+
+  def render_panes(%State{events: events, scroll_offset: offset} = state, focused?, %Rect{
+        x: x,
+        y: y,
+        width: width,
+        height: height
+      }) do
+    list_rect = %Rect{x: x, y: y, width: width, height: height}
+
+    scrollbar_rect = %Rect{
+      x: x + 1,
+      y: y + 1,
+      width: max(width - 2, 0),
+      height: max(height - 2, 0)
+    }
+
+    scrollbar = %Scrollbar{
+      orientation: :vertical_right,
+      content_length: length(events),
+      position: offset,
+      viewport_content_length: max(height - 2, 0),
+      thumb_style: Theme.border_style(focused?)
+    }
+
+    [{render(state, focused?), list_rect}, {scrollbar, scrollbar_rect}]
   end
 
   @doc """

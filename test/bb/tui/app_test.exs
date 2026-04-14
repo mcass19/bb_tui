@@ -25,6 +25,8 @@ defmodule BB.TUI.AppTest do
       assert state.active_panel == :safety
       assert state.events_paused == false
       assert state.command_selected == 0
+      assert is_pid(state.task_supervisor)
+      assert Process.alive?(state.task_supervisor)
     end
 
     test "raises on invalid robot module" do
@@ -77,6 +79,7 @@ defmodule BB.TUI.AppTest do
       widgets = App.render(state, frame)
 
       # title_bar, safety, commands, joints, events, parameters, status_bar = 7
+      # No scrollbar pane when events are empty.
       assert is_list(widgets)
       assert length(widgets) == 7
 
@@ -84,6 +87,21 @@ defmodule BB.TUI.AppTest do
         assert is_struct(widget)
         assert %Rect{} = rect
       end)
+    end
+
+    test "renders a Scrollbar pane alongside the events list when events exist" do
+      events = [
+        {~U[2026-03-30 12:00:00Z], [:state_machine], %{payload: %{from: :disarmed, to: :armed}}}
+      ]
+
+      state = Fixtures.sample_state(%{events: events, scroll_offset: 0})
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+
+      widgets = App.render(state, frame)
+
+      # 7 base panels + 1 scrollbar overlay = 8
+      assert length(widgets) == 8
+      assert Enum.any?(widgets, fn {w, _} -> match?(%ExRatatui.Widgets.Scrollbar{}, w) end)
     end
 
     test "includes help popup when show_help is true" do
@@ -129,7 +147,8 @@ defmodule BB.TUI.AppTest do
       frame = %ExRatatui.Frame{width: 120, height: 40}
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 8
+      # 7 base panels + 1 scrollbar overlay + 1 popup = 9
+      assert length(widgets) == 9
       {last_widget, _rect} = List.last(widgets)
       assert %ExRatatui.Widgets.Popup{} = last_widget
     end
@@ -378,7 +397,7 @@ defmodule BB.TUI.AppTest do
       assert new_state.command_selected == 0
     end
 
-    test "enter executes selected command" do
+    test "enter executes selected command and reports completion" do
       Fixtures.stub_bb_modules()
 
       Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
@@ -387,19 +406,25 @@ defmodule BB.TUI.AppTest do
       end)
 
       commands = [%{name: :home, allowed_states: [:idle]}]
+      task_sup = start_supervised!(Task.Supervisor)
 
       state =
         Fixtures.sample_state(%{
           active_panel: :commands,
           commands: commands,
           command_selected: 0,
-          runtime_state: :idle
+          runtime_state: :idle,
+          task_supervisor: task_sup
         })
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state} = App.handle_event(event, state)
       assert new_state.executing_command != nil
+
+      # The supervised Task monitors the spawned command pid (which exits :normal)
+      # and should forward a completion message back to the TUI.
+      assert_receive {:command_result, {:ok, :completed}}, 1000
     end
 
     test "enter does nothing for blocked command" do
@@ -451,13 +476,15 @@ defmodule BB.TUI.AppTest do
       end)
 
       commands = [%{name: :home, allowed_states: [:idle]}]
+      task_sup = start_supervised!(Task.Supervisor)
 
       state =
         Fixtures.sample_state(%{
           active_panel: :commands,
           commands: commands,
           command_selected: 0,
-          runtime_state: :idle
+          runtime_state: :idle,
+          task_supervisor: task_sup
         })
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
@@ -465,7 +492,7 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} = App.handle_event(event, state)
       assert new_state.executing_command != nil
 
-      # Wait for the spawn to send the error message
+      # Wait for the supervised Task to send the error message
       assert_receive {:command_result, {:error, :not_allowed}}, 1000
     end
 
@@ -478,13 +505,15 @@ defmodule BB.TUI.AppTest do
       end)
 
       commands = [%{name: :home, allowed_states: [:idle]}]
+      task_sup = start_supervised!(Task.Supervisor)
 
       state =
         Fixtures.sample_state(%{
           active_panel: :commands,
           commands: commands,
           command_selected: 0,
-          runtime_state: :idle
+          runtime_state: :idle,
+          task_supervisor: task_sup
         })
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
@@ -504,20 +533,22 @@ defmodule BB.TUI.AppTest do
       end)
 
       commands = [%{name: :home, allowed_states: [:idle]}]
+      task_sup = start_supervised!(Task.Supervisor)
 
       state =
         Fixtures.sample_state(%{
           active_panel: :commands,
           commands: commands,
           command_selected: 0,
-          runtime_state: :idle
+          runtime_state: :idle,
+          task_supervisor: task_sup
         })
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, _new_state} = App.handle_event(event, state)
 
-      # Wait for the spawn to send the error result
+      # Wait for the supervised Task to send the error result
       assert_receive {:command_result, {:error, :boom}}, 1000
     end
 

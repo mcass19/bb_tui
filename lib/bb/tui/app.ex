@@ -21,12 +21,31 @@ defmodule BB.TUI.App do
       └──────────────────────┴───────────────────────────────────────┘
        Robot | ● Armed | idle | [q]Quit [Tab]Panel [?]Help
 
+  ## Runtime
+
+  Uses the ExRatatui **callback runtime** (`use ExRatatui.App`, which
+  defaults to `runtime: :callbacks`). Each mount owns a linked
+  `Task.Supervisor` that runs robot command execution off the render
+  loop so a slow `Robot.execute_command/4` can't block input.
+
+  > **Planned:** migrate to `use ExRatatui.App, runtime: :reducer` so
+  > command execution and subscriptions become declarative
+  > `ExRatatui.Command` / `ExRatatui.Subscription` values and the
+  > unified `update/2` path replaces the split between `handle_event/2`
+  > / `handle_info/2`. See `BB.TUI` for the full rationale.
+
   ## Callbacks
 
-    * `mount/1` — validates the robot module, subscribes to PubSub, snapshots ETS state
-    * `render/2` — composes panel functions into `[{widget, rect}]` list
-    * `handle_event/2` — keyboard input dispatches BB API calls and state transitions
-    * `handle_info/2` — PubSub messages (`{:bb, path, msg}`) update state
+    * `mount/1` — validates the robot module, subscribes to PubSub,
+      snapshots ETS state, and starts a per-session `Task.Supervisor`
+    * `render/2` — composes panel functions into a flat
+      `[{widget, rect}]` list (the events panel contributes two panes:
+      the list and an overlay `ExRatatui.Widgets.Scrollbar`)
+    * `handle_event/2` — keyboard input dispatches BB API calls and
+      state transitions
+    * `handle_info/2` — PubSub messages (`{:bb, path, msg}`) update
+      state; `{:command_result, _}` messages arrive from the supervised
+      command Task
     * `terminate/2` — cleanup (no-op)
   """
 
@@ -55,6 +74,8 @@ defmodule BB.TUI.App do
 
     Robot.subscribe(robot, [[:state_machine], [:sensor], [:param]], node)
 
+    {:ok, task_supervisor} = Task.Supervisor.start_link()
+
     robot_struct = Robot.get_robot(robot, node)
     positions = Robot.positions(robot, node)
 
@@ -79,7 +100,8 @@ defmodule BB.TUI.App do
         active_panel: :safety,
         scroll_offset: 0,
         show_help: false,
-        confirm_force_disarm: false
+        confirm_force_disarm: false,
+        task_supervisor: task_supervisor
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
 
@@ -126,15 +148,18 @@ defmodule BB.TUI.App do
         {:percentage, 45}
       ])
 
-    panels = [
-      {Panels.TitleBar.render(state), title_bar_area},
-      {Panels.Safety.render(state, state.active_panel == :safety), safety_area},
-      {Panels.Commands.render(state, state.active_panel == :commands), commands_area},
-      {Panels.Joints.render(state, state.active_panel == :joints), joints_area},
-      {Panels.Events.render(state, state.active_panel == :events), events_area},
-      {Panels.Parameters.render(state, state.active_panel == :parameters), params_area},
-      {Panels.StatusBar.render(state), status_bar_area}
-    ]
+    panels =
+      [
+        {Panels.TitleBar.render(state), title_bar_area},
+        {Panels.Safety.render(state, state.active_panel == :safety), safety_area},
+        {Panels.Commands.render(state, state.active_panel == :commands), commands_area},
+        {Panels.Joints.render(state, state.active_panel == :joints), joints_area}
+      ] ++
+        Panels.Events.render_panes(state, state.active_panel == :events, events_area) ++
+        [
+          {Panels.Parameters.render(state, state.active_panel == :parameters), params_area},
+          {Panels.StatusBar.render(state), status_bar_area}
+        ]
 
     maybe_add_popup(panels, state, full)
   end
@@ -561,35 +586,40 @@ defmodule BB.TUI.App do
         if Panels.Commands.command_ready?(cmd, state.runtime_state) and
              state.executing_command == nil do
           tui_pid = self()
+          robot = state.robot
+          node = state.node
+          name = cmd.name
 
-          pid =
-            spawn(fn ->
-              result = Robot.execute_command(state.robot, cmd.name, %{}, state.node)
-
-              case result do
-                {:ok, cmd_pid} ->
-                  ref = Process.monitor(cmd_pid)
-
-                  receive do
-                    {:DOWN, ^ref, :process, ^cmd_pid, :normal} ->
-                      send(tui_pid, {:command_result, {:ok, :completed}})
-
-                    {:DOWN, ^ref, :process, ^cmd_pid, reason} ->
-                      send(tui_pid, {:command_result, {:error, reason}})
-                  after
-                    @command_timeout ->
-                      send(tui_pid, {:command_result, {:error, :timeout}})
-                  end
-
-                {:error, reason} ->
-                  send(tui_pid, {:command_result, {:error, reason}})
-              end
+          {:ok, pid} =
+            Task.Supervisor.start_child(state.task_supervisor, fn ->
+              run_command(tui_pid, robot, name, node)
             end)
 
           {:noreply, State.start_command(state, pid)}
         else
           {:noreply, state}
         end
+    end
+  end
+
+  defp run_command(tui_pid, robot, name, node) do
+    case Robot.execute_command(robot, name, %{}, node) do
+      {:ok, cmd_pid} ->
+        ref = Process.monitor(cmd_pid)
+
+        receive do
+          {:DOWN, ^ref, :process, ^cmd_pid, :normal} ->
+            send(tui_pid, {:command_result, {:ok, :completed}})
+
+          {:DOWN, ^ref, :process, ^cmd_pid, reason} ->
+            send(tui_pid, {:command_result, {:error, reason}})
+        after
+          @command_timeout ->
+            send(tui_pid, {:command_result, {:error, :timeout}})
+        end
+
+      {:error, reason} ->
+        send(tui_pid, {:command_result, {:error, reason}})
     end
   end
 end

@@ -4,7 +4,9 @@ defmodule BB.TUI.Panels.EventsTest do
 
   alias BB.TUI.Panels.Events
   alias BB.TUI.Test.Fixtures
+  alias ExRatatui.Layout.Rect
   alias ExRatatui.Widgets.List, as: WidgetList
+  alias ExRatatui.Widgets.Scrollbar
 
   describe "render/2" do
     test "renders empty event list" do
@@ -68,6 +70,67 @@ defmodule BB.TUI.Panels.EventsTest do
 
       assert widget.block.title =~ "1"
       assert widget.block.title =~ "PAUSED"
+    end
+  end
+
+  describe "render_panes/3" do
+    setup do
+      %{rect: %Rect{x: 2, y: 3, width: 40, height: 10}}
+    end
+
+    test "returns only the list pane when there are no events", %{rect: rect} do
+      state = Fixtures.sample_state(%{events: []})
+
+      assert [{list_widget, ^rect}] = Events.render_panes(state, false, rect)
+      assert %WidgetList{} = list_widget
+    end
+
+    test "returns list + scrollbar when events exist", %{rect: rect} do
+      events =
+        for i <- 1..5 do
+          {DateTime.add(~U[2026-03-30 12:00:00Z], i, :second), [:test], %{}}
+        end
+
+      state = Fixtures.sample_state(%{events: events, scroll_offset: 2})
+
+      assert [{list_widget, list_rect}, {scrollbar, scrollbar_rect}] =
+               Events.render_panes(state, true, rect)
+
+      assert %WidgetList{} = list_widget
+      assert list_rect == rect
+
+      assert %Scrollbar{
+               orientation: :vertical_right,
+               content_length: 5,
+               position: 2
+             } = scrollbar
+
+      # Inset by one cell on every side so the bar renders inside the block border.
+      assert scrollbar_rect.x == rect.x + 1
+      assert scrollbar_rect.y == rect.y + 1
+      assert scrollbar_rect.width == rect.width - 2
+      assert scrollbar_rect.height == rect.height - 2
+    end
+
+    test "sets viewport_content_length from the rect", %{rect: rect} do
+      events = [{~U[2026-03-30 12:00:00Z], [:test], %{}}]
+      state = Fixtures.sample_state(%{events: events})
+
+      [{_list, _}, {%Scrollbar{viewport_content_length: viewport}, _}] =
+        Events.render_panes(state, false, rect)
+
+      assert viewport == rect.height - 2
+    end
+
+    test "clamps inset dimensions when rect is tiny" do
+      tiny = %Rect{x: 0, y: 0, width: 1, height: 1}
+      events = [{~U[2026-03-30 12:00:00Z], [:test], %{}}]
+      state = Fixtures.sample_state(%{events: events})
+
+      [{_list, _}, {_scrollbar, scrollbar_rect}] = Events.render_panes(state, false, tiny)
+
+      assert scrollbar_rect.width == 0
+      assert scrollbar_rect.height == 0
     end
   end
 

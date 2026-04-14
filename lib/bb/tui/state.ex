@@ -36,6 +36,7 @@ defmodule BB.TUI.State do
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
+    task_supervisor: nil,
     joint_selected: 0,
     param_selected: 0
   ]
@@ -61,6 +62,7 @@ defmodule BB.TUI.State do
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
           executing_command: pid() | nil,
+          task_supervisor: pid() | nil,
           joint_selected: non_neg_integer(),
           param_selected: non_neg_integer()
         }
