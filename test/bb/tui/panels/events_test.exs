@@ -5,8 +5,14 @@ defmodule BB.TUI.Panels.EventsTest do
   alias BB.TUI.Panels.Events
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
+  alias ExRatatui.Text.Line
   alias ExRatatui.Widgets.List, as: WidgetList
   alias ExRatatui.Widgets.Scrollbar
+
+  # Flatten a `%Line{}` (or list of them) back to a single string for
+  # substring assertions. The events panel renders rich text now, so
+  # most `=~` checks need to walk the spans.
+  defp text(%Line{spans: spans}), do: Enum.map_join(spans, "", & &1.content)
 
   describe "render/2" do
     test "renders empty event list" do
@@ -15,7 +21,7 @@ defmodule BB.TUI.Panels.EventsTest do
 
       assert %WidgetList{} = widget
       assert widget.items == []
-      assert widget.block.title == " Events "
+      assert text(widget.block.title) == " Events "
     end
 
     test "renders events with formatted entries" do
@@ -29,9 +35,9 @@ defmodule BB.TUI.Panels.EventsTest do
       widget = Events.render(state, true)
 
       assert length(widget.items) == 2
-      assert widget.block.title == " Events (2) "
+      assert text(widget.block.title) == " Events (2) "
 
-      first_item = hd(widget.items)
+      first_item = text(hd(widget.items))
       assert first_item =~ "12:00:00"
       assert first_item =~ "state_machine"
       assert first_item =~ "\u{2192}"
@@ -60,7 +66,7 @@ defmodule BB.TUI.Panels.EventsTest do
       state = Fixtures.sample_state(%{events: [], events_paused: true})
       widget = Events.render(state, false)
 
-      assert widget.block.title =~ "PAUSED"
+      assert text(widget.block.title) =~ "PAUSED"
     end
 
     test "shows count with pause indicator" do
@@ -68,8 +74,21 @@ defmodule BB.TUI.Panels.EventsTest do
       state = Fixtures.sample_state(%{events: events, events_paused: true})
       widget = Events.render(state, false)
 
-      assert widget.block.title =~ "1"
-      assert widget.block.title =~ "PAUSED"
+      assert text(widget.block.title) =~ "1"
+      assert text(widget.block.title) =~ "PAUSED"
+    end
+  end
+
+  describe "title_line/2" do
+    test "renders just the PAUSED badge for an empty paused stream" do
+      assert text(Events.title_line(0, true)) =~ "PAUSED"
+    end
+
+    test "PAUSED badge carries yellow-bold style" do
+      %Line{spans: spans} = Events.title_line(7, true)
+      paused = Enum.find(spans, &(&1.content =~ "PAUSED"))
+      assert paused.style.fg == :yellow
+      assert :bold in paused.style.modifiers
     end
   end
 

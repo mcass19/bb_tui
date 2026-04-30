@@ -12,6 +12,8 @@ defmodule BB.TUI.Panels.Joints do
 
   alias BB.TUI.State
   alias BB.TUI.Theme
+  alias ExRatatui.Style
+  alias ExRatatui.Text.{Line, Span}
   alias ExRatatui.Widgets.Block
   alias ExRatatui.Widgets.Table
 
@@ -38,10 +40,10 @@ defmodule BB.TUI.Panels.Joints do
         proximity = State.limit_proximity(pos, joint)
 
         [
-          format_name(name, joint),
+          name_span(name, joint),
           format_type(joint),
-          format_position(pos, joint) <> proximity_suffix(proximity),
-          position_bar(pos, joint, proximity)
+          position_span(pos, joint, proximity),
+          position_bar_line(pos, joint, proximity)
         ]
       end)
 
@@ -143,49 +145,6 @@ defmodule BB.TUI.Panels.Joints do
   end
 
   @doc """
-  Builds a text-based position bar with limit labels showing where the joint
-  is within its range. Format: `lower_label bar upper_label`
-
-  ## Examples
-
-      iex> joint = %{type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}}
-      iex> bar = BB.TUI.Panels.Joints.position_bar(0.0, joint)
-      iex> bar =~ "\u{25CF}"
-      true
-      iex> bar =~ "-90"
-      true
-
-      iex> BB.TUI.Panels.Joints.position_bar(0.0, %{type: :continuous})
-      ""
-  """
-  @spec position_bar(number() | nil, map(), atom()) :: String.t()
-  def position_bar(pos, joint, proximity \\ :normal)
-  def position_bar(nil, _joint, _proximity), do: ""
-  def position_bar(_pos, %{type: :continuous}, _proximity), do: ""
-
-  def position_bar(pos, joint, proximity) do
-    case get_limits(joint) do
-      {lower, upper} when upper > lower ->
-        ratio = (pos - lower) / (upper - lower)
-        ratio = max(0.0, min(1.0, ratio))
-        marker_pos = round(ratio * (@bar_width - 1))
-        marker = marker_char(proximity)
-
-        bar =
-          String.duplicate("\u{2500}", marker_pos) <>
-            marker <>
-            String.duplicate("\u{2500}", @bar_width - 1 - marker_pos)
-
-        low_label = format_limit(lower, joint)
-        high_label = format_limit(upper, joint)
-        "#{low_label} #{bar} #{high_label}"
-
-      _ ->
-        ""
-    end
-  end
-
-  @doc """
   Formats a joint limit value in human-readable units (degrees or mm).
 
   ## Examples
@@ -226,4 +185,63 @@ defmodule BB.TUI.Panels.Joints do
 
   defp float_to_str(val) when is_float(val), do: :erlang.float_to_binary(val, decimals: 1)
   defp float_to_str(val) when is_integer(val), do: "#{val}.0"
+
+  # ── Rich-text cell helpers ─────────────────────────────────
+
+  defp name_span(name, %{actuators: []}) do
+    %Line{
+      spans: [
+        %Span{content: to_string(name), style: %Style{fg: :white}},
+        %Span{content: " SIM", style: Theme.sim_style()}
+      ]
+    }
+  end
+
+  defp name_span(name, _joint) do
+    %Span{content: to_string(name), style: %Style{fg: :white}}
+  end
+
+  defp position_span(pos, joint, proximity) do
+    text = format_position(pos, joint) <> proximity_suffix(proximity)
+    style = %Style{fg: Theme.proximity_color(proximity), modifiers: position_modifiers(proximity)}
+    %Span{content: text, style: style}
+  end
+
+  defp position_modifiers(:normal), do: []
+  defp position_modifiers(_), do: [:bold]
+
+  defp position_bar_line(nil, _joint, _proximity), do: ""
+  defp position_bar_line(_pos, %{type: :continuous}, _proximity), do: ""
+
+  defp position_bar_line(pos, joint, proximity) do
+    case get_limits(joint) do
+      {lower, upper} when upper > lower ->
+        ratio = (pos - lower) / (upper - lower)
+        ratio = max(0.0, min(1.0, ratio))
+        marker_pos = round(ratio * (@bar_width - 1))
+        marker = marker_char(proximity)
+
+        track_left = String.duplicate("\u{2500}", marker_pos)
+        track_right = String.duplicate("\u{2500}", @bar_width - 1 - marker_pos)
+
+        low_label = format_limit(lower, joint)
+        high_label = format_limit(upper, joint)
+
+        %Line{
+          spans: [
+            %Span{content: "#{low_label} ", style: %Style{fg: Theme.dim_text()}},
+            %Span{content: track_left, style: %Style{fg: Theme.dim_border()}},
+            %Span{
+              content: marker,
+              style: %Style{fg: Theme.proximity_color(proximity), modifiers: [:bold]}
+            },
+            %Span{content: track_right, style: %Style{fg: Theme.dim_border()}},
+            %Span{content: " #{high_label}", style: %Style{fg: Theme.dim_text()}}
+          ]
+        }
+
+      _ ->
+        ""
+    end
+  end
 end

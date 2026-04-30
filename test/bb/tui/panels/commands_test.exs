@@ -4,7 +4,11 @@ defmodule BB.TUI.Panels.CommandsTest do
 
   alias BB.TUI.Panels.Commands
   alias BB.TUI.Test.Fixtures
+  alias ExRatatui.Text.Line
   alias ExRatatui.Widgets.List, as: WidgetList
+
+  defp text(%Line{spans: spans}), do: Enum.map_join(spans, "", & &1.content)
+  defp text(s) when is_binary(s), do: s
 
   describe "render/2" do
     test "renders empty command list" do
@@ -13,33 +17,51 @@ defmodule BB.TUI.Panels.CommandsTest do
 
       assert %WidgetList{} = widget
       assert widget.items == []
-      assert widget.block.title == " Commands "
+      assert text(widget.block.title) == " Commands "
     end
 
-    test "renders commands with ready status" do
+    test "renders commands with Ready badge" do
       commands = [%{name: :home, allowed_states: [:idle]}]
       state = Fixtures.sample_state(%{commands: commands, runtime_state: :idle})
       widget = Commands.render(state, true)
 
-      assert hd(widget.items) =~ "home"
-      assert hd(widget.items) =~ "Ready"
+      first = text(hd(widget.items))
+      assert first =~ "home"
+      assert first =~ "Ready"
     end
 
-    test "renders commands with blocked status" do
+    test "Ready badge renders green-bold" do
+      commands = [%{name: :home, allowed_states: [:idle]}]
+      state = Fixtures.sample_state(%{commands: commands, runtime_state: :idle})
+      widget = Commands.render(state, true)
+
+      %Line{spans: spans} = hd(widget.items)
+      ready = Enum.find(spans, &(&1.content =~ "Ready"))
+      assert ready.style.fg == :green
+      assert :bold in ready.style.modifiers
+    end
+
+    test "renders commands with Blocked badge" do
       commands = [%{name: :home, allowed_states: [:idle]}]
       state = Fixtures.sample_state(%{commands: commands, runtime_state: :executing})
       widget = Commands.render(state, false)
 
-      assert hd(widget.items) =~ "home"
-      assert hd(widget.items) =~ "Blocked"
+      first = text(hd(widget.items))
+      assert first =~ "home"
+      assert first =~ "Blocked"
     end
 
-    test "shows command count in title" do
+    test "shows command count in title with bold-cyan number" do
       commands = [%{name: :a}, %{name: :b}]
       state = Fixtures.sample_state(%{commands: commands})
       widget = Commands.render(state, false)
 
-      assert widget.block.title == " Commands (2) "
+      assert text(widget.block.title) == " Commands (2) "
+
+      %Line{spans: title_spans} = widget.block.title
+      count = Enum.find(title_spans, &(&1.content == "2"))
+      assert count.style.fg == :cyan
+      assert :bold in count.style.modifiers
     end
 
     test "uses command_selected as selected index" do
@@ -51,24 +73,36 @@ defmodule BB.TUI.Panels.CommandsTest do
     end
 
     test "shows executing indicator" do
-      state = Fixtures.sample_state(%{commands: [], executing_command: self()})
+      state = Fixtures.sample_state(%{commands: [], executing_command: :running})
       widget = Commands.render(state, false)
 
-      assert Enum.any?(widget.items, &(&1 =~ "Executing"))
+      assert Enum.any?(widget.items, &(text(&1) =~ "Executing"))
     end
 
-    test "shows success result" do
+    test "shows success result (green)" do
       state = Fixtures.sample_state(%{commands: [], command_result: {:ok, :done}})
       widget = Commands.render(state, false)
 
-      assert Enum.any?(widget.items, &(&1 =~ ":done"))
+      result =
+        widget.items
+        |> Enum.find(&(text(&1) =~ ":done"))
+
+      assert result
+      %Line{spans: [span]} = result
+      assert span.style.fg == :green
     end
 
-    test "shows error result" do
+    test "shows error result (red)" do
       state = Fixtures.sample_state(%{commands: [], command_result: {:error, :timeout}})
       widget = Commands.render(state, false)
 
-      assert Enum.any?(widget.items, &(&1 =~ ":timeout"))
+      result =
+        widget.items
+        |> Enum.find(&(text(&1) =~ ":timeout"))
+
+      assert result
+      %Line{spans: [span]} = result
+      assert span.style.fg == :red
     end
 
     test "uses arrow symbol as highlight" do

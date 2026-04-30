@@ -4,7 +4,16 @@ defmodule BB.TUI.Panels.JointsTest do
 
   alias BB.TUI.Panels.Joints
   alias BB.TUI.Test.Fixtures
+  alias ExRatatui.Text.{Line, Span}
   alias ExRatatui.Widgets.Table
+
+  # Cells in the joints table can be a plain string, a `%Span{}`, or a
+  # `%Line{}` (rich text). Flatten them all back to a plain string for
+  # substring assertions; tests that care about color check the spans
+  # directly.
+  defp cell_text(%Line{spans: spans}), do: Enum.map_join(spans, "", & &1.content)
+  defp cell_text(%Span{content: c}), do: c
+  defp cell_text(s) when is_binary(s), do: s
 
   describe "render/2" do
     test "renders a table with joint data" do
@@ -21,7 +30,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       [first_row | _] = widget.rows
-      assert hd(first_row) == "elbow"
+      assert cell_text(hd(first_row)) == "elbow"
     end
 
     test "formats revolute positions in degrees" do
@@ -37,7 +46,7 @@ defmodule BB.TUI.Panels.JointsTest do
 
       row = hd(widget.rows)
       assert Enum.at(row, 1) == "rev"
-      assert Enum.at(row, 2) == "28.6\u00B0"
+      assert cell_text(Enum.at(row, 2)) == "28.6°"
     end
 
     test "formats prismatic positions in millimeters" do
@@ -53,7 +62,7 @@ defmodule BB.TUI.Panels.JointsTest do
 
       row = hd(widget.rows)
       assert Enum.at(row, 1) == "pri"
-      assert Enum.at(row, 2) == "30.0 mm"
+      assert cell_text(Enum.at(row, 2)) == "30.0 mm"
     end
 
     test "shows position bar for joints with limits" do
@@ -68,15 +77,31 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      bar = Enum.at(row, 3)
-      # Marker and line chars with limit labels
+      bar = cell_text(Enum.at(row, 3))
+
       assert bar =~ "\u{25CF}"
       assert bar =~ "\u{2500}"
       assert bar =~ "-90"
       assert bar =~ "90"
     end
 
-    test "shows SIM tag for simulated joints" do
+    test "position-bar marker carries the proximity color" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}},
+          position: 0.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      [%Line{spans: spans} | _] = widget.rows |> hd() |> Enum.filter(&match?(%Line{}, &1))
+      marker = Enum.find(spans, &(&1.content == "\u{25CF}"))
+      assert marker.style.fg == :green
+    end
+
+    test "shows SIM tag (yellow) for simulated joints" do
       joints = %{
         wrist: %{
           joint: %{
@@ -93,7 +118,8 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert hd(row) == "wrist SIM"
+      assert cell_text(hd(row)) =~ "wrist"
+      assert cell_text(hd(row)) =~ "SIM"
     end
 
     test "does not show SIM tag for joints with actuator" do
@@ -113,7 +139,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert hd(row) == "wrist"
+      assert cell_text(hd(row)) == "wrist"
     end
 
     test "handles nil position" do
@@ -128,7 +154,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 2) == "N/A"
+      assert cell_text(Enum.at(row, 2)) == "N/A"
       assert Enum.at(row, 3) == ""
     end
 
@@ -206,7 +232,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 2) == "0.0\u00B0"
+      assert cell_text(Enum.at(row, 2)) == "0.0°"
     end
 
     test "handles integer position for prismatic joints" do
@@ -221,8 +247,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      # At lower limit, position gets danger suffix
-      assert Enum.at(row, 2) == "0.0 mm !!"
+      assert cell_text(Enum.at(row, 2)) == "0.0 mm !!"
     end
   end
 
@@ -239,8 +264,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      # Position text should have warning suffix
-      assert Enum.at(row, 2) =~ " !"
+      assert cell_text(Enum.at(row, 2)) =~ " !"
     end
 
     test "shows danger suffix when at limit" do
@@ -255,7 +279,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      assert Enum.at(row, 2) =~ " !!"
+      assert cell_text(Enum.at(row, 2)) =~ " !!"
     end
 
     test "uses warning marker in position bar when near limit" do
@@ -270,8 +294,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      bar = Enum.at(row, 3)
-      # Warning marker ◆ instead of normal ●
+      bar = cell_text(Enum.at(row, 3))
       assert bar =~ "\u{25C6}"
       refute bar =~ "\u{25CF}"
     end
@@ -288,8 +311,7 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      bar = Enum.at(row, 3)
-      # Danger marker ◉ instead of normal ●
+      bar = cell_text(Enum.at(row, 3))
       assert bar =~ "\u{25C9}"
       refute bar =~ "\u{25CF}"
     end
@@ -306,8 +328,57 @@ defmodule BB.TUI.Panels.JointsTest do
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
-      refute Enum.at(row, 2) =~ "!"
-      assert Enum.at(row, 3) =~ "\u{25CF}"
+      refute cell_text(Enum.at(row, 2)) =~ "!"
+      assert cell_text(Enum.at(row, 3)) =~ "\u{25CF}"
+    end
+
+    test "warning marker carries yellow color" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 1.4
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      %Line{spans: spans} = Enum.at(row, 3)
+      marker = Enum.find(spans, &(&1.content == "\u{25C6}"))
+      assert marker.style.fg == :yellow
+    end
+
+    test "danger marker carries red color" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.5708, upper: 1.5708}},
+          position: 1.55
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      %Line{spans: spans} = Enum.at(row, 3)
+      marker = Enum.find(spans, &(&1.content == "\u{25C9}"))
+      assert marker.style.fg == :red
+    end
+
+    test "joints with empty/zero-width limits skip the bar" do
+      joints = %{
+        wrist: %{
+          joint: %{name: :wrist, type: :revolute, limits: %{lower: 1.0, upper: 1.0}},
+          position: 1.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert Enum.at(row, 3) == ""
     end
   end
 

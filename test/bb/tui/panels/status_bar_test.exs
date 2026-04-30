@@ -4,7 +4,15 @@ defmodule BB.TUI.Panels.StatusBarTest do
 
   alias BB.TUI.Panels.StatusBar
   alias BB.TUI.Test.Fixtures
+  alias ExRatatui.Text.Line
   alias ExRatatui.Widgets.Paragraph
+
+  # Flatten the rich-text Line back to a single string for substring
+  # assertions. Each pill / dim segment carries its own color, but the
+  # text content is what users actually read.
+  defp text(%Paragraph{text: %Line{spans: spans}}) do
+    Enum.map_join(spans, "", & &1.content)
+  end
 
   describe "render/1" do
     test "shows robot module name" do
@@ -12,127 +20,124 @@ defmodule BB.TUI.Panels.StatusBarTest do
       widget = StatusBar.render(state)
 
       assert %Paragraph{} = widget
-      assert widget.text =~ "MyApp.Robot"
+      assert text(widget) =~ "MyApp.Robot"
     end
 
-    test "shows safety state indicator" do
+    test "shows safety badge for armed state" do
       state = Fixtures.sample_state(%{safety_state: :armed})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "Armed"
+      assert text(StatusBar.render(state)) =~ "ARMED"
     end
 
-    test "shows runtime state" do
+    test "shows runtime state pill" do
       state = Fixtures.sample_state(%{runtime_state: :idle})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "idle"
+      assert text(StatusBar.render(state)) =~ "idle"
     end
 
-    test "shows global key hints" do
+    test "shows global key pills (Tab / ? / q)" do
       state = Fixtures.sample_state()
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[q]Quit"
-      assert widget.text =~ "[Tab]Panel"
-      assert widget.text =~ "[?]Help"
+      assert txt =~ " Tab "
+      assert txt =~ " panel"
+      assert txt =~ " ? "
+      assert txt =~ " help"
+      assert txt =~ " q "
+      assert txt =~ " quit"
     end
 
-    test "shows panel-specific hints for safety" do
+    test "shows safety panel hints (arm / disarm)" do
       state = Fixtures.sample_state(%{active_panel: :safety})
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[a]Arm"
-      assert widget.text =~ "[d]Disarm"
+      assert txt =~ " a "
+      assert txt =~ " arm "
+      assert txt =~ " d "
+      assert txt =~ " disarm "
     end
 
-    test "shows panel-specific hints for events" do
+    test "shows events panel hints (scroll / pause / clear / detail)" do
       state = Fixtures.sample_state(%{active_panel: :events})
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[p]Pause"
-      assert widget.text =~ "[c]Clear"
+      assert txt =~ "scroll"
+      assert txt =~ "pause"
+      assert txt =~ "clear"
+      assert txt =~ "detail"
     end
 
-    test "shows panel-specific hints for commands" do
+    test "shows commands panel hints (select / execute)" do
       state = Fixtures.sample_state(%{active_panel: :commands})
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[Enter]Execute"
+      assert txt =~ "select"
+      assert txt =~ "execute"
     end
 
-    test "has inverted colors" do
-      state = Fixtures.sample_state()
-      widget = StatusBar.render(state)
-
+    test "background is dark_gray and foreground is white" do
+      widget = StatusBar.render(Fixtures.sample_state())
       assert widget.style.fg == :white
       assert widget.style.bg == :dark_gray
     end
 
-    test "shows disarming safety state" do
+    test "shows DISARMING safety badge" do
       state = Fixtures.sample_state(%{safety_state: :disarming})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "Disarming"
+      assert text(StatusBar.render(state)) =~ "DISARMING"
     end
 
-    test "shows error safety state" do
+    test "shows ERROR safety badge" do
       state = Fixtures.sample_state(%{safety_state: :error})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "Error"
+      assert text(StatusBar.render(state)) =~ "ERROR"
     end
 
-    test "shows unknown safety state as string" do
+    test "renders unknown safety state as plain text" do
       state = Fixtures.sample_state(%{safety_state: :custom_state})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "custom_state"
+      assert text(StatusBar.render(state)) =~ "custom_state"
     end
 
-    test "shows panel-specific hints for joints" do
-      state = Fixtures.sample_state(%{active_panel: :joints})
-      widget = StatusBar.render(state)
+    test "shows joints panel hints when not armed (select only)" do
+      state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :disarmed})
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[j/k]Select"
+      assert txt =~ "j/k"
+      assert txt =~ "select"
+      refute txt =~ "adjust"
     end
 
-    test "shows joint adjustment hints when armed" do
+    test "shows joints adjustment hints when armed" do
       state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :armed})
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[h/l]Adj"
-      assert widget.text =~ "[H/L]Adj10x"
+      assert txt =~ "h/l"
+      assert txt =~ "adjust"
+      assert txt =~ "H/L"
+      assert txt =~ "10×"
     end
 
-    test "shows joint adjustment hints when disarming" do
+    test "shows joints adjustment hints when disarming" do
       state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :disarming})
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[h/l]Adj"
+      assert txt =~ "h/l"
+      assert txt =~ "adjust"
     end
 
-    test "shows panel-specific hints for parameters" do
+    test "shows parameters panel hints (select / adjust / toggle)" do
       state = Fixtures.sample_state(%{active_panel: :parameters})
-      widget = StatusBar.render(state)
+      txt = text(StatusBar.render(state))
 
-      assert widget.text =~ "[j/k]Select"
-      assert widget.text =~ "[h/l]Adj"
-      assert widget.text =~ "[Enter]Toggle"
+      assert txt =~ "select"
+      assert txt =~ "adjust"
+      assert txt =~ "toggle"
     end
 
-    test "shows disarmed safety state" do
+    test "shows Disarmed dim badge" do
       state = Fixtures.sample_state(%{safety_state: :disarmed})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "Disarmed"
+      assert text(StatusBar.render(state)) =~ "Disarmed"
     end
 
-    test "shows no panel-specific hints for unknown panel" do
+    test "still shows global pills for an unknown panel" do
       state = Fixtures.sample_state(%{active_panel: :unknown_panel})
-      widget = StatusBar.render(state)
-
-      assert widget.text =~ "[q]Quit"
+      assert text(StatusBar.render(state)) =~ " q "
     end
   end
 end

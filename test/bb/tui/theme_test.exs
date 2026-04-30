@@ -93,4 +93,19 @@ defmodule BB.TUI.ThemeTest do
       assert Theme.border_style(false) == Theme.unfocused_border_style()
     end
   end
+
+  describe "safety_badge/1" do
+    test "renders an unknown safety state as a dim plain-text span" do
+      span = Theme.safety_badge(:custom_state)
+      assert span.content =~ "custom_state"
+      assert span.style.fg == Theme.dim_text()
+      assert span.style.bg == nil
+    end
+  end
+
+  describe "proximity_color/1" do
+    test "falls back to dim_text/0 for unknown proximity values" do
+      assert Theme.proximity_color(:unexpected) == Theme.dim_text()
+    end
+  end
 end

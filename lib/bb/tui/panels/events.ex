@@ -12,6 +12,8 @@ defmodule BB.TUI.Panels.Events do
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Layout.Rect
+  alias ExRatatui.Style
+  alias ExRatatui.Text.{Line, Span}
   alias ExRatatui.Widgets.Block
   alias ExRatatui.Widgets.List, as: WidgetList
   alias ExRatatui.Widgets.Scrollbar
@@ -29,14 +31,14 @@ defmodule BB.TUI.Panels.Events do
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{events: events, scroll_offset: offset, events_paused: paused}, focused?) do
-    items = Enum.map(events, &format_event/1)
+    items = Enum.map(events, &event_line/1)
 
     %WidgetList{
       items: items,
       selected: if(events != [], do: offset),
       highlight_style: Theme.highlight_style(),
       block: %Block{
-        title: title(length(events), paused),
+        title: title_line(length(events), paused),
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(focused?)
@@ -102,7 +104,7 @@ defmodule BB.TUI.Panels.Events do
   end
 
   @doc """
-  Builds the panel title with event count and pause indicator.
+  Builds the panel title as a single-string label (legacy form).
 
   ## Examples
 
@@ -114,12 +116,120 @@ defmodule BB.TUI.Panels.Events do
 
       iex> BB.TUI.Panels.Events.title(0, false)
       " Events "
+
+      iex> BB.TUI.Panels.Events.title(0, true)
+      " Events \u{23F8} PAUSED "
   """
   @spec title(non_neg_integer(), boolean()) :: String.t()
   def title(0, false), do: " Events "
   def title(count, false), do: " Events (#{count}) "
   def title(0, true), do: " Events \u{23F8} PAUSED "
   def title(count, true), do: " Events (#{count}) \u{23F8} PAUSED "
+
+  @doc ~S"""
+  Builds the panel title as a rich-text `%Line{}` — the count renders
+  bold-cyan and the `⏸ PAUSED` badge renders bold-yellow when the
+  stream is paused.
+
+  ## Examples
+
+      iex> %ExRatatui.Text.Line{spans: spans} =
+      ...>   BB.TUI.Panels.Events.title_line(47, false)
+      iex> Enum.map_join(spans, "", & &1.content)
+      " Events (47) "
+
+      iex> %ExRatatui.Text.Line{spans: spans} =
+      ...>   BB.TUI.Panels.Events.title_line(47, true)
+      iex> Enum.map_join(spans, "", & &1.content)
+      " Events (47)  ⏸ PAUSED "
+
+      iex> %ExRatatui.Text.Line{spans: [%{content: only}]} =
+      ...>   BB.TUI.Panels.Events.title_line(0, false)
+      iex> only
+      " Events "
+  """
+  @spec title_line(non_neg_integer(), boolean()) :: Line.t()
+  def title_line(0, false) do
+    %Line{spans: [%Span{content: " Events ", style: %Style{}}]}
+  end
+
+  def title_line(count, false) do
+    %Line{
+      spans: [
+        %Span{content: " Events (", style: %Style{}},
+        %Span{
+          content: Integer.to_string(count),
+          style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+        },
+        %Span{content: ") ", style: %Style{}}
+      ]
+    }
+  end
+
+  def title_line(count, true) do
+    base =
+      case count do
+        0 ->
+          [%Span{content: " Events ", style: %Style{}}]
+
+        _ ->
+          [
+            %Span{content: " Events (", style: %Style{}},
+            %Span{
+              content: Integer.to_string(count),
+              style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+            },
+            %Span{content: ") ", style: %Style{}}
+          ]
+      end
+
+    %Line{
+      spans:
+        base ++
+          [
+            %Span{
+              content: " \u{23F8} PAUSED ",
+              style: %Style{fg: Theme.yellow(), modifiers: [:bold]}
+            }
+          ]
+    }
+  end
+
+  @doc ~S"""
+  Builds a rich-text `%Line{}` for a single event.
+
+  | segment   | color  |
+  | --------- | ------ |
+  | timestamp | cyan   |
+  | path      | blue (`Theme.path_style/0`) |
+  | summary   | white  |
+
+  ## Examples
+
+      iex> ts = ~U[2026-01-15 18:23:12.000Z]
+      iex> %ExRatatui.Text.Line{spans: spans} =
+      ...>   BB.TUI.Panels.Events.event_line(
+      ...>     {ts, [:state_machine], %{payload: %{from: :disarmed, to: :armed}}}
+      ...>   )
+      iex> Enum.map_join(spans, "", & &1.content)
+      "18:23:12 state_machine      disarmed → armed"
+  """
+  @spec event_line({DateTime.t(), list(), term()}) :: Line.t()
+  def event_line({timestamp, path, message}) do
+    time = Calendar.strftime(timestamp, "%H:%M:%S")
+    path_str = path |> Enum.join(".") |> String.pad_trailing(18)
+    summary = summarize(path, message)
+
+    %Line{
+      spans: [
+        %Span{content: time, style: %Style{fg: Theme.cyan()}},
+        %Span{content: " ", style: %Style{}},
+        %Span{content: path_str, style: Theme.path_style()},
+        %Span{content: " ", style: %Style{}},
+        %Span{content: summary, style: %Style{fg: :white}}
+      ]
+    }
+  end
 
   @doc """
   Formats a single event as a display string.
