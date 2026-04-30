@@ -4,6 +4,8 @@
 
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
 
+![BB.TUI Demo](https://raw.githubusercontent.com/mcass19/bb_tui/main/assets/demo.png)
+
 ## Features
 
 - **Safety controls** — arm / disarm / force disarm with confirmation popup
