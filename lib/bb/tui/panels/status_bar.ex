@@ -47,10 +47,10 @@ defmodule BB.TUI.Panels.StatusBar do
   """
   @spec render(State.t()) :: struct()
   def render(%State{} = state) do
-    %Paragraph{
-      text: line(state),
-      style: %Style{bg: :dark_gray, fg: :white}
-    }
+    # No bg on the paragraph itself — `dim_span/1` paints `:dark_gray`
+    # text, so a `bg: :dark_gray` strip would make every label
+    # disappear. The pills carry the visual identity instead.
+    %Paragraph{text: line(state)}
   end
 
   defp line(%State{} = state) do

@@ -73,10 +73,12 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert txt =~ "execute"
     end
 
-    test "background is dark_gray and foreground is white" do
+    test "uses no paragraph background — pills carry the visual identity" do
       widget = StatusBar.render(Fixtures.sample_state())
-      assert widget.style.fg == :white
-      assert widget.style.bg == :dark_gray
+      # A `bg: :dark_gray` strip would clash with the dim-gray descriptor
+      # spans next to each pill (dark-on-dark renders blank). Each pill
+      # sets its own bg, so the paragraph stays unstyled.
+      assert widget.style == %ExRatatui.Style{}
     end
 
     test "shows DISARMING safety badge" do
