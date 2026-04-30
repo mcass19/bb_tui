@@ -68,6 +68,7 @@ defmodule BB.TUI.App do
 
   use ExRatatui.App, runtime: :reducer
 
+  alias BB.Robot.Joint
   alias BB.TUI.Panels
   alias BB.TUI.Robot
   alias BB.TUI.State
@@ -100,7 +101,7 @@ defmodule BB.TUI.App do
     joints =
       robot_struct
       |> BB.Robot.joints_in_order()
-      |> Enum.filter(&BB.Robot.Joint.movable?/1)
+      |> Enum.filter(&Joint.movable?/1)
       |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0}})
 
     commands = Robot.discover_commands(robot, node)

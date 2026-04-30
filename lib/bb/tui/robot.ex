@@ -29,6 +29,10 @@ defmodule BB.TUI.Robot do
   goes away (the link will tear it down on disconnect).
   """
 
+  alias BB.Dsl.Info
+  alias BB.Robot.Runtime
+  alias BB.TUI.Rpc
+
   @typedoc "Either nil for local execution or a connected remote node."
   @type maybe_node :: node() | nil
 
@@ -52,7 +56,7 @@ defmodule BB.TUI.Robot do
   def subscribe(robot, paths, node) when is_list(paths) and is_atom(node) do
     parent = self()
 
-    BB.TUI.Rpc.spawn_link(node, fn ->
+    Rpc.spawn_link(node, fn ->
       Enum.each(paths, &BB.subscribe(robot, &1))
       relay_loop(parent)
     end)
@@ -80,17 +84,17 @@ defmodule BB.TUI.Robot do
 
   @doc "Returns the runtime state machine state."
   @spec runtime_state(module(), maybe_node()) :: atom()
-  def runtime_state(robot, nil), do: BB.Robot.Runtime.state(robot)
+  def runtime_state(robot, nil), do: Runtime.state(robot)
   def runtime_state(robot, node), do: rpc(node, BB.Robot.Runtime, :state, [robot])
 
   @doc "Returns the runtime robot struct (joints, actuators, etc.)."
   @spec get_robot(module(), maybe_node()) :: term()
-  def get_robot(robot, nil), do: BB.Robot.Runtime.get_robot(robot)
+  def get_robot(robot, nil), do: Runtime.get_robot(robot)
   def get_robot(robot, node), do: rpc(node, BB.Robot.Runtime, :get_robot, [robot])
 
   @doc "Returns the latest joint positions known by the runtime."
   @spec positions(module(), maybe_node()) :: %{atom() => float()}
-  def positions(robot, nil), do: BB.Robot.Runtime.positions(robot)
+  def positions(robot, nil), do: Runtime.positions(robot)
   def positions(robot, node), do: rpc(node, BB.Robot.Runtime, :positions, [robot])
 
   @doc "Returns the parameter list (with metadata maps) for the robot."
@@ -104,8 +108,8 @@ defmodule BB.TUI.Robot do
   """
   @spec discover_commands(module(), maybe_node()) :: [term()]
   def discover_commands(robot, nil) do
-    if Code.ensure_loaded?(BB.Dsl.Info) and function_exported?(BB.Dsl.Info, :commands, 1) do
-      BB.Dsl.Info.commands(robot)
+    if Code.ensure_loaded?(Info) and function_exported?(Info, :commands, 1) do
+      Info.commands(robot)
     else
       []
     end
@@ -114,7 +118,7 @@ defmodule BB.TUI.Robot do
   end
 
   def discover_commands(robot, node) do
-    case BB.TUI.Rpc.call(node, BB.Dsl.Info, :commands, [robot]) do
+    case Rpc.call(node, BB.Dsl.Info, :commands, [robot]) do
       {:badrpc, _} -> []
       result when is_list(result) -> result
       _ -> []
@@ -175,7 +179,7 @@ defmodule BB.TUI.Robot do
   @spec execute_command(module(), atom(), map(), maybe_node()) ::
           {:ok, pid()} | {:error, term()}
   def execute_command(robot, name, args, nil) do
-    BB.Robot.Runtime.execute(robot, name, args)
+    Runtime.execute(robot, name, args)
   end
 
   def execute_command(robot, name, args, node) do
@@ -185,7 +189,7 @@ defmodule BB.TUI.Robot do
   # ── Internal ───────────────────────────────────────────────
 
   defp rpc(node, mod, fun, args) do
-    case BB.TUI.Rpc.call(node, mod, fun, args) do
+    case Rpc.call(node, mod, fun, args) do
       {:badrpc, reason} ->
         raise "BB.TUI.Robot: remote call #{inspect(mod)}.#{fun}/#{length(args)} " <>
                 "on #{inspect(node)} failed: #{inspect(reason)}"

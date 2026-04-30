@@ -353,7 +353,7 @@ defmodule BB.TUI.Panels.Events do
   end
 
   def summarize([:param | rest], %{payload: %{new_value: val}}) do
-    param_name = rest |> Enum.map(&to_string/1) |> Enum.join(".")
+    param_name = Enum.map_join(rest, ".", &to_string/1)
     "#{param_name} = #{inspect(val)}"
   end
 

@@ -147,6 +147,8 @@ defmodule BB.TUI do
   `ExRatatui.Runtime`.
   """
 
+  alias BB.TUI.App
+
   @doc """
   Returns a child specification for supervision trees.
 
@@ -251,10 +253,10 @@ defmodule BB.TUI do
       :ssh ->
         opts
         |> wrap_app_opts(robot)
-        |> BB.TUI.App.start_link()
+        |> App.start_link()
 
       _ ->
-        BB.TUI.App.start_link(Keyword.put(opts, :robot, robot))
+        App.start_link(Keyword.put(opts, :robot, robot))
     end
   end
 
@@ -306,7 +308,7 @@ defmodule BB.TUI do
     opts
     |> Keyword.put(:transport, :ssh)
     |> wrap_app_opts(robot)
-    |> BB.TUI.App.start_link()
+    |> App.start_link()
   end
 
   @doc """

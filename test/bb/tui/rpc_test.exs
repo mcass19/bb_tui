@@ -1,5 +1,5 @@
 defmodule BB.TUI.RpcTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias BB.TUI.Rpc
 

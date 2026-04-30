@@ -111,7 +111,7 @@ defmodule BB.TUI.Panels.Parameters do
   """
   @spec format_path(list()) :: String.t()
   def format_path(path) when is_list(path) do
-    path |> Enum.map(&to_string/1) |> Enum.join(".")
+    Enum.map_join(path, ".", &to_string/1)
   end
 
   @doc """

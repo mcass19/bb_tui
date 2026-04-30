@@ -2,6 +2,8 @@ defmodule Mix.Tasks.Bb.TuiTest do
   use ExUnit.Case, async: false
   use Mimic
 
+  alias Mix.Tasks.Bb.Tui
+
   setup :set_mimic_global
 
   setup do
@@ -35,14 +37,14 @@ defmodule Mix.Tasks.Bb.TuiTest do
   describe "run/1" do
     test "raises when --robot is missing" do
       assert_raise Mix.Error, ~r/--robot option is required/, fn ->
-        Mix.Tasks.Bb.Tui.run([])
+        Tui.run([])
       end
     end
 
     test "translates the --robot string into a module atom and runs the TUI" do
       task =
         Task.async(fn ->
-          Mix.Tasks.Bb.Tui.run(["--robot", "BB.TUI.TestRobot"])
+          Tui.run(["--robot", "BB.TUI.TestRobot"])
         end)
 
       assert_receive {:app_started, opts}, 1_000
@@ -58,7 +60,7 @@ defmodule Mix.Tasks.Bb.TuiTest do
     test "translates --node into an atom and forwards it through to the App" do
       task =
         Task.async(fn ->
-          Mix.Tasks.Bb.Tui.run([
+          Tui.run([
             "--robot",
             "BB.TUI.TestRobot",
             "--node",
@@ -79,7 +81,7 @@ defmodule Mix.Tasks.Bb.TuiTest do
     test "--ssh sets transport: :ssh with default port and auto_host_key" do
       task =
         Task.async(fn ->
-          Mix.Tasks.Bb.Tui.run(["--robot", "BB.TUI.TestRobot", "--ssh"])
+          Tui.run(["--robot", "BB.TUI.TestRobot", "--ssh"])
         end)
 
       assert_receive {:app_started, opts}, 1_000
@@ -98,7 +100,7 @@ defmodule Mix.Tasks.Bb.TuiTest do
     test "--ssh --port overrides the default SSH port" do
       task =
         Task.async(fn ->
-          Mix.Tasks.Bb.Tui.run([
+          Tui.run([
             "--robot",
             "BB.TUI.TestRobot",
             "--ssh",
@@ -120,7 +122,7 @@ defmodule Mix.Tasks.Bb.TuiTest do
     test "--ssh with --node passes both through" do
       task =
         Task.async(fn ->
-          Mix.Tasks.Bb.Tui.run([
+          Tui.run([
             "--robot",
             "BB.TUI.TestRobot",
             "--ssh",
@@ -142,7 +144,7 @@ defmodule Mix.Tasks.Bb.TuiTest do
     test "--port without --ssh is ignored" do
       task =
         Task.async(fn ->
-          Mix.Tasks.Bb.Tui.run(["--robot", "BB.TUI.TestRobot", "--port", "3333"])
+          Tui.run(["--robot", "BB.TUI.TestRobot", "--port", "3333"])
         end)
 
       assert_receive {:app_started, opts}, 1_000

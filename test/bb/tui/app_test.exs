@@ -1,5 +1,5 @@
 defmodule BB.TUI.AppTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use Mimic
   doctest BB.TUI
 
@@ -7,7 +7,8 @@ defmodule BB.TUI.AppTest do
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
 
-  setup :set_mimic_global
+  setup :verify_on_exit!
+  setup :set_mimic_private
 
   describe "mount/1" do
     test "initializes state from robot module" do

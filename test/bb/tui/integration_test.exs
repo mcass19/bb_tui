@@ -241,17 +241,15 @@ defmodule BB.TUI.IntegrationTest do
   end
 
   defp do_eventually(assertion_fn, deadline) do
-    try do
-      assertion_fn.()
-    rescue
-      ExUnit.AssertionError ->
-        if System.monotonic_time(:millisecond) >= deadline do
-          # Final attempt — let the assertion error propagate.
-          assertion_fn.()
-        else
-          Process.sleep(25)
-          do_eventually(assertion_fn, deadline)
-        end
-    end
+    assertion_fn.()
+  rescue
+    ExUnit.AssertionError ->
+      if System.monotonic_time(:millisecond) >= deadline do
+        # Final attempt — let the assertion error propagate.
+        assertion_fn.()
+      else
+        Process.sleep(25)
+        do_eventually(assertion_fn, deadline)
+      end
   end
 end
