@@ -1,9 +1,12 @@
 defmodule BB.TUI.App do
   @moduledoc """
-  Main TUI application using `ExRatatui.App` behaviour.
+  Main TUI application using the `ExRatatui.App` **reducer runtime**.
 
-  Renders the dashboard layout and handles keyboard events and PubSub messages
-  from the BB robot. All state transitions are delegated to `BB.TUI.State`.
+  Renders the dashboard layout and handles every keyboard event,
+  PubSub message, and side effect through a single `update/2` arrow.
+  Pure state transitions live in `BB.TUI.State`; this module's job is
+  to wire input and async results to those transitions and return
+  declarative `ExRatatui.Command` values for IO.
 
   ## Layout
 
@@ -21,48 +24,65 @@ defmodule BB.TUI.App do
       └──────────────────────┴───────────────────────────────────────┘
        Robot | ● Armed | idle | [q]Quit [Tab]Panel [?]Help
 
-  ## Runtime
+  ## Reducer callbacks
 
-  Uses the ExRatatui **callback runtime** (`use ExRatatui.App`, which
-  defaults to `runtime: :callbacks`). Each mount owns a linked
-  `Task.Supervisor` that runs robot command execution off the render
-  loop so a slow `Robot.execute_command/4` can't block input.
-
-  > **Planned:** migrate to `use ExRatatui.App, runtime: :reducer` so
-  > command execution and subscriptions become declarative
-  > `ExRatatui.Command` / `ExRatatui.Subscription` values and the
-  > unified `update/2` path replaces the split between `handle_event/2`
-  > / `handle_info/2`. See `BB.TUI` for the full rationale.
-
-  ## Callbacks
-
-    * `mount/1` — validates the robot module, subscribes to PubSub,
-      snapshots ETS state, and starts a per-session `Task.Supervisor`
+    * `init/1` — validates the robot module, subscribes to PubSub
+      (`{:bb, _, _}` messages flow into `update/2` as `{:info, _}`
+      automatically), and snapshots ETS state. No `Task.Supervisor`
+      is required: long-running command execution is owned by the
+      runtime via `ExRatatui.Command.async/2`.
     * `render/2` — composes panel functions into a flat
       `[{widget, rect}]` list (the events panel contributes two panes:
-      the list and an overlay `ExRatatui.Widgets.Scrollbar`)
-    * `handle_event/2` — keyboard input dispatches BB API calls and
-      state transitions
-    * `handle_info/2` — PubSub messages (`{:bb, path, msg}`) update
-      state; `{:command_result, _}` messages arrive from the supervised
-      command Task
-    * `terminate/2` — cleanup (no-op)
+      the list and an overlay `ExRatatui.Widgets.Scrollbar`).
+    * `update/2` — the single dispatch arrow. Receives `{:event, ev}`
+      for terminal input and `{:info, msg}` for everything else
+      (PubSub, async results, subscription ticks, `send_after`
+      messages). Returns `{:noreply, state}` for pure transitions or
+      `{:noreply, state, commands: [cmd]}` when an effect should fire.
+    * `subscriptions/1` — declares the throbber tick interval whenever
+      the dashboard has something animating (a `:disarming` safety
+      state or a command currently executing). The runtime diffs the
+      result against the previous one, so the timer only runs when
+      needed. This replaces the previously-dormant
+      `Process.send_after`-style throbber tick.
+
+  ## Async commands
+
+  When the user presses Enter on a Ready command, `update/2` returns
+  a batched `Command.async/2` (which monitors the spawned command pid
+  and reports `{:command_result, _}`) plus a `Command.send_after/2`
+  for the timeout. Both end up in the same `{:info, _}` mailbox, so
+  the timeout result simply becomes another `update/2` clause.
+
+  ## Side-effect convention
+
+  Fast, fire-and-forget calls (`Robot.arm/2`, `Robot.disarm/2`,
+  `Robot.set_actuator/4`, `Robot.set_parameter/4`,
+  `Robot.publish/4`, `Robot.force_disarm/2`) are invoked inline from
+  `update/2` rather than wrapped in a `Command.async/2`. They are
+  effectively constant-time PubSub publishes; the boilerplate of
+  routing through a no-op result mapper would dwarf the call. Only
+  `Robot.execute_command/4`, which monitors a spawned command process
+  and waits for its `:DOWN`, goes through `Command.async/2`.
   """
 
-  use ExRatatui.App
+  use ExRatatui.App, runtime: :reducer
 
   alias BB.TUI.Panels
   alias BB.TUI.Robot
   alias BB.TUI.State
+  alias ExRatatui.Command
+  alias ExRatatui.Event
   alias ExRatatui.Layout
   alias ExRatatui.Layout.Rect
+  alias ExRatatui.Subscription
 
   @command_timeout Application.compile_env(:bb_tui, :command_timeout, 30_000)
 
-  # ── Callbacks ──────────────────────────────────────────────
+  # ── Init ──────────────────────────────────────────────────────
 
   @impl true
-  def mount(opts) do
+  def init(opts) do
     robot = Keyword.fetch!(opts, :robot)
     node = Keyword.get(opts, :node)
 
@@ -73,8 +93,6 @@ defmodule BB.TUI.App do
     end
 
     Robot.subscribe(robot, [[:state_machine], [:sensor], [:param]], node)
-
-    {:ok, task_supervisor} = Task.Supervisor.start_link()
 
     robot_struct = Robot.get_robot(robot, node)
     positions = Robot.positions(robot, node)
@@ -100,13 +118,14 @@ defmodule BB.TUI.App do
         active_panel: :safety,
         scroll_offset: 0,
         show_help: false,
-        confirm_force_disarm: false,
-        task_supervisor: task_supervisor
+        confirm_force_disarm: false
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
 
     {:ok, state}
   end
+
+  # ── Render ────────────────────────────────────────────────────
 
   @impl true
   def render(state, frame) do
@@ -164,75 +183,77 @@ defmodule BB.TUI.App do
     maybe_add_popup(panels, state, full)
   end
 
+  # ── Update — popup intercepts ────────────────────────────────
+
   @impl true
-  # ── Popup intercepts ────────────────────────────────────────
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{show_help: true} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.scroll_help_down(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{show_help: true} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.scroll_help_up(state)}
   end
 
-  def handle_event(%ExRatatui.Event.Key{kind: "press"}, %{show_help: true} = state) do
+  def update({:event, %Event.Key{kind: "press"}}, %{show_help: true} = state) do
     {:noreply, State.toggle_help(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "y", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "y", kind: "press"}},
         %{confirm_force_disarm: true} = state
       ) do
     Robot.force_disarm(state.robot, state.node)
     {:noreply, State.dismiss_force_disarm(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "n", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "n", kind: "press"}},
         %{confirm_force_disarm: true} = state
       ) do
     {:noreply, State.dismiss_force_disarm(state)}
   end
 
-  def handle_event(%ExRatatui.Event.Key{kind: "press"}, %{confirm_force_disarm: true} = state) do
+  def update({:event, %Event.Key{kind: "press"}}, %{confirm_force_disarm: true} = state) do
     {:noreply, state}
   end
 
-  def handle_event(%ExRatatui.Event.Key{kind: "press"}, %{show_event_detail: true} = state) do
+  def update({:event, %Event.Key{kind: "press"}}, %{show_event_detail: true} = state) do
     {:noreply, State.dismiss_event_detail(state)}
   end
 
-  # ── Global keys ─────────────────────────────────────────────
-  def handle_event(%ExRatatui.Event.Key{code: "q", kind: "press"}, state) do
+  # ── Update — global keys ─────────────────────────────────────
+
+  def update({:event, %Event.Key{code: "q", kind: "press"}}, state) do
     {:stop, state}
   end
 
-  def handle_event(%ExRatatui.Event.Key{code: "tab", kind: "press"}, state) do
+  def update({:event, %Event.Key{code: "tab", kind: "press"}}, state) do
     {:noreply, State.cycle_panel(state)}
   end
 
-  def handle_event(%ExRatatui.Event.Key{code: "?", kind: "press"}, state) do
+  def update({:event, %Event.Key{code: "?", kind: "press"}}, state) do
     {:noreply, State.toggle_help(state)}
   end
 
-  def handle_event(%ExRatatui.Event.Key{code: "a", kind: "press"}, state) do
+  def update({:event, %Event.Key{code: "a", kind: "press"}}, state) do
     Robot.arm(state.robot, state.node)
     {:noreply, state}
   end
 
-  def handle_event(%ExRatatui.Event.Key{code: "d", kind: "press"}, state) do
+  def update({:event, %Event.Key{code: "d", kind: "press"}}, state) do
     Robot.disarm(state.robot, state.node)
     {:noreply, state}
   end
 
-  def handle_event(%ExRatatui.Event.Key{code: "f", kind: "press"}, state) do
+  def update({:event, %Event.Key{code: "f", kind: "press"}}, state) do
     if state.safety_state == :error do
       {:noreply, State.show_force_disarm(state)}
     else
@@ -240,39 +261,40 @@ defmodule BB.TUI.App do
     end
   end
 
-  # ── Events panel keys ──────────────────────────────────────
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  # ── Update — events panel keys ───────────────────────────────
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :events} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.scroll_down(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :events} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.scroll_up(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "p", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "p", kind: "press"}},
         %{active_panel: :events} = state
       ) do
     {:noreply, State.toggle_events_pause(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "c", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "c", kind: "press"}},
         %{active_panel: :events} = state
       ) do
     {:noreply, State.clear_events(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "enter", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
         %{active_panel: :events} = state
       ) do
     if State.selected_event(state) do
@@ -282,140 +304,137 @@ defmodule BB.TUI.App do
     end
   end
 
-  # ── Commands panel keys ────────────────────────────────────
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  # ── Update — commands panel keys ─────────────────────────────
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :commands} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.select_next_command(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :commands} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_command(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "enter", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
         %{active_panel: :commands} = state
       ) do
     execute_selected_command(state)
   end
 
-  # ── Joints panel keys ──────────────────────────────────────
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  # ── Update — joints panel keys ───────────────────────────────
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :joints} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.select_next_joint(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :joints} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_joint(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :joints} = state
       )
       when code in ["l", "right"] do
     adjust_selected_joint(state, :increase, 1)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :joints} = state
       )
       when code in ["h", "left"] do
     adjust_selected_joint(state, :decrease, 1)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "L", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "L", kind: "press"}},
         %{active_panel: :joints} = state
       ) do
     adjust_selected_joint(state, :increase, 10)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "H", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "H", kind: "press"}},
         %{active_panel: :joints} = state
       ) do
     adjust_selected_joint(state, :decrease, 10)
   end
 
-  # ── Parameters panel keys ───────────────────────────────────
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  # ── Update — parameters panel keys ───────────────────────────
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :parameters} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.select_next_param(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :parameters} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_param(state)}
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :parameters} = state
       )
       when code in ["l", "right"] do
     adjust_selected_param(state, :increase, 1)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: code, kind: "press"},
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :parameters} = state
       )
       when code in ["h", "left"] do
     adjust_selected_param(state, :decrease, 1)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "L", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "L", kind: "press"}},
         %{active_panel: :parameters} = state
       ) do
     adjust_selected_param(state, :increase, 10)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "H", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "H", kind: "press"}},
         %{active_panel: :parameters} = state
       ) do
     adjust_selected_param(state, :decrease, 10)
   end
 
-  def handle_event(
-        %ExRatatui.Event.Key{code: "enter", kind: "press"},
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
         %{active_panel: :parameters} = state
       ) do
     toggle_selected_param(state)
   end
 
-  # ── Catch-all ──────────────────────────────────────────────
-  def handle_event(_event, state) do
-    {:noreply, state}
-  end
+  # ── Update — PubSub + async info messages ────────────────────
 
-  # ── PubSub messages ────────────────────────────────────────
-
-  @impl true
-  def handle_info({:bb, [:state_machine | _] = path, msg}, state) do
+  def update({:info, {:bb, [:state_machine | _] = path, msg}}, state) do
     safety_state = Robot.safety_state(state.robot, state.node)
     runtime_state = Robot.runtime_state(state.robot, state.node)
 
@@ -427,7 +446,7 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
-  def handle_info({:bb, [:sensor | _] = path, %{payload: payload} = msg}, state) do
+  def update({:info, {:bb, [:sensor | _] = path, %{payload: payload} = msg}}, state) do
     positions =
       case payload do
         %{names: names, positions: pos} -> Enum.zip(names, pos) |> Map.new()
@@ -442,7 +461,7 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
-  def handle_info({:bb, [:param | _] = path, msg}, state) do
+  def update({:info, {:bb, [:param | _] = path, msg}}, state) do
     parameters = Robot.list_parameters(state.robot, [], state.node)
 
     state =
@@ -453,22 +472,46 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
-  def handle_info({:bb, path, msg}, state) do
+  def update({:info, {:bb, path, msg}}, state) do
     {:noreply, State.append_event(state, path, msg)}
   end
 
-  def handle_info({:command_result, result}, state) do
+  def update({:info, {:command_result, result}}, state) do
     {:noreply, State.set_command_result(state, result)}
   end
 
-  def handle_info(_msg, state) do
+  def update({:info, :command_timeout}, %{executing_command: nil} = state) do
     {:noreply, state}
   end
 
-  @impl true
-  def terminate(_reason, _state), do: :ok
+  def update({:info, :command_timeout}, state) do
+    {:noreply, State.set_command_result(state, {:error, :timeout})}
+  end
 
-  # ── Helpers ────────────────────────────────────────────────
+  def update({:info, :throbber_tick}, state) do
+    {:noreply, State.tick_throbber(state)}
+  end
+
+  # ── Update — catch-all ───────────────────────────────────────
+
+  def update(_msg, state), do: {:noreply, state}
+
+  # ── Subscriptions ────────────────────────────────────────────
+
+  @impl true
+  def subscriptions(state) do
+    if needs_throbber?(state) do
+      [Subscription.interval(:throbber, 100, :throbber_tick)]
+    else
+      []
+    end
+  end
+
+  # ── Helpers ──────────────────────────────────────────────────
+
+  defp needs_throbber?(%State{safety_state: :disarming}), do: true
+  defp needs_throbber?(%State{executing_command: marker}) when marker != nil, do: true
+  defp needs_throbber?(_), do: false
 
   defp maybe_add_popup(panels, %{show_help: true, help_scroll_offset: offset}, full) do
     panels ++ [{Panels.Help.render(offset), full}]
@@ -585,41 +628,41 @@ defmodule BB.TUI.App do
       cmd ->
         if Panels.Commands.command_ready?(cmd, state.runtime_state) and
              state.executing_command == nil do
-          tui_pid = self()
-          robot = state.robot
-          node = state.node
-          name = cmd.name
-
-          {:ok, pid} =
-            Task.Supervisor.start_child(state.task_supervisor, fn ->
-              run_command(tui_pid, robot, name, node)
-            end)
-
-          {:noreply, State.start_command(state, pid)}
+          {:noreply, State.start_command(state, :running),
+           commands: [execute_command_command(state, cmd)]}
         else
           {:noreply, state}
         end
     end
   end
 
-  defp run_command(tui_pid, robot, name, node) do
+  defp execute_command_command(%State{robot: robot, node: node}, cmd) do
+    name = cmd.name
+
+    Command.batch([
+      Command.async(
+        fn -> wait_for_command_result(robot, name, node) end,
+        fn result -> {:command_result, result} end
+      ),
+      Command.send_after(@command_timeout, :command_timeout)
+    ])
+  end
+
+  defp wait_for_command_result(robot, name, node) do
     case Robot.execute_command(robot, name, %{}, node) do
       {:ok, cmd_pid} ->
         ref = Process.monitor(cmd_pid)
 
         receive do
           {:DOWN, ^ref, :process, ^cmd_pid, :normal} ->
-            send(tui_pid, {:command_result, {:ok, :completed}})
+            {:ok, :completed}
 
           {:DOWN, ^ref, :process, ^cmd_pid, reason} ->
-            send(tui_pid, {:command_result, {:error, reason}})
-        after
-          @command_timeout ->
-            send(tui_pid, {:command_result, {:error, :timeout}})
+            {:error, reason}
         end
 
       {:error, reason} ->
-        send(tui_pid, {:command_result, {:error, reason}})
+        {:error, reason}
     end
   end
 end

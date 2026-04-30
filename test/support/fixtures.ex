@@ -24,7 +24,6 @@ defmodule BB.TUI.Test.Fixtures do
       command_selected: 0,
       command_result: nil,
       executing_command: nil,
-      task_supervisor: nil,
       joint_selected: 0,
       param_selected: 0
     }

@@ -89,10 +89,100 @@ defmodule BB.TUI.IntegrationTest do
       snapshot = Runtime.snapshot(pid)
 
       assert snapshot.mod == BB.TUI.App
-      assert snapshot.mode in [:callbacks, :reducer]
+      assert snapshot.mode == :reducer
       assert snapshot.transport == :local
       refute snapshot.polling_enabled?
       assert snapshot.dimensions == {80, 24}
+    end
+  end
+
+  describe "Command result flow" do
+    test "completion: a command that exits :normal yields {:ok, :completed}" do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        cmd_pid = spawn(fn -> :ok end)
+        {:ok, cmd_pid}
+      end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).command_result == {:ok, :completed}
+      end)
+
+      assert current_state(pid).executing_command == nil
+    end
+
+    test "execute error: a {:error, reason} from execute_command surfaces verbatim" do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        {:error, :not_allowed}
+      end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).command_result == {:error, :not_allowed}
+      end)
+    end
+
+    test "abnormal exit: a non-:normal :DOWN reason surfaces as {:error, reason}" do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        cmd_pid = spawn(fn -> exit(:boom) end)
+        {:ok, cmd_pid}
+      end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).command_result == {:error, :boom}
+      end)
+    end
+
+    test "timeout: a long-running command fires :command_timeout via send_after" do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+        {:ok, cmd_pid}
+      end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      # config/test.exs sets :bb_tui, :command_timeout to 100ms.
+      eventually(fn ->
+        assert current_state(pid).command_result == {:error, :timeout}
+      end)
+    end
+  end
+
+  describe "Throbber subscription" do
+    test "dormant when nothing is animating" do
+      pid = start_tui!()
+
+      # In :idle / :armed there's no throbber subscription, so the
+      # throbber_step never advances on its own.
+      Process.sleep(150)
+
+      assert current_state(pid).throbber_step == 0
+    end
+
+    test "advances while safety_state is :disarming" do
+      pid = start_tui!()
+
+      # Force the dashboard into the animating state, then inject any
+      # event so the runtime re-evaluates subscriptions/1 and arms the
+      # 100ms interval that drives :throbber_tick.
+      update_user_state(pid, fn state -> %{state | safety_state: :disarming} end)
+      :ok = Runtime.inject_event(pid, %Key{code: "noop", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).throbber_step > 0
+      end)
     end
   end
 
@@ -117,5 +207,51 @@ defmodule BB.TUI.IntegrationTest do
 
   defp current_panel(pid) do
     current_state(pid).active_panel
+  end
+
+  defp start_tui_on_commands_panel! do
+    pid = start_tui!()
+
+    # Seed a Ready command so Enter has something to execute.
+    update_user_state(pid, fn state ->
+      %{
+        state
+        | active_panel: :commands,
+          commands: [%{name: :home, allowed_states: [:idle]}],
+          command_selected: 0,
+          runtime_state: :idle
+      }
+    end)
+
+    pid
+  end
+
+  defp update_user_state(pid, fun) do
+    :sys.replace_state(pid, fn server_state ->
+      %{server_state | user_state: fun.(server_state.user_state)}
+    end)
+  end
+
+  # Polls `assertion_fn` every 25ms until it succeeds or 2 seconds elapse.
+  # The reducer runs commands and subscriptions on the live server, so
+  # results land asynchronously — we have to wait for the mailbox round-trip.
+  defp eventually(assertion_fn, timeout_ms \\ 2_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_eventually(assertion_fn, deadline)
+  end
+
+  defp do_eventually(assertion_fn, deadline) do
+    try do
+      assertion_fn.()
+    rescue
+      ExUnit.AssertionError ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          # Final attempt — let the assertion error propagate.
+          assertion_fn.()
+        else
+          Process.sleep(25)
+          do_eventually(assertion_fn, deadline)
+        end
+    end
   end
 end

@@ -211,6 +211,25 @@ The `-t` flag is required — it forces PTY allocation, which the TUI needs for 
 
 See `ExRatatui.SSH.Daemon` for the full list of SSH options (authentication, host keys, idle timeout, max sessions, etc.).
 
+## Runtime inspection
+
+The running `BB.TUI.App` pid (local, SSH, or distributed) exposes debugging hooks via `ExRatatui.Runtime`. Handy for peeking into SSH sessions, asserting against a running TUI from tests, or tracing transitions when a panel misbehaves:
+
+```elixir
+# Headless-or-not check plus dimensions, render count, subscriptions, etc.
+ExRatatui.Runtime.snapshot(pid)
+
+# Record the last N state transitions in memory — each event / info message,
+# render, command dispatch, and subscription firing gets a trace record.
+ExRatatui.Runtime.enable_trace(pid, limit: 200)
+ExRatatui.Runtime.trace_events(pid)
+ExRatatui.Runtime.disable_trace(pid)
+
+# Deterministically drive input — works under test_mode where live polling
+# is disabled. See test/bb/tui/integration_test.exs for end-to-end examples.
+ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "press"})
+```
+
 ## Keybindings
 
 ### Global
@@ -354,45 +373,6 @@ iex> ExRatatui.Distributed.attach(:"robot@<your-hostname>", BB.TUI.App)
 ```
 
 Terminal 2 takes over with the dashboard while `mount/render/handle_event/handle_info` run on the robot node. Press `q` to disconnect — monitors fire on both sides and the local terminal is restored.
-
-## Runtime inspection
-
-The running `BB.TUI.App` pid (local, SSH, or distributed) exposes debugging hooks via `ExRatatui.Runtime`. Handy for peeking into SSH sessions, asserting against a running TUI from tests, or tracing transitions when a panel misbehaves:
-
-```elixir
-# Headless-or-not check plus dimensions, render count, subscriptions, etc.
-ExRatatui.Runtime.snapshot(pid)
-
-# Record the last N state transitions in memory — each event / info message,
-# render, command dispatch, and subscription firing gets a trace record.
-ExRatatui.Runtime.enable_trace(pid, limit: 200)
-ExRatatui.Runtime.trace_events(pid)
-ExRatatui.Runtime.disable_trace(pid)
-
-# Deterministically drive input — works under test_mode where live polling
-# is disabled. See test/bb/tui/integration_test.exs for end-to-end examples.
-ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "press"})
-```
-
-## Planned: reducer runtime migration
-
-`BB.TUI.App` currently uses the ExRatatui **callback runtime** (`use ExRatatui.App` with the default `runtime: :callbacks`), which behaves like a GenServer (`mount/1`, `render/2`, `handle_event/2`, `handle_info/2`). ExRatatui v0.7 shipped an Elm-style **reducer runtime** (`use ExRatatui.App, runtime: :reducer`) that is planned as the next step for this dashboard.
-
-**Why migrate?**
-
-- **Side effects become data.** Commands like "execute this robot action and route the result back" become `ExRatatui.Command` values returned from `update/2`. The runtime supervises the async task, handles cancellation, and surfaces results via a unified `{:msg, _}` path — replacing the mount-owned `Task.Supervisor` + hand-rolled `send/2` pattern in `execute_selected_command/1`.
-- **Subscriptions replace ad-hoc timers.** The throbber step, command timeouts, and any periodic ETS polling would be declared in a single `subscriptions/1` callback and diffed by the runtime, instead of being scattered across `Process.send_after/3` calls.
-- **A single update arrow is easier to reason about and trace.** Pure state transitions already live in [`BB.TUI.State`](lib/bb/tui/state.ex); the reducer migration removes the impedance mismatch between those pure functions and the GenServer-shaped callback module. Combined with `ExRatatui.Runtime.enable_trace/2`, the dashboard becomes introspectable down to every message and command.
-- **Cleaner multi-transport story.** The same reducer can be driven by local, SSH, or distributed transports without any per-transport wiring changes — ExRatatui v0.7 already handles that, but the reducer shape keeps our surface area smaller.
-
-References:
-
-- `ExRatatui.App` — both runtime entrypoints
-- `ExRatatui.Command` — declarative side effects (message, async, batch, send_after)
-- `ExRatatui.Subscription` — interval / once / none declarations
-- `ExRatatui.Runtime` — snapshot / trace / inject_event, unchanged across runtimes
-
-The pure `BB.TUI.State` module is already shaped for this — most transitions are `state -> state` or `state -> {state, effect}` today, so the migration is mostly re-routing effects from `BB.TUI.App.handle_event/2` into `update/2` returning `{state, Command.t()}`.
 
 ## License
 

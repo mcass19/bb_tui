@@ -36,7 +36,6 @@ defmodule BB.TUI.State do
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
-    task_supervisor: nil,
     joint_selected: 0,
     param_selected: 0
   ]
@@ -61,8 +60,7 @@ defmodule BB.TUI.State do
           show_event_detail: boolean(),
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
-          executing_command: pid() | nil,
-          task_supervisor: pid() | nil,
+          executing_command: term() | nil,
           joint_selected: non_neg_integer(),
           param_selected: non_neg_integer()
         }
@@ -452,9 +450,9 @@ defmodule BB.TUI.State do
       iex> {new_state.executing_command, new_state.command_result}
       {pid, nil}
   """
-  @spec start_command(t(), pid()) :: t()
-  def start_command(%__MODULE__{} = state, pid) do
-    %{state | executing_command: pid, command_result: nil}
+  @spec start_command(t(), term()) :: t()
+  def start_command(%__MODULE__{} = state, marker) do
+    %{state | executing_command: marker, command_result: nil}
   end
 
   # ── Joint control ──────────────────────────────────────────

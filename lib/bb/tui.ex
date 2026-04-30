@@ -119,40 +119,32 @@ defmodule BB.TUI do
 
   See `ExRatatui.Runtime` for the full API.
 
-  ## Planned: reducer runtime migration
+  ## Reducer runtime
 
-  BB.TUI.App currently uses the callback runtime
-  (`use ExRatatui.App` with the default `runtime: :callbacks`), which
-  behaves like a GenServer — `mount/1`, `render/2`, `handle_event/2`,
-  `handle_info/2`. ExRatatui v0.7 shipped an Elm-style reducer runtime
-  (`use ExRatatui.App, runtime: :reducer`) that is planned for this
-  dashboard.
+  `BB.TUI.App` is built on the ExRatatui **reducer runtime**
+  (`use ExRatatui.App, runtime: :reducer`). Every keyboard event,
+  PubSub message, async result, and subscription tick flows through
+  a single `update/2` arrow; pure state transitions live in
+  `BB.TUI.State`.
 
-  **Why migrate?**
+    * `init/1` — validates the robot, subscribes to PubSub, snapshots
+      ETS state.
+    * `update({:event, ev}, state)` — terminal input.
+    * `update({:info, msg}, state)` — PubSub, async results,
+      `send_after` deliveries, subscription ticks.
+    * `subscriptions/1` — declares the 100ms throbber tick whenever
+      the dashboard has something animating; the runtime diffs the
+      result so the timer only runs when needed.
 
-    * Side effects become declarative `ExRatatui.Command`s returned from
-      `update/2`, replacing the mount-owned `Task.Supervisor` + raw
-      `send/2` pattern in `execute_selected_command/1`. The runtime
-      supervises the command task, handles cancellation, and surfaces
-      errors through the reducer's unified `{:msg, _}` path.
-    * Subscriptions (`ExRatatui.Subscription`) replace hand-rolled
-      timers/intervals: the throbber step, command timeouts, and any
-      periodic ETS polling would be declared in a single
-      `subscriptions/1` callback and diffed by the runtime.
-    * A single `update(msg, state) -> {new_state, command}` arrow makes
-      the whole dashboard easier to reason about, test in isolation, and
-      snapshot/trace. Pure state transitions already live in
-      `BB.TUI.State`; the reducer migration removes the impedance
-      mismatch between those pure functions and the GenServer-shaped
-      callback module.
-    * Built-in tracing via `ExRatatui.Runtime.enable_trace/2` becomes
-      the primary debugging tool — every message, command, and
-      subscription fires through the trace ring.
+  Long-running command execution is owned by the runtime via
+  `ExRatatui.Command.async/2`, batched with `Command.send_after/2`
+  for the timeout. Both reach the reducer as `{:info, _}` messages.
+  Fast, fire-and-forget robot calls (arm / disarm / set_actuator /
+  set_parameter / publish) are invoked inline from `update/2`.
 
-  See the ex_ratatui reducer runtime guide for the target shape:
-  `use ExRatatui.App, runtime: :reducer` + `init/1`, `update/2`,
-  `view/1`, `subscriptions/1`, plus `ExRatatui.Command` and
-  `ExRatatui.Subscription`.
+  See the README for the full rationale and the cross-references to
+  `ExRatatui.Command`, `ExRatatui.Subscription`, and
+  `ExRatatui.Runtime`.
   """
 
   @doc """
