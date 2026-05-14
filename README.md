@@ -46,7 +46,15 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 
 ## Installation
 
-Add `bb_tui` to your dependencies in `mix.exs`:
+Use [Igniter](https://hex.pm/packages/igniter) to add `bb_tui` (and a `BB`
+robot) to your project in one shot:
+
+```sh
+mix igniter.install bb_tui
+mix igniter.install bb_tui --robot MyApp.Arm
+```
+
+Or add it to your dependencies in `mix.exs` manually:
 
 ```elixir
 def deps do
