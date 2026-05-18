@@ -71,22 +71,25 @@ mix igniter.install bb_tui --auto-bb
 mix igniter.install bb_tui --auto-bb --robot MyApp.Arm
 ```
 
-### Boot the dashboard from the supervision tree
+### Boot the dashboard over SSH from the supervision tree
 
-`--supervise` appends `{BB.TUI, robot: <Robot>}` to the consumer's
-`Application.start/2` children, so the dashboard starts with the app.
-Pair with `--ssh` to serve over SSH instead of taking over the local
-terminal — handy for headless robots:
+`--ssh` appends a supervised `{BB.TUI, …}` child wired for an SSH
+daemon to `Application.start/2`, so the dashboard is reachable as soon
+as the app boots — handy for headless robots:
 
 ```sh
-mix igniter.install bb_tui --supervise
-mix igniter.install bb_tui --supervise --ssh --port 2222
-mix igniter.install bb_tui --supervise --ssh --user pilot --password secret
+mix igniter.install bb_tui --ssh
+mix igniter.install bb_tui --ssh --port 2222
+mix igniter.install bb_tui --ssh --user pilot --password secret
 ```
 
 The injection is idempotent — re-running won't duplicate the child
 spec. Change the credentials in the generated child spec before
 deploying.
+
+Local dashboards aren't supervised: a child that claims the terminal
+on boot would fight an IEx session for stdin/stdout, so the local
+entry points are `mix bb.tui` and `BB.TUI.run/1` from IEx.
 
 ### Nerves: plug into `nerves_ssh` as a subsystem
 

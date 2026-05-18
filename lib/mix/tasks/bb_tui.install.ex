@@ -11,14 +11,19 @@ if Code.ensure_loaded?(Igniter) do
     `bb.install` to scaffold one. Pass `--auto-bb` to skip the prompt in
     non-interactive contexts.
 
-    With `--supervise`, the installer also appends `{BB.TUI, robot: …}`
-    to the consumer's application supervision tree. Pair it with `--ssh`
-    to boot an SSH daemon on application start.
+    With `--ssh`, the installer appends a supervised `{BB.TUI, robot: …}`
+    child to the application that boots an SSH daemon on application
+    start. Use this when the dashboard should be reachable remotely.
 
     With `--nerves`, the installer registers `BB.TUI.subsystem/1` under
     `config :nerves_ssh, :subsystems` in `config/runtime.exs`. Use this
     on Nerves devices that already run `nerves_ssh` so the dashboard
     rides on the existing daemon instead of opening a second SSH port.
+
+    Without `--ssh` or `--nerves`, no supervision is wired up: launch
+    the dashboard on demand with `mix bb.tui` or `BB.TUI.run/1` from
+    IEx. Auto-claiming the local terminal would fight an IEx session
+    for stdin/stdout.
 
     ## Examples
 
@@ -26,9 +31,9 @@ if Code.ensure_loaded?(Igniter) do
     mix igniter.install bb_tui
     mix igniter.install bb_tui --robot MyApp.Arm
     mix igniter.install bb_tui --auto-bb
-    mix igniter.install bb_tui --supervise
-    mix igniter.install bb_tui --supervise --ssh --port 2222
-    mix igniter.install bb_tui --supervise --ssh --user pilot --password secret
+    mix igniter.install bb_tui --ssh
+    mix igniter.install bb_tui --ssh --port 2222
+    mix igniter.install bb_tui --ssh --user pilot --password secret
     mix igniter.install bb_tui --nerves
     ```
 
@@ -37,10 +42,8 @@ if Code.ensure_loaded?(Igniter) do
     * `--robot` - The robot module (defaults to `{AppPrefix}.Robot`).
     * `--auto-bb` - When the robot module is missing, compose `bb.install`
       without prompting.
-    * `--supervise` - Append `{BB.TUI, robot: …}` to the application's
-      supervision tree. Idempotent.
-    * `--ssh` - When supervising, configure the child for an SSH daemon
-      (`transport: :ssh`).
+    * `--ssh` - Append a supervised SSH-mode `{BB.TUI, …}` child to the
+      application's supervision tree. Idempotent.
     * `--port` - SSH daemon port (default `2222`). Ignored without `--ssh`.
     * `--user` - SSH username (default `admin`). Ignored without `--ssh`.
     * `--password` - SSH password (default `admin`). Ignored without `--ssh`.
@@ -60,7 +63,6 @@ if Code.ensure_loaded?(Igniter) do
         schema: [
           robot: :string,
           auto_bb: :boolean,
-          supervise: :boolean,
           ssh: :boolean,
           port: :integer,
           user: :string,
@@ -75,7 +77,7 @@ if Code.ensure_loaded?(Igniter) do
     def igniter(igniter) do
       options = igniter.args.options
       auto_bb? = Keyword.get(options, :auto_bb, false)
-      supervise? = Keyword.get(options, :supervise, false)
+      ssh? = Keyword.get(options, :ssh, false)
       nerves? = Keyword.get(options, :nerves, false)
       igniter = Formatter.import_dep(igniter, :bb_tui)
       robot_module = BB.Igniter.robot_module(igniter)
@@ -83,31 +85,32 @@ if Code.ensure_loaded?(Igniter) do
 
       cond do
         robot_exists? ->
-          run_install(igniter, robot_module, supervise?, nerves?, options)
+          run_install(igniter, robot_module, ssh?, nerves?, options)
 
         auto_bb? or prompt_bb_install?() ->
           igniter
           |> Igniter.compose_task("bb.install", bb_install_argv(options))
-          |> run_install(robot_module, supervise?, nerves?, options)
+          |> run_install(robot_module, ssh?, nerves?, options)
 
         true ->
           Igniter.add_notice(igniter, manual_install_notice(robot_module))
       end
     end
 
-    defp run_install(igniter, robot_module, supervise?, nerves?, options) do
+    defp run_install(igniter, robot_module, ssh?, nerves?, options) do
       igniter
-      |> maybe_supervise(supervise?, robot_module, options)
+      |> maybe_supervise_ssh(ssh?, robot_module, options)
       |> maybe_nerves(nerves?, robot_module)
-      |> Igniter.add_notice(launch_notice(robot_module, supervise?, nerves?, options))
+      |> Igniter.add_notice(launch_notice(robot_module, ssh?, nerves?, options))
     end
 
-    defp maybe_supervise(igniter, false, _robot_module, _options), do: igniter
+    defp maybe_supervise_ssh(igniter, false, _robot_module, _options), do: igniter
 
-    defp maybe_supervise(igniter, true, robot_module, options) do
+    defp maybe_supervise_ssh(igniter, true, robot_module, options) do
       Application.add_new_child(
         igniter,
-        {BB.TUI, {:code, child_opts_ast(robot_module, options)}}
+        {BB.TUI, {:code, child_opts_ast(robot_module, options)}},
+        after: [robot_module]
       )
     end
 
@@ -154,24 +157,20 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp child_opts_string(robot_module, options) do
-      if Keyword.get(options, :ssh, false) do
-        port = Keyword.get(options, :port, 2222)
-        user = Keyword.get(options, :user, "admin")
-        password = Keyword.get(options, :password, "admin")
+      port = Keyword.get(options, :port, 2222)
+      user = Keyword.get(options, :user, "admin")
+      password = Keyword.get(options, :password, "admin")
 
-        """
-        [
-          robot: #{inspect(robot_module)},
-          transport: :ssh,
-          port: #{port},
-          auto_host_key: true,
-          auth_methods: ~c"password",
-          user_passwords: [{~c"#{user}", ~c"#{password}"}]
-        ]
-        """
-      else
-        "[robot: #{inspect(robot_module)}]"
-      end
+      """
+      [
+        robot: #{inspect(robot_module)},
+        transport: :ssh,
+        port: #{port},
+        auto_host_key: true,
+        auth_methods: ~c"password",
+        user_passwords: [{~c"#{user}", ~c"#{password}"}]
+      ]
+      """
     end
 
     defp bb_install_argv(options) do
@@ -185,7 +184,7 @@ if Code.ensure_loaded?(Igniter) do
       Mix.shell().yes?("bb_tui needs a BB robot module. Scaffold one with bb.install now?")
     end
 
-    defp launch_notice(robot_module, supervise?, nerves?, options) do
+    defp launch_notice(robot_module, ssh?, nerves?, options) do
       cond do
         nerves? ->
           """
@@ -199,7 +198,7 @@ if Code.ensure_loaded?(Igniter) do
           for interactive input.
           """
 
-        supervise? and Keyword.get(options, :ssh, false) ->
+        ssh? ->
           port = Keyword.get(options, :port, 2222)
           user = Keyword.get(options, :user, "admin")
 
@@ -210,15 +209,6 @@ if Code.ensure_loaded?(Igniter) do
               ssh #{user}@localhost -p #{port}
 
           Adjust the credentials in the child spec before deploying.
-          """
-
-        supervise? ->
-          """
-          bb_tui: the dashboard is supervised as part of the application and
-          will take over the terminal when the app starts.
-
-          For an interactive session against #{inspect(robot_module)}, use
-          `BB.TUI.run(#{inspect(robot_module)})` from a separate IEx shell.
           """
 
         true ->

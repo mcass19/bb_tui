@@ -72,20 +72,15 @@ defmodule Mix.Tasks.BbTui.InstallTest do
     end
   end
 
-  describe "--supervise" do
-    test "appends a local {BB.TUI, robot: …} child to the application" do
-      project_with_robot()
-      |> Igniter.compose_task("bb_tui.install", ["--supervise"])
-      |> assert_has_patch("lib/test/application.ex", """
-      + |    children = [{BB.TUI, [robot: Test.Robot]}, {Test.Robot, []}]
-      """)
-      |> assert_has_notice(&String.contains?(&1, "supervised as part of the application"))
-    end
-
-    test "with --ssh wires the child for an SSH daemon and notices ssh login" do
+  describe "--ssh" do
+    test "appends a supervised SSH child after the robot in the application" do
       igniter =
         project_with_robot()
-        |> Igniter.compose_task("bb_tui.install", ["--supervise", "--ssh"])
+        |> Igniter.compose_task("bb_tui.install", ["--ssh"])
+
+      assert_has_patch(igniter, "lib/test/application.ex", """
+      + |    children = [
+      """)
 
       assert_has_patch(igniter, "lib/test/application.ex", """
       + |         transport: :ssh,
@@ -107,7 +102,6 @@ defmodule Mix.Tasks.BbTui.InstallTest do
       igniter =
         project_with_robot()
         |> Igniter.compose_task("bb_tui.install", [
-          "--supervise",
           "--ssh",
           "--port",
           "3333",
@@ -131,32 +125,18 @@ defmodule Mix.Tasks.BbTui.InstallTest do
     test "is idempotent on a second run" do
       first =
         project_with_robot()
-        |> Igniter.compose_task("bb_tui.install", ["--supervise"])
+        |> Igniter.compose_task("bb_tui.install", ["--ssh"])
         |> apply_igniter!()
 
       first
-      |> Igniter.compose_task("bb_tui.install", ["--supervise"])
+      |> Igniter.compose_task("bb_tui.install", ["--ssh"])
       |> assert_unchanged("lib/test/application.ex")
     end
 
-    test "supervises after composing bb.install when robot is missing" do
+    test "supervises SSH child after composing bb.install when robot is missing" do
       test_project()
-      |> Igniter.compose_task("bb_tui.install", ["--auto-bb", "--supervise"])
-      |> assert_creates("lib/test/application.ex", """
-      defmodule Test.Application do
-        @moduledoc false
-
-        use Application
-
-        @impl true
-        def start(_type, _args) do
-          children = [{BB.TUI, [robot: Test.Robot]}, {Test.Robot, []}]
-
-          opts = [strategy: :one_for_one, name: Test.Supervisor]
-          Supervisor.start_link(children, opts)
-        end
-      end
-      """)
+      |> Igniter.compose_task("bb_tui.install", ["--auto-bb", "--ssh"])
+      |> assert_creates("lib/test/application.ex")
     end
   end
 
