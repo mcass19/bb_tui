@@ -14,6 +14,51 @@ defmodule Dev.TestRobot do
     name(:test_robot)
   end
 
+  commands do
+    # Argument-less command — Enter executes directly.
+    command :home do
+      handler(Dev.EchoHandler)
+      allowed_states([:idle])
+    end
+
+    # Mixed argument types — Enter on this opens edit mode.
+    command :move do
+      handler(Dev.EchoHandler)
+      allowed_states([:idle])
+
+      argument :angle, :float do
+        default(0.0)
+        doc("Target joint angle, in radians.")
+      end
+
+      argument :side, {:in, [:left, :right]} do
+        default(:left)
+        doc("Which side of the workspace to move toward.")
+      end
+
+      argument :strict, :boolean do
+        default(false)
+        doc("Abort instead of clamping when out of range.")
+      end
+    end
+
+    # String + integer args.
+    command :log do
+      handler(Dev.EchoHandler)
+      allowed_states([:idle, :armed])
+
+      argument :message, :string do
+        default("hello")
+        doc("Free-form note attached to the entry.")
+      end
+
+      argument :level, :integer do
+        default(1)
+        doc("Severity 1..5; higher is louder.")
+      end
+    end
+  end
+
   parameters do
     group :motion do
       param(:max_speed, type: :float, default: 1.0, min: 0.0, max: 5.0)
