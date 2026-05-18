@@ -68,7 +68,36 @@ defmodule BB.TUI.RobotTest do
   describe "discover_commands/2 (local)" do
     test "returns commands when BB.Dsl.Info is loaded and exports commands/1" do
       Mimic.stub(BB.Dsl.Info, :commands, fn BB.TUI.TestRobot -> [%{name: :home}] end)
-      assert Robot.discover_commands(@robot, nil) == [%{name: :home}]
+
+      assert [
+               %{
+                 name: :home,
+                 handler: nil,
+                 timeout: :infinity,
+                 allowed_states: [],
+                 arguments: []
+               }
+             ] = Robot.discover_commands(@robot, nil)
+    end
+
+    test "normalizes argument types to strings (mirrors bb_liveview)" do
+      Mimic.stub(BB.Dsl.Info, :commands, fn BB.TUI.TestRobot ->
+        [
+          %{
+            name: :move,
+            arguments: [
+              %{name: :angle, type: :float, default: 0.0, required: true, doc: "Radians"},
+              %{name: :side, type: {:in, [:left, :right]}, default: :left}
+            ]
+          }
+        ]
+      end)
+
+      [%{arguments: [angle_arg, side_arg]}] = Robot.discover_commands(@robot, nil)
+      assert angle_arg.type == "float"
+      assert angle_arg.required == true
+      assert side_arg.type == "enum:[:left, :right]"
+      assert side_arg.required == false
     end
 
     test "returns [] when BB.Dsl.Info.commands raises" do
@@ -218,12 +247,12 @@ defmodule BB.TUI.RobotTest do
   describe "discover_commands/2 (remote)" do
     @remote :"robot@127.0.0.1"
 
-    test "returns the list when :rpc.call yields a list" do
+    test "returns the normalized list when :rpc.call yields commands" do
       Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :commands, [BB.TUI.TestRobot] ->
         [%{name: :home}]
       end)
 
-      assert Robot.discover_commands(@robot, @remote) == [%{name: :home}]
+      assert [%{name: :home, arguments: []}] = Robot.discover_commands(@robot, @remote)
     end
 
     test "returns [] when :rpc.call returns {:badrpc, _}" do

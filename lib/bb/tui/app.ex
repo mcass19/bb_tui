@@ -236,6 +236,13 @@ defmodule BB.TUI.App do
     {:stop, state}
   end
 
+  def update(
+        {:event, %Event.Key{code: "tab", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    {:noreply, State.focus_next_arg(state)}
+  end
+
   def update({:event, %Event.Key{code: "tab", kind: "press"}}, state) do
     {:noreply, State.cycle_panel(state)}
   end
@@ -305,7 +312,64 @@ defmodule BB.TUI.App do
     end
   end
 
-  # ── Update — commands panel keys ─────────────────────────────
+  # ── Update — commands panel: argument-edit mode ──────────────
+  # These clauses run only when the user has entered edit mode on a
+  # command with arguments (Enter from the list view enters edit mode
+  # when the selected command has args). Keep them above the list-view
+  # clauses so they take precedence.
+
+  def update(
+        {:event, %Event.Key{code: "esc", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    {:noreply, State.exit_command_edit_mode(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    execute_selected_command(state)
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      )
+      when code in ["tab", "down"] do
+    {:noreply, State.focus_next_arg(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "backtab", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    {:noreply, State.focus_prev_arg(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "up", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    {:noreply, State.focus_prev_arg(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "backspace", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    {:noreply, State.backspace_focused_arg(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      )
+      when byte_size(code) == 1 do
+    {:noreply, State.append_to_focused_arg(state, code)}
+  end
+
+  # ── Update — commands panel: list view ───────────────────────
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
@@ -327,7 +391,10 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: "enter", kind: "press"}},
         %{active_panel: :commands} = state
       ) do
-    execute_selected_command(state)
+    case State.selected_command(state) do
+      %{arguments: [_ | _]} -> {:noreply, State.enter_command_edit_mode(state)}
+      _ -> execute_selected_command(state)
+    end
   end
 
   # ── Update — joints panel keys ───────────────────────────────
@@ -629,28 +696,30 @@ defmodule BB.TUI.App do
       cmd ->
         if Panels.Commands.command_ready?(cmd, state.runtime_state) and
              state.executing_command == nil do
-          {:noreply, State.start_command(state, :running),
-           commands: [execute_command_command(state, cmd)]}
+          args = State.parsed_args_for_selected(state)
+
+          {:noreply, State.start_command(State.exit_command_edit_mode(state), :running),
+           commands: [execute_command_command(state, cmd, args)]}
         else
           {:noreply, state}
         end
     end
   end
 
-  defp execute_command_command(%State{robot: robot, node: node}, cmd) do
+  defp execute_command_command(%State{robot: robot, node: node}, cmd, args) do
     name = cmd.name
 
     Command.batch([
       Command.async(
-        fn -> wait_for_command_result(robot, name, node) end,
+        fn -> wait_for_command_result(robot, name, args, node) end,
         fn result -> {:command_result, result} end
       ),
       Command.send_after(@command_timeout, :command_timeout)
     ])
   end
 
-  defp wait_for_command_result(robot, name, node) do
-    case Robot.execute_command(robot, name, %{}, node) do
+  defp wait_for_command_result(robot, name, args, node) do
+    case Robot.execute_command(robot, name, args, node) do
       {:ok, cmd_pid} ->
         ref = Process.monitor(cmd_pid)
 
