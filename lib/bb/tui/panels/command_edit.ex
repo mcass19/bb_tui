@@ -51,16 +51,14 @@ defmodule BB.TUI.Panels.CommandEdit do
   end
 
   defp build_popup(state, cmd_name, args) do
-    lines =
+    line_groups =
       args
       |> Enum.with_index()
-      |> Enum.map(fn {arg, i} ->
-        arg_line(state, cmd_name, arg, i == state.command_focused_arg)
+      |> Enum.flat_map(fn {arg, i} ->
+        arg_lines(state, cmd_name, arg, i == state.command_focused_arg)
       end)
 
-    text =
-      [lines, [%Line{spans: []}, hint_line()]]
-      |> Enum.concat()
+    text = line_groups ++ [%Line{spans: []}, hint_line()]
 
     content = %Paragraph{text: text, style: %Style{fg: :white}}
 
@@ -90,23 +88,39 @@ defmodule BB.TUI.Panels.CommandEdit do
     }
   end
 
-  defp arg_line(state, cmd_name, arg, focused?) do
+  defp arg_lines(state, cmd_name, arg, focused?) do
+    [field_line(state, cmd_name, arg, focused?) | doc_line(arg)]
+  end
+
+  defp field_line(state, cmd_name, arg, focused?) do
     name = to_string(arg.name)
     type = arg.type
     value = State.arg_value(state, cmd_name, arg)
     prefix = if focused?, do: " › ", else: "   "
     cursor = if focused?, do: "▏", else: ""
+    required_marker = if Map.get(arg, :required, false), do: "*", else: ""
 
     %Line{
       spans: [
         %Span{content: prefix, style: %Style{fg: Theme.cyan()}},
         %Span{content: name, style: %Style{fg: :white, modifiers: [:bold]}},
+        %Span{content: required_marker, style: %Style{fg: Theme.red(), modifiers: [:bold]}},
         %Span{content: " (#{type})", style: %Style{fg: Theme.dim_text()}},
         %Span{content: ": ", style: %Style{fg: Theme.dim_text()}},
         %Span{content: value, style: value_style(focused?)},
         %Span{content: cursor, style: %Style{fg: Theme.cyan(), modifiers: [:bold]}}
       ]
     }
+  end
+
+  defp doc_line(arg) do
+    case Map.get(arg, :doc) do
+      doc when is_binary(doc) and byte_size(doc) > 0 ->
+        [%Line{spans: [%Span{content: "     " <> doc, style: %Style{fg: Theme.dim_text()}}]}]
+
+      _ ->
+        []
+    end
   end
 
   defp value_style(true), do: %Style{fg: :white, modifiers: [:bold]}
