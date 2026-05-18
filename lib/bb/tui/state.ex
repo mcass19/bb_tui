@@ -255,9 +255,15 @@ defmodule BB.TUI.State do
   def append_event(%__MODULE__{events_paused: true} = state, _path, _message), do: state
 
   def append_event(%__MODULE__{events: events} = state, path, message) do
-    event = {DateTime.utc_now(), path, message}
+    event = {event_timestamp(message), path, message}
     %{state | events: Enum.take([event | events], @max_events)}
   end
+
+  defp event_timestamp(%BB.Message{wall_time: wall_time}) when is_integer(wall_time) do
+    DateTime.from_unix!(wall_time, :nanosecond)
+  end
+
+  defp event_timestamp(_message), do: DateTime.utc_now()
 
   @doc """
   Scrolls the event panel down (newer events).
