@@ -169,6 +169,44 @@ defmodule BB.TUI.AppTest do
       # No popup added — just the 7 base panels.
       assert length(widgets) == 7
     end
+
+    test "includes the command-edit popup when in edit mode on an arg-bearing command" do
+      cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [%{name: :angle, type: "float", default: 0.0, required: true, doc: nil}]
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          commands: [cmd],
+          command_selected: 0,
+          command_edit_mode: true
+        })
+
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+      widgets = App.render(state, frame)
+
+      assert length(widgets) == 8
+      {last_widget, _rect} = List.last(widgets)
+      assert %ExRatatui.Widgets.Popup{} = last_widget
+    end
+
+    test "skips the command-edit popup when edit mode is on but no arguments are declared" do
+      no_args = %{name: :home, allowed_states: [:idle], arguments: []}
+
+      state =
+        Fixtures.sample_state(%{
+          commands: [no_args],
+          command_selected: 0,
+          command_edit_mode: true
+        })
+
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+      widgets = App.render(state, frame)
+
+      assert length(widgets) == 7
+    end
   end
 
   describe "handle_event/2" do
