@@ -121,6 +121,16 @@ defmodule BB.TUI.StateTest do
 
       assert state.events == []
     end
+
+    test "uses BB.Message.wall_time as the event timestamp" do
+      wall_time = DateTime.to_unix(~U[2026-05-18 12:34:56Z], :nanosecond)
+      message = %BB.Message{wall_time: wall_time, node: :nonode@nohost, payload: %{}}
+
+      state = State.append_event(Fixtures.sample_state(), [:test], message)
+      {ts, _path, _msg} = hd(state.events)
+
+      assert DateTime.truncate(ts, :second) == ~U[2026-05-18 12:34:56Z]
+    end
   end
 
   describe "scroll_down/1 and scroll_up/1" do
