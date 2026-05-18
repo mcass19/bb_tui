@@ -48,11 +48,17 @@ defmodule BB.TUI.App do
 
   ## Async commands
 
-  When the user presses Enter on a Ready command, `update/2` returns
-  a batched `Command.async/2` (which monitors the spawned command pid
-  and reports `{:command_result, _}`) plus a `Command.send_after/2`
-  for the timeout. Both end up in the same `{:info, _}` mailbox, so
-  the timeout result simply becomes another `update/2` clause.
+  Pressing Enter on a Ready command executes it when the command has
+  no arguments, or enters an inline argument-edit mode when the
+  command declares arguments. From edit mode, Tab/Shift+Tab cycle
+  fields, typing edits the focused field, Enter executes with the
+  parsed values, and Esc exits without executing.
+
+  Execution returns a batched `Command.async/2` (which monitors the
+  spawned command pid and reports `{:command_result, _}`) plus a
+  `Command.send_after/2` for the timeout. Both end up in the same
+  `{:info, _}` mailbox, so the timeout result simply becomes another
+  `update/2` clause.
 
   ## Side-effect convention
 
