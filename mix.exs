@@ -53,7 +53,8 @@ defmodule BB.TUI.MixProject do
       # Dev
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: :dev, runtime: false}
+      {:credo, "~> 1.7", only: :dev, runtime: false},
+      {:igniter, "~> 0.6", only: [:dev, :test], runtime: false}
     ]
   end
 end
