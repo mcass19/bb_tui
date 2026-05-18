@@ -146,9 +146,8 @@ defmodule Mix.Tasks.BbTui.InstallTest do
         project_with_robot()
         |> Igniter.compose_task("bb_tui.install", ["--nerves"])
 
-      assert_creates(igniter, "config/runtime.exs", """
-      import Config
-      config :nerves_ssh, subsystems: [BB.TUI.subsystem(Test.Robot)]
+      assert_has_patch(igniter, "config/runtime.exs", """
+      + |config :nerves_ssh, subsystems: [BB.TUI.subsystem(Test.Robot)]
       """)
 
       assert_has_notice(igniter, &String.contains?(&1, "ssh -t <device.local>"))
