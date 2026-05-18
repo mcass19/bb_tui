@@ -21,24 +21,23 @@ defmodule Dev.TestRobot do
       allowed_states([:idle])
     end
 
-    # Mixed argument types — Enter on this opens edit mode.
+    # Drives a joint via the kinematic simulator; the actuator publish
+    # flows through `[:actuator, <joint>]` so the move is visible in
+    # the event stream and the joints panel updates from the resulting
+    # sensor feedback.
     command :move do
-      handler(Dev.EchoHandler)
+      handler(Dev.MoveHandler)
       allowed_states([:idle])
+
+      argument :joint,
+               {:in, [:waist, :shoulder, :elbow, :wrist_angle, :wrist_rotate, :gripper]} do
+        default(:waist)
+        doc("Joint to drive.")
+      end
 
       argument :angle, :float do
         default(0.0)
         doc("Target joint angle, in radians.")
-      end
-
-      argument :side, {:in, [:left, :right]} do
-        default(:left)
-        doc("Which side of the workspace to move toward.")
-      end
-
-      argument :strict, :boolean do
-        default(false)
-        doc("Abort instead of clamping when out of range.")
       end
     end
 
