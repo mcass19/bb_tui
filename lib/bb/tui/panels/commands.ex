@@ -9,10 +9,9 @@ defmodule BB.TUI.Panels.Commands do
   result / executing rows render as colored badges too — green ✔ for
   success, red ✖ for failure, yellow ⏳ while a command is in flight.
 
-  When `state.command_edit_mode` is true, argument rows render
-  beneath the command list — one per declared argument on the
-  selected command, with a `›` prefix and `▏` cursor on the focused
-  row, and a hint footer describing the edit-mode keys.
+  Argument editing for commands with declared arguments is handled by
+  `BB.TUI.Panels.CommandEdit`, which renders as a popup above this
+  panel while `state.command_edit_mode` is true.
 
   Pure function — takes state, returns a widget struct.
   """
@@ -44,13 +43,6 @@ defmodule BB.TUI.Panels.Commands do
   def render(%State{} = state, focused?) do
     items = format_commands(state)
 
-    arg_lines =
-      if state.command_edit_mode do
-        format_arg_fields(state)
-      else
-        []
-      end
-
     result_line =
       case state.command_result do
         {:ok, result} -> [result_line(:ok, "✔ #{inspect(result, limit: 50)}")]
@@ -65,7 +57,7 @@ defmodule BB.TUI.Panels.Commands do
         []
       end
 
-    all_items = items ++ arg_lines ++ executing_line ++ result_line
+    all_items = items ++ executing_line ++ result_line
 
     %WidgetList{
       items: all_items,
@@ -202,52 +194,5 @@ defmodule BB.TUI.Panels.Commands do
 
   defp result_line(:error, text) do
     %Line{spans: [%Span{content: text, style: %Style{fg: Theme.red(), modifiers: [:bold]}}]}
-  end
-
-  # ── Private: arg-field rows for edit mode ────────────────────
-
-  defp format_arg_fields(%State{} = state) do
-    case State.selected_command(state) do
-      %{name: cmd_name, arguments: [_ | _] = args} ->
-        args
-        |> Enum.with_index()
-        |> Enum.map(fn {arg, i} ->
-          arg_row(state, cmd_name, arg, i == state.command_focused_arg)
-        end)
-        |> Kernel.++([hint_row()])
-
-      _ ->
-        []
-    end
-  end
-
-  defp arg_row(state, cmd_name, arg, focused?) do
-    name = to_string(arg.name)
-    value = State.arg_value(state, cmd_name, arg)
-    cursor = if focused?, do: "▏", else: ""
-    prefix = if focused?, do: "  › ", else: "    "
-
-    %Line{
-      spans: [
-        %Span{content: prefix, style: %Style{fg: Theme.cyan()}},
-        %Span{content: name <> ": ", style: %Style{fg: Theme.dim_text()}},
-        %Span{content: value, style: value_style(focused?)},
-        %Span{content: cursor, style: %Style{fg: Theme.cyan(), modifiers: [:bold]}}
-      ]
-    }
-  end
-
-  defp value_style(true), do: %Style{fg: :white, modifiers: [:bold]}
-  defp value_style(false), do: %Style{fg: Theme.dim_text()}
-
-  defp hint_row do
-    %Line{
-      spans: [
-        %Span{
-          content: "    [Tab] next  [Enter] execute  [Esc] cancel",
-          style: %Style{fg: Theme.dim_text()}
-        }
-      ]
-    }
   end
 end

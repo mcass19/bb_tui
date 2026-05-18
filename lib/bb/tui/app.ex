@@ -595,6 +595,13 @@ defmodule BB.TUI.App do
     end
   end
 
+  defp maybe_add_popup(panels, %{command_edit_mode: true} = state, full) do
+    case Panels.CommandEdit.render(state) do
+      nil -> panels
+      popup -> panels ++ [{popup, full}]
+    end
+  end
+
   defp maybe_add_popup(panels, _state, _full), do: panels
 
   defp adjust_selected_joint(state, _direction, _multiplier)
