@@ -337,6 +337,9 @@ defmodule BB.TUI.Panels.Events do
       iex> BB.TUI.Panels.Events.summarize([:state_machine], %{payload: %{from: :armed, to: :idle}})
       "armed \u{2192} idle"
 
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :waist], %{payload: %{position: 1.57}})
+      "waist \u{2190} position 1.570"
+
       iex> BB.TUI.Panels.Events.summarize([:param, :speed], %{payload: %{new_value: 42}})
       "speed = 42"
 
@@ -350,6 +353,12 @@ defmodule BB.TUI.Panels.Events do
 
   def summarize([:state_machine | _], %{payload: %{from: from, to: to}}) do
     "#{from} \u{2192} #{to}"
+  end
+
+  def summarize([:actuator | rest], %{payload: %{position: position}})
+      when is_number(position) do
+    joint = Enum.map_join(rest, ".", &to_string/1)
+    "#{joint} \u{2190} position #{:erlang.float_to_binary(position / 1, decimals: 3)}"
   end
 
   def summarize([:param | rest], %{payload: %{new_value: val}}) do
