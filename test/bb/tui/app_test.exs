@@ -36,12 +36,14 @@ defmodule BB.TUI.AppTest do
     end
 
     test "loads commands from BB.Dsl.Info" do
-      commands = [%{name: :home, allowed_states: [:idle]}]
       Fixtures.stub_bb_modules()
-      Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> commands end)
+
+      Mimic.stub(BB.Dsl.Info, :commands, fn _robot ->
+        [%{name: :home, allowed_states: [:idle]}]
+      end)
 
       assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
-      assert state.commands == commands
+      assert [%{name: :home, allowed_states: [:idle], arguments: []}] = state.commands
     end
 
     test "handles BB.Dsl.Info.commands raising" do
@@ -459,6 +461,114 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, ^state} = App.update({:event, event}, state)
+    end
+
+    # Commands panel — argument edit mode
+
+    defp cmd_with_args do
+      %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{name: :angle, type: "float", default: 1.5, required: true, doc: nil},
+          %{name: :side, type: "atom", default: :left, required: false, doc: nil}
+        ]
+      }
+    end
+
+    defp edit_mode_state(opts \\ %{}) do
+      Fixtures.sample_state(
+        Map.merge(
+          %{
+            active_panel: :commands,
+            commands: [cmd_with_args()],
+            command_selected: 0,
+            command_edit_mode: true,
+            runtime_state: :idle
+          },
+          opts
+        )
+      )
+    end
+
+    test "enter on a command with args enters edit mode without executing" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: [cmd_with_args()],
+          command_selected: 0,
+          runtime_state: :idle
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_edit_mode == true
+      assert new_state.executing_command == nil
+    end
+
+    test "esc exits edit mode" do
+      state = edit_mode_state()
+      event = %ExRatatui.Event.Key{code: "esc", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_edit_mode == false
+    end
+
+    test "tab/down focuses the next arg in edit mode" do
+      state = edit_mode_state(%{command_focused_arg: 0})
+
+      for code <- ["tab", "down"] do
+        event = %ExRatatui.Event.Key{code: code, kind: "press"}
+        assert {:noreply, new_state} = App.update({:event, event}, state)
+        assert new_state.command_focused_arg == 1
+      end
+    end
+
+    test "backtab/up focuses the previous arg in edit mode" do
+      state = edit_mode_state(%{command_focused_arg: 1})
+
+      for code <- ["backtab", "up"] do
+        event = %ExRatatui.Event.Key{code: code, kind: "press"}
+        assert {:noreply, new_state} = App.update({:event, event}, state)
+        assert new_state.command_focused_arg == 0
+      end
+    end
+
+    test "typing a char appends to the focused arg" do
+      state = edit_mode_state(%{command_focused_arg: 0})
+      event = %ExRatatui.Event.Key{code: "2", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_form_values == %{move: %{angle: "1.52"}}
+    end
+
+    test "backspace deletes the last char of the focused arg" do
+      state =
+        edit_mode_state(%{
+          command_focused_arg: 0,
+          command_form_values: %{move: %{angle: "1.5"}}
+        })
+
+      event = %ExRatatui.Event.Key{code: "backspace", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_form_values == %{move: %{angle: "1."}}
+    end
+
+    test "enter in edit mode executes with parsed args and exits edit mode" do
+      state =
+        edit_mode_state(%{
+          command_focused_arg: 0,
+          command_form_values: %{move: %{angle: "2.5"}}
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+
+      assert {:noreply, new_state, opts} = App.update({:event, event}, state)
+      assert new_state.command_edit_mode == false
+      assert new_state.executing_command == :running
+      assert [%ExRatatui.Command{kind: :batch}] = opts[:commands]
     end
 
     # Result/timeout/error semantics are exercised by the integration suite,

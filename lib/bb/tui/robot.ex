@@ -103,13 +103,28 @@ defmodule BB.TUI.Robot do
   def list_parameters(robot, opts, node), do: rpc(node, BB.Parameter, :list, [robot, opts])
 
   @doc """
-  Returns the list of declared commands for the robot, or `[]` if the
-  command DSL is not available or raises.
+  Returns the list of declared commands for the robot, normalized for the
+  UI. Returns `[]` if the command DSL is not available or raises.
+
+  Each command map has the shape:
+
+      %{
+        name: atom(),
+        handler: term(),
+        timeout: integer() | :infinity,
+        allowed_states: [atom()],
+        arguments: [%{name: atom(), type: String.t(), required: boolean(),
+                      default: term(), doc: String.t() | nil}]
+      }
+
+  Argument types are normalized to strings: `"boolean"`, `"integer"`,
+  `"float"`, `"atom"`, `"string"`, or `"enum:[a, b, c]"`. Mirrors
+  `BB.LiveView.Components.Command` so both UIs see the same shape.
   """
-  @spec discover_commands(module(), maybe_node()) :: [term()]
+  @spec discover_commands(module(), maybe_node()) :: [map()]
   def discover_commands(robot, nil) do
     if Code.ensure_loaded?(Info) and function_exported?(Info, :commands, 1) do
-      Info.commands(robot)
+      robot |> Info.commands() |> normalize_commands()
     else
       []
     end
@@ -120,12 +135,41 @@ defmodule BB.TUI.Robot do
   def discover_commands(robot, node) do
     case Rpc.call(node, BB.Dsl.Info, :commands, [robot]) do
       {:badrpc, _} -> []
-      result when is_list(result) -> result
+      result when is_list(result) -> normalize_commands(result)
       _ -> []
     end
   rescue
     _ -> []
   end
+
+  defp normalize_commands(commands) do
+    commands
+    |> Enum.map(&format_command/1)
+    |> Enum.sort_by(& &1.name)
+  end
+
+  defp format_command(cmd) do
+    %{
+      name: cmd.name,
+      handler: Map.get(cmd, :handler),
+      timeout: Map.get(cmd, :timeout, :infinity),
+      allowed_states: Map.get(cmd, :allowed_states, []),
+      arguments: cmd |> Map.get(:arguments, []) |> Enum.map(&format_argument/1)
+    }
+  end
+
+  defp format_argument(arg) do
+    %{
+      name: arg.name,
+      type: format_type(Map.get(arg, :type, :string)),
+      required: Map.get(arg, :required, false),
+      default: Map.get(arg, :default),
+      doc: Map.get(arg, :doc)
+    }
+  end
+
+  defp format_type(type) when is_atom(type), do: Atom.to_string(type)
+  defp format_type({:in, values}), do: "enum:#{inspect(values)}"
 
   # ── Write calls ────────────────────────────────────────────
 

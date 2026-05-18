@@ -242,6 +242,176 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "command argument edit mode" do
+    defp cmd_with_args do
+      %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{name: :angle, type: "float", default: 1.5, required: true, doc: nil},
+          %{name: :side, type: "atom", default: :left, required: false, doc: nil}
+        ]
+      }
+    end
+
+    defp cmd_no_args, do: %{name: :home, allowed_states: [:idle], arguments: []}
+
+    defp edit_state(opts) do
+      base = %{commands: [cmd_with_args()], command_selected: 0, command_edit_mode: true}
+      Fixtures.sample_state(Map.merge(base, opts))
+    end
+
+    test "selected_command/1 returns the selected map or nil" do
+      state =
+        Fixtures.sample_state(%{commands: [cmd_no_args(), cmd_with_args()], command_selected: 1})
+
+      assert State.selected_command(state).name == :move
+      assert State.selected_command(Fixtures.sample_state(%{commands: []})) == nil
+    end
+
+    test "enter_command_edit_mode/1 enters when selected command has args" do
+      state = Fixtures.sample_state(%{commands: [cmd_with_args()], command_selected: 0})
+      assert State.enter_command_edit_mode(state).command_edit_mode == true
+    end
+
+    test "enter_command_edit_mode/1 is a no-op for arg-less commands" do
+      state = Fixtures.sample_state(%{commands: [cmd_no_args()], command_selected: 0})
+      assert State.enter_command_edit_mode(state).command_edit_mode == false
+    end
+
+    test "enter_command_edit_mode/1 is a no-op when no command is selected" do
+      state = Fixtures.sample_state(%{commands: [], command_selected: 0})
+      assert State.enter_command_edit_mode(state).command_edit_mode == false
+    end
+
+    test "exit_command_edit_mode/1 turns the flag off and keeps form_values" do
+      state = edit_state(%{command_form_values: %{move: %{angle: "2.0"}}})
+      exited = State.exit_command_edit_mode(state)
+      assert exited.command_edit_mode == false
+      assert exited.command_form_values == %{move: %{angle: "2.0"}}
+    end
+
+    test "focus_next_arg/1 wraps at the end" do
+      state = edit_state(%{command_focused_arg: 1})
+      assert State.focus_next_arg(state).command_focused_arg == 0
+    end
+
+    test "focus_prev_arg/1 wraps at the start" do
+      state = edit_state(%{command_focused_arg: 0})
+      assert State.focus_prev_arg(state).command_focused_arg == 1
+    end
+
+    test "focus_next_arg/1 is a no-op without a selected arg-bearing command" do
+      state = Fixtures.sample_state(%{commands: [], command_focused_arg: 0})
+      assert State.focus_next_arg(state).command_focused_arg == 0
+    end
+
+    test "focus_prev_arg/1 is a no-op without a selected arg-bearing command" do
+      state = Fixtures.sample_state(%{commands: [], command_focused_arg: 0})
+      assert State.focus_prev_arg(state).command_focused_arg == 0
+    end
+
+    test "arg_value/3 falls back to the argument's default when unset" do
+      state = Fixtures.sample_state(%{command_form_values: %{}})
+      assert State.arg_value(state, :move, %{name: :angle, default: 1.5}) == "1.5"
+      assert State.arg_value(state, :move, %{name: :side, default: :left}) == ":left"
+      assert State.arg_value(state, :move, %{name: :missing, default: nil}) == ""
+      assert State.arg_value(state, :move, %{name: :raw, default: "hello"}) == "hello"
+    end
+
+    test "append_to_focused_arg/2 appends to the focused field's current value" do
+      state = edit_state(%{command_focused_arg: 0})
+      state = State.append_to_focused_arg(state, "2")
+      state = State.append_to_focused_arg(state, ".")
+      state = State.append_to_focused_arg(state, "5")
+
+      assert State.arg_value(state, :move, %{name: :angle, default: 1.5}) == "1.5" <> "2.5"
+    end
+
+    test "append_to_focused_arg/2 is a no-op outside of edit mode" do
+      state = Fixtures.sample_state(%{command_edit_mode: false})
+      assert State.append_to_focused_arg(state, "x") == state
+    end
+
+    test "backspace_focused_arg/1 deletes the last char" do
+      state =
+        edit_state(%{
+          command_focused_arg: 0,
+          command_form_values: %{move: %{angle: "1.5"}}
+        })
+
+      state = State.backspace_focused_arg(state)
+      assert State.arg_value(state, :move, %{name: :angle, default: 0.0}) == "1."
+    end
+
+    test "backspace_focused_arg/1 leaves empty strings alone" do
+      state =
+        edit_state(%{
+          command_focused_arg: 0,
+          command_form_values: %{move: %{angle: ""}}
+        })
+
+      state = State.backspace_focused_arg(state)
+      assert State.arg_value(state, :move, %{name: :angle, default: 0.0}) == ""
+    end
+
+    test "backspace_focused_arg/1 is a no-op outside of edit mode" do
+      state = Fixtures.sample_state(%{command_edit_mode: false})
+      assert State.backspace_focused_arg(state) == state
+    end
+
+    test "append_to_focused_arg/2 is a no-op when no command is selected" do
+      state = Fixtures.sample_state(%{command_edit_mode: true, commands: []})
+      assert State.append_to_focused_arg(state, "x") == state
+    end
+
+    test "parsed_args_for_selected/1 parses each type" do
+      cmd = %{
+        name: :move,
+        arguments: [
+          %{name: :flag, type: "boolean", default: false},
+          %{name: :off, type: "boolean", default: true},
+          %{name: :int, type: "integer", default: 0},
+          %{name: :flo, type: "float", default: 0.0},
+          %{name: :side, type: "atom", default: :left},
+          %{name: :unknown, type: "atom", default: nil},
+          %{name: :note, type: "string", default: "hi"}
+        ]
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          commands: [cmd],
+          command_selected: 0,
+          command_form_values: %{
+            move: %{
+              flag: "true",
+              off: "false",
+              int: "42",
+              flo: "3.14",
+              side: ":right",
+              unknown: ":__definitely_undefined_atom__",
+              note: "hello"
+            }
+          }
+        })
+
+      args = State.parsed_args_for_selected(state)
+      assert args.flag == true
+      assert args.off == false
+      assert args.int == 42
+      assert args.flo == 3.14
+      assert args.side == :right
+      # falls through unchanged when atom isn't existing
+      assert args.unknown == ":__definitely_undefined_atom__"
+      assert args.note == "hello"
+    end
+
+    test "parsed_args_for_selected/1 returns an empty map when nothing is selected" do
+      assert State.parsed_args_for_selected(Fixtures.sample_state(%{commands: []})) == %{}
+    end
+  end
+
   describe "sorted_joint_names/1" do
     test "returns joint names sorted alphabetically" do
       state = Fixtures.sample_state()

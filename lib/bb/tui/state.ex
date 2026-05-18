@@ -36,6 +36,9 @@ defmodule BB.TUI.State do
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
+    command_edit_mode: false,
+    command_focused_arg: 0,
+    command_form_values: %{},
     joint_selected: 0,
     param_selected: 0
   ]
@@ -61,6 +64,9 @@ defmodule BB.TUI.State do
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
           executing_command: term() | nil,
+          command_edit_mode: boolean(),
+          command_focused_arg: non_neg_integer(),
+          command_form_values: %{atom() => %{atom() => String.t()}},
           joint_selected: non_neg_integer(),
           param_selected: non_neg_integer()
         }
@@ -428,6 +434,203 @@ defmodule BB.TUI.State do
   @spec select_prev_command(t()) :: t()
   def select_prev_command(%__MODULE__{command_selected: idx} = state) do
     %{state | command_selected: max(idx - 1, 0)}
+  end
+
+  @doc """
+  Returns the currently selected command map, or `nil`.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{commands: [%{name: :a}, %{name: :b}], command_selected: 1}
+      iex> BB.TUI.State.selected_command(state)
+      %{name: :b}
+
+      iex> BB.TUI.State.selected_command(%BB.TUI.State{commands: []})
+      nil
+  """
+  @spec selected_command(t()) :: map() | nil
+  def selected_command(%__MODULE__{commands: cmds, command_selected: idx}) do
+    Enum.at(cmds, idx)
+  end
+
+  @doc """
+  Enters argument-edit mode for the selected command, if it has arguments.
+
+  No-op when the selected command has no arguments — argument-less
+  commands execute directly on Enter.
+
+  ## Examples
+
+      iex> cmd = %{name: :move, arguments: [%{name: :angle, type: "float", default: 0.0}]}
+      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0}
+      iex> BB.TUI.State.enter_command_edit_mode(state).command_edit_mode
+      true
+
+      iex> cmd = %{name: :home, arguments: []}
+      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0}
+      iex> BB.TUI.State.enter_command_edit_mode(state).command_edit_mode
+      false
+  """
+  @spec enter_command_edit_mode(t()) :: t()
+  def enter_command_edit_mode(%__MODULE__{} = state) do
+    case selected_command(state) do
+      %{arguments: [_ | _]} -> %{state | command_edit_mode: true, command_focused_arg: 0}
+      _ -> state
+    end
+  end
+
+  @doc """
+  Exits argument-edit mode. Keeps `command_form_values` intact.
+  """
+  @spec exit_command_edit_mode(t()) :: t()
+  def exit_command_edit_mode(%__MODULE__{} = state) do
+    %{state | command_edit_mode: false}
+  end
+
+  @doc """
+  Focuses the next argument field, wrapping at the end.
+  """
+  @spec focus_next_arg(t()) :: t()
+  def focus_next_arg(%__MODULE__{command_focused_arg: idx} = state) do
+    case selected_command(state) do
+      %{arguments: args} when args != [] ->
+        %{state | command_focused_arg: rem(idx + 1, length(args))}
+
+      _ ->
+        state
+    end
+  end
+
+  @doc """
+  Focuses the previous argument field, wrapping at the start.
+  """
+  @spec focus_prev_arg(t()) :: t()
+  def focus_prev_arg(%__MODULE__{command_focused_arg: idx} = state) do
+    case selected_command(state) do
+      %{arguments: args} when args != [] ->
+        count = length(args)
+        %{state | command_focused_arg: rem(idx - 1 + count, count)}
+
+      _ ->
+        state
+    end
+  end
+
+  @doc """
+  Returns the current string value for an argument, falling back to the
+  argument's `:default` (rendered as a string).
+  """
+  @spec arg_value(t(), atom(), %{name: atom(), default: term()}) :: String.t()
+  def arg_value(%__MODULE__{command_form_values: form}, cmd_name, %{name: name, default: default}) do
+    case form |> Map.get(cmd_name, %{}) |> Map.fetch(name) do
+      {:ok, value} -> value
+      :error -> default_to_string(default)
+    end
+  end
+
+  @doc """
+  Appends a character to the focused argument's value.
+  """
+  @spec append_to_focused_arg(t(), String.t()) :: t()
+  def append_to_focused_arg(%__MODULE__{command_edit_mode: false} = state, _char), do: state
+
+  def append_to_focused_arg(%__MODULE__{} = state, char) do
+    update_focused_arg(state, fn current -> current <> char end)
+  end
+
+  @doc """
+  Deletes the last character from the focused argument's value.
+  """
+  @spec backspace_focused_arg(t()) :: t()
+  def backspace_focused_arg(%__MODULE__{command_edit_mode: false} = state), do: state
+
+  def backspace_focused_arg(%__MODULE__{} = state) do
+    update_focused_arg(state, fn
+      "" -> ""
+      str -> String.slice(str, 0, String.length(str) - 1)
+    end)
+  end
+
+  defp update_focused_arg(
+         %__MODULE__{command_focused_arg: idx, command_form_values: form} = state,
+         fun
+       ) do
+    case selected_command(state) do
+      %{name: cmd_name, arguments: args} when args != [] ->
+        arg = Enum.at(args, idx)
+        current = arg_value(state, cmd_name, arg)
+        per_command = form |> Map.get(cmd_name, %{}) |> Map.put(arg.name, fun.(current))
+        %{state | command_form_values: Map.put(form, cmd_name, per_command)}
+
+      _ ->
+        state
+    end
+  end
+
+  defp default_to_string(nil), do: ""
+  defp default_to_string(value) when is_binary(value), do: value
+  defp default_to_string(value) when is_atom(value), do: ":" <> Atom.to_string(value)
+  defp default_to_string(value), do: to_string(value)
+
+  @doc """
+  Returns the form values for the selected command, parsed by type.
+
+  Mirrors `BB.LiveView.Components.Command`'s `parse_value/1`:
+  `"true"`/`"false"` → boolean, `":foo"` → atom, numeric → number,
+  else string.
+
+  Falls back to `arg.default` for arguments the user has not touched.
+
+  ## Examples
+
+      iex> cmd = %{
+      ...>   name: :move,
+      ...>   arguments: [
+      ...>     %{name: :angle, type: "float", default: 1.5},
+      ...>     %{name: :side, type: "atom", default: :left}
+      ...>   ]
+      ...> }
+      iex> state = %BB.TUI.State{
+      ...>   commands: [cmd],
+      ...>   command_selected: 0,
+      ...>   command_form_values: %{move: %{angle: "2.5"}}
+      ...> }
+      iex> BB.TUI.State.parsed_args_for_selected(state)
+      %{angle: 2.5, side: :left}
+  """
+  @spec parsed_args_for_selected(t()) :: map()
+  def parsed_args_for_selected(%__MODULE__{} = state) do
+    case selected_command(state) do
+      %{name: cmd_name, arguments: args} ->
+        Map.new(args, fn arg ->
+          {arg.name, parse_value(arg_value(state, cmd_name, arg))}
+        end)
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp parse_value("true"), do: true
+  defp parse_value("false"), do: false
+
+  defp parse_value(":" <> rest = value) when byte_size(rest) > 0 do
+    String.to_existing_atom(rest)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp parse_value(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} ->
+        int
+
+      _ ->
+        case Float.parse(value) do
+          {float, ""} -> float
+          _ -> value
+        end
+    end
   end
 
   @doc """

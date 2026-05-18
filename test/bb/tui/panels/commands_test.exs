@@ -111,6 +111,66 @@ defmodule BB.TUI.Panels.CommandsTest do
 
       assert widget.highlight_symbol == "\u{25B6} "
     end
+
+    test "renders arg rows under the command list when in edit mode" do
+      cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{name: :angle, type: "float", default: 1.5, required: true, doc: nil},
+          %{name: :side, type: "atom", default: :left, required: false, doc: nil}
+        ]
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          commands: [cmd],
+          command_selected: 0,
+          command_edit_mode: true,
+          command_focused_arg: 1,
+          command_form_values: %{move: %{angle: "2.0"}}
+        })
+
+      widget = Commands.render(state, true)
+
+      arg_texts = widget.items |> Enum.map(&text/1)
+
+      # angle row: not focused
+      assert Enum.any?(arg_texts, &(&1 == "    angle: 2.0"))
+      # side row: focused (shows cursor)
+      assert Enum.any?(arg_texts, &(&1 == "  › side: :left▏"))
+      # hint row present
+      assert Enum.any?(arg_texts, &String.contains?(&1, "[Tab] next"))
+    end
+
+    test "skips arg rows when edit mode is on but no command is selected" do
+      state =
+        Fixtures.sample_state(%{
+          commands: [],
+          command_edit_mode: true
+        })
+
+      widget = Commands.render(state, true)
+      refute Enum.any?(Enum.map(widget.items, &text/1), &String.contains?(&1, "[Tab] next"))
+    end
+
+    test "skips arg rows when edit mode is off" do
+      cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [%{name: :a, type: "float", default: 0.0}]
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          commands: [cmd],
+          command_selected: 0,
+          command_edit_mode: false
+        })
+
+      widget = Commands.render(state, true)
+      refute Enum.any?(widget.items |> Enum.map(&text/1), &String.contains?(&1, "[Tab] next"))
+    end
   end
 
   describe "command_ready?/2" do
