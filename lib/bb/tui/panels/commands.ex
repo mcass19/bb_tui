@@ -9,6 +9,11 @@ defmodule BB.TUI.Panels.Commands do
   result / executing rows render as colored badges too — green ✔ for
   success, red ✖ for failure, yellow ⏳ while a command is in flight.
 
+  When `state.command_edit_mode` is true, argument rows render
+  beneath the command list — one per declared argument on the
+  selected command, with a `›` prefix and `▏` cursor on the focused
+  row, and a hint footer describing the edit-mode keys.
+
   Pure function — takes state, returns a widget struct.
   """
 

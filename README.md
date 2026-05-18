@@ -11,7 +11,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Safety controls** — arm / disarm / force disarm with confirmation popup
 - **Joint control panel** — position table with type (revolute/prismatic/continuous), units (degrees/mm), visual range bars, target tracking, simulated joint markers, and direct position adjustment via keyboard (1% and 10% steps)
 - **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload
-- **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state; select and execute directly from the TUI
+- **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state. Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
 - **Parameters panel** — live parameter table grouped by path with real-time updates
 - **Runtime state monitoring** — safety state and runtime state displayed in the sidebar
 - **Status bar** — robot name, safety indicator, runtime state, and key hints
@@ -328,11 +328,26 @@ ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "pre
 
 ### Commands panel
 
-| Key           | Action         |
-|---------------|----------------|
-| `j` / `Down`  | Select next    |
-| `k` / `Up`    | Select previous|
-| `Enter`       | Execute        |
+| Key           | Action                                          |
+|---------------|-------------------------------------------------|
+| `j` / `Down`  | Select next                                     |
+| `k` / `Up`    | Select previous                                 |
+| `Enter`       | Execute (or enter argument edit mode when args) |
+
+### Command edit mode
+
+Active when the selected command declares arguments and Enter is pressed.
+
+| Key             | Action                            |
+|-----------------|-----------------------------------|
+| `Tab` / `Down`  | Focus next argument               |
+| `Shift+Tab` / `Up` | Focus previous argument        |
+| Printable key   | Append to focused argument        |
+| `Backspace`     | Delete last char of focused arg   |
+| `Enter`         | Execute with current values       |
+| `Esc`           | Exit edit mode (keeps values)     |
+
+Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → atom, numeric → integer or float, otherwise string.
 
 ### Joints panel
 
