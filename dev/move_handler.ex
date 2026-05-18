@@ -2,12 +2,15 @@
 
 defmodule Dev.MoveHandler do
   @moduledoc """
-  Dev/UI command handler that drives a single joint to a target angle by
-  publishing a position command on `[:actuator, <joint>]`. The dev
-  supervisor boots `BB.Supervisor` with `simulation: :kinematic`, so
-  the kinematic simulator picks the command up and emits the expected
-  `JointState` sensor updates — which the dashboard already reflects
-  in the joints panel.
+  Dev/UI command handler that drives a single joint by publishing a
+  synthetic `JointState` sensor message on `[:sensor, :simulated]`.
+
+  This mirrors `BB.LiveView.Components.JointControl.send_simulated_position/3`
+  in bb_liveview — when no real actuator is wired up (as in our dev
+  robot and the default `mix bb.add_robot` scaffold), publishing a
+  fake `JointState` is the pragmatic way to feed position updates
+  into the dashboard's joints panel. No need for actuator
+  declarations or `simulation: :kinematic`.
 
   Returns the state machine to the robot's initial operational state
   so the runtime doesn't park in `:executing`.
@@ -17,10 +20,20 @@ defmodule Dev.MoveHandler do
   use BB.Command
 
   alias BB.Dsl.Info
+  alias BB.Message
+  alias BB.Message.Sensor.JointState
 
   @impl BB.Command
   def handle_command(%{joint: joint, angle: angle}, context, state) do
-    :ok = BB.Actuator.set_position(context.robot_module, [joint], angle)
+    {:ok, msg} =
+      Message.new(JointState, :simulated,
+        names: [joint],
+        positions: [angle * 1.0],
+        velocities: [0.0],
+        efforts: [0.0]
+      )
+
+    BB.publish(context.robot_module, [:sensor, :simulated], msg)
     next_state = Info.initial_state(context.robot_module)
 
     {:stop, :normal,
