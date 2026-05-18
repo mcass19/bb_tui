@@ -159,4 +159,49 @@ defmodule Mix.Tasks.BbTui.InstallTest do
       """)
     end
   end
+
+  describe "--nerves" do
+    test "registers BB.TUI.subsystem under :nerves_ssh in runtime.exs" do
+      igniter =
+        project_with_robot()
+        |> Igniter.compose_task("bb_tui.install", ["--nerves"])
+
+      assert_creates(igniter, "config/runtime.exs", """
+      import Config
+      config :nerves_ssh, subsystems: [BB.TUI.subsystem(Test.Robot)]
+      """)
+
+      assert_has_notice(igniter, &String.contains?(&1, "ssh -t <device.local>"))
+    end
+
+    test "appends to an existing :nerves_ssh subsystems list" do
+      runtime_exs = """
+      import Config
+
+      config :nerves_ssh, subsystems: [:ssh_sftpd.subsystem_spec(cwd: ~c"/")]
+      """
+
+      test_project(files: %{"config/runtime.exs" => runtime_exs})
+      |> Igniter.compose_task("bb.install")
+      |> apply_igniter!()
+      |> Igniter.compose_task("bb_tui.install", ["--nerves"])
+      |> assert_has_patch("config/runtime.exs", """
+      + |  subsystems: [:ssh_sftpd.subsystem_spec(cwd: ~c"/"), BB.TUI.subsystem(Test.Robot)]
+      """)
+    end
+
+    test "is idempotent on a second run" do
+      project_with_robot()
+      |> Igniter.compose_task("bb_tui.install", ["--nerves"])
+      |> apply_igniter!()
+      |> Igniter.compose_task("bb_tui.install", ["--nerves"])
+      |> assert_unchanged("config/runtime.exs")
+    end
+
+    test "does not touch runtime.exs when the flag is absent" do
+      project_with_robot()
+      |> Igniter.compose_task("bb_tui.install")
+      |> assert_unchanged("config/runtime.exs")
+    end
+  end
 end
