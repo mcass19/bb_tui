@@ -217,7 +217,7 @@ defmodule BB.TUI.Panels.Events do
   @spec event_line({DateTime.t(), list(), term()}) :: Line.t()
   def event_line({timestamp, path, message}) do
     time = Calendar.strftime(timestamp, "%H:%M:%S")
-    path_str = path |> Enum.join(".") |> String.pad_trailing(18)
+    path_str = path |> format_path() |> String.pad_trailing(18)
     summary = summarize(path, message)
 
     %Line{
@@ -243,13 +243,19 @@ defmodule BB.TUI.Panels.Events do
       "18:23:12 sensor.simulated   JointState 1 joint(s)"
 
       iex> ts = ~U[2026-01-15 18:23:12.000Z]
+      iex> BB.TUI.Panels.Events.format_event(
+      ...>   {ts, [:command, :move, make_ref()], %{payload: %{status: :cancelled}}}
+      ...> )
+      "18:23:12 command.move       move cancelled"
+
+      iex> ts = ~U[2026-01-15 18:23:12.000Z]
       iex> BB.TUI.Panels.Events.format_event({ts, [:state_machine], %{payload: %{from: :disarmed, to: :armed}}})
       "18:23:12 state_machine      disarmed \u{2192} armed"
   """
   @spec format_event({DateTime.t(), list(), term()}) :: String.t()
   def format_event({timestamp, path, message}) do
     time = Calendar.strftime(timestamp, "%H:%M:%S")
-    path_str = path |> Enum.join(".") |> String.pad_trailing(18)
+    path_str = path |> format_path() |> String.pad_trailing(18)
     summary = summarize(path, message)
 
     "#{time} #{path_str} #{summary}"
@@ -326,6 +332,23 @@ defmodule BB.TUI.Panels.Events do
 
   defp format_value(other), do: inspect(other)
 
+  # bb's command pubsub paths look like `[:command, :move, #Reference<…>]`.
+  # The execution_id reference is internal correlation and doesn't render
+  # via String.Chars, so drop reference segments and stringify the rest.
+  defp format_path(path) do
+    path
+    |> Enum.reject(&is_reference/1)
+    |> Enum.map_join(".", &to_string/1)
+  end
+
+  defp format_goal(goal) when map_size(goal) == 0, do: "(no args)"
+
+  defp format_goal(goal) do
+    goal
+    |> Enum.sort_by(fn {k, _} -> to_string(k) end)
+    |> Enum.map_join(" ", fn {k, v} -> "#{k}=#{inspect(v, limit: 5)}" end)
+  end
+
   @doc """
   Produces a short summary string for an event based on its path and payload.
 
@@ -339,6 +362,21 @@ defmodule BB.TUI.Panels.Events do
 
       iex> BB.TUI.Panels.Events.summarize([:actuator, :waist], %{payload: %{position: 1.57}})
       "waist \u{2190} position 1.570"
+
+      iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :started, data: %{goal: %{angle: 1.5}}}})
+      "move started angle=1.5"
+
+      iex> BB.TUI.Panels.Events.summarize([:command, :home, :ref], %{payload: %{status: :started, data: %{goal: %{}}}})
+      "home started (no args)"
+
+      iex> BB.TUI.Panels.Events.summarize([:command, :home, :ref], %{payload: %{status: :succeeded, data: %{result: :ok}}})
+      "home \u{2714} :ok"
+
+      iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :failed, data: %{reason: :timeout}}})
+      "move \u{2718} :timeout"
+
+      iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :cancelled}})
+      "move cancelled"
 
       iex> BB.TUI.Panels.Events.summarize([:param, :speed], %{payload: %{new_value: 42}})
       "speed = 42"
@@ -359,6 +397,28 @@ defmodule BB.TUI.Panels.Events do
       when is_number(position) do
     joint = Enum.map_join(rest, ".", &to_string/1)
     "#{joint} \u{2190} position #{:erlang.float_to_binary(position / 1, decimals: 3)}"
+  end
+
+  def summarize([:command, name, _execution_id], %{
+        payload: %{status: :started, data: %{goal: goal}}
+      }) do
+    "#{name} started #{format_goal(goal)}"
+  end
+
+  def summarize([:command, name, _execution_id], %{
+        payload: %{status: :succeeded, data: %{result: result}}
+      }) do
+    "#{name} \u{2714} #{inspect(result, limit: 30)}"
+  end
+
+  def summarize([:command, name, _execution_id], %{
+        payload: %{status: :failed, data: %{reason: reason}}
+      }) do
+    "#{name} \u{2718} #{inspect(reason, limit: 30)}"
+  end
+
+  def summarize([:command, name, _execution_id], %{payload: %{status: :cancelled}}) do
+    "#{name} cancelled"
   end
 
   def summarize([:param | rest], %{payload: %{new_value: val}}) do

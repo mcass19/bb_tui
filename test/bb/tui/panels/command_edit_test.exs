@@ -57,8 +57,8 @@ defmodule BB.TUI.Panels.CommandEditTest do
       assert %Popup{content: %{text: lines}} = CommandEdit.render(state(%{}))
       texts = Enum.map(lines, &text/1)
 
-      # Two arg rows + blank separator + hint row
-      assert Enum.count(texts, &String.contains?(&1, "angle (float)")) == 1
+      # angle is required (shows `angle*`), side is optional
+      assert Enum.count(texts, &String.contains?(&1, "angle* (float)")) == 1
       assert Enum.count(texts, &String.contains?(&1, "side (atom)")) == 1
       assert Enum.any?(texts, &String.contains?(&1, "[Tab] next"))
     end
@@ -73,12 +73,43 @@ defmodule BB.TUI.Panels.CommandEditTest do
       refute Enum.any?(texts, &(&1 =~ " › angle"))
     end
 
+    test "renders a red asterisk after the name when arg is required" do
+      assert %Popup{content: %{text: lines}} = CommandEdit.render(state(%{}))
+      texts = Enum.map(lines, &text/1)
+
+      # angle is required (per cmd/0), side is not
+      assert Enum.any?(texts, &(&1 =~ "angle*"))
+      refute Enum.any?(texts, &(&1 =~ "side*"))
+    end
+
+    test "renders the arg.doc as a dim hint line under the field" do
+      cmd_with_doc = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{name: :angle, type: "float", default: 0.0, required: false, doc: "Target joint angle"}
+        ]
+      }
+
+      s =
+        Fixtures.sample_state(%{
+          commands: [cmd_with_doc],
+          command_selected: 0,
+          command_edit_mode: true
+        })
+
+      assert %Popup{content: %{text: lines}} = CommandEdit.render(s)
+      texts = Enum.map(lines, &text/1)
+
+      assert Enum.any?(texts, &String.contains?(&1, "Target joint angle"))
+    end
+
     test "shows the current form value when set, falls back to default otherwise" do
       s = state(%{command_form_values: %{move: %{angle: "2.5"}}})
       assert %Popup{content: %{text: lines}} = CommandEdit.render(s)
       texts = Enum.map(lines, &text/1)
 
-      assert Enum.any?(texts, &String.contains?(&1, "angle (float): 2.5"))
+      assert Enum.any?(texts, &String.contains?(&1, "angle* (float): 2.5"))
       assert Enum.any?(texts, &String.contains?(&1, "side (atom): :left"))
     end
   end
