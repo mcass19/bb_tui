@@ -399,7 +399,7 @@ defmodule BB.TUI.AppTest do
       assert new_state.command_selected == 0
     end
 
-    test "enter on a Ready command returns Command.batch with async + send_after" do
+    test "enter on a Ready command returns a Command.async that reports {:command_result, _}" do
       commands = [%{name: :home, allowed_states: [:idle]}]
 
       state =
@@ -416,10 +416,9 @@ defmodule BB.TUI.AppTest do
       assert new_state.executing_command == :running
       assert new_state.command_result == nil
 
-      # The reducer hands the runtime two commands wrapped in a batch: the
-      # async work (which monitors the spawned command pid and reports
-      # `{:command_result, _}`), and a `send_after` for the timeout.
-      assert [%ExRatatui.Command{kind: :batch}] = opts[:commands]
+      # BB.Command.await/2 enforces the timeout internally, so we hand
+      # the runtime a single async (no separate send_after backstop).
+      assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
     end
 
     test "enter does nothing for blocked command" do
@@ -568,12 +567,12 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state, opts} = App.update({:event, event}, state)
       assert new_state.command_edit_mode == false
       assert new_state.executing_command == :running
-      assert [%ExRatatui.Command{kind: :batch}] = opts[:commands]
+      assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
     end
 
     # Result/timeout/error semantics are exercised by the integration suite,
-    # which boots a real ExRatatui.Server so that Command.async + send_after
-    # actually drive the {:info, _} mailbox round-trip. See
+    # which boots a real ExRatatui.Server so that Command.async actually
+    # drives the {:info, _} mailbox round-trip. See
     # `test/bb/tui/integration_test.exs` ("Command result flow").
 
     # Joints panel keys — navigation
@@ -1219,20 +1218,6 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state(%{throbber_step: 7})
       assert {:noreply, next} = App.update({:info, :throbber_tick}, state)
       assert next.throbber_step == 8
-    end
-  end
-
-  describe "command timeout" do
-    test ":command_timeout with executing_command nil is a no-op" do
-      state = Fixtures.sample_state(%{executing_command: nil})
-      assert {:noreply, ^state} = App.update({:info, :command_timeout}, state)
-    end
-
-    test ":command_timeout while a command is running surfaces a timeout error" do
-      state = Fixtures.sample_state(%{executing_command: :running, command_result: nil})
-      assert {:noreply, next} = App.update({:info, :command_timeout}, state)
-      assert next.command_result == {:error, :timeout}
-      assert next.executing_command == nil
     end
   end
 end

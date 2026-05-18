@@ -45,7 +45,7 @@ defmodule Dev.TestRobot do
     # String + integer args.
     command :log do
       handler(Dev.EchoHandler)
-      allowed_states([:idle, :armed])
+      allowed_states([:idle])
 
       argument :message, :string do
         default("hello")
