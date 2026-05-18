@@ -4,20 +4,26 @@ if Code.ensure_loaded?(Igniter) do
     @moduledoc """
     #{@shortdoc}
 
-    Imports the package's formatter rules and prints a notice with the
-    `mix bb.tui` invocation for launching the dashboard against the robot
-    module configured by `bb.install`.
+    Imports the package's formatter rules and prints a launch notice for
+    the configured robot module.
 
     When no robot module is present yet, the installer offers to compose
     `bb.install` to scaffold one. Pass `--auto-bb` to skip the prompt in
     non-interactive contexts.
 
-    ## Example
+    With `--supervise`, the installer also appends `{BB.TUI, robot: …}`
+    to the consumer's application supervision tree. Pair it with `--ssh`
+    to boot an SSH daemon on application start.
+
+    ## Examples
 
     ```bash
     mix igniter.install bb_tui
     mix igniter.install bb_tui --robot MyApp.Arm
     mix igniter.install bb_tui --auto-bb
+    mix igniter.install bb_tui --supervise
+    mix igniter.install bb_tui --supervise --ssh --port 2222
+    mix igniter.install bb_tui --supervise --ssh --user pilot --password secret
     ```
 
     ## Options
@@ -25,17 +31,32 @@ if Code.ensure_loaded?(Igniter) do
     * `--robot` - The robot module (defaults to `{AppPrefix}.Robot`).
     * `--auto-bb` - When the robot module is missing, compose `bb.install`
       without prompting.
+    * `--supervise` - Append `{BB.TUI, robot: …}` to the application's
+      supervision tree. Idempotent.
+    * `--ssh` - When supervising, configure the child for an SSH daemon
+      (`transport: :ssh`).
+    * `--port` - SSH daemon port (default `2222`). Ignored without `--ssh`.
+    * `--user` - SSH username (default `admin`). Ignored without `--ssh`.
+    * `--password` - SSH password (default `admin`). Ignored without `--ssh`.
     """
 
     use Igniter.Mix.Task
 
-    alias Igniter.Project.Formatter
+    alias Igniter.Project.{Application, Formatter, Module}
 
     @impl Igniter.Mix.Task
     def info(_argv, _parent) do
       %Igniter.Mix.Task.Info{
         composes: ["bb.install"],
-        schema: [robot: :string, auto_bb: :boolean],
+        schema: [
+          robot: :string,
+          auto_bb: :boolean,
+          supervise: :boolean,
+          ssh: :boolean,
+          port: :integer,
+          user: :string,
+          password: :string
+        ],
         aliases: [r: :robot]
       }
     end
@@ -44,21 +65,61 @@ if Code.ensure_loaded?(Igniter) do
     def igniter(igniter) do
       options = igniter.args.options
       auto_bb? = Keyword.get(options, :auto_bb, false)
+      supervise? = Keyword.get(options, :supervise, false)
       igniter = Formatter.import_dep(igniter, :bb_tui)
       robot_module = BB.Igniter.robot_module(igniter)
-      {robot_exists?, igniter} = Igniter.Project.Module.module_exists(igniter, robot_module)
+      {robot_exists?, igniter} = Module.module_exists(igniter, robot_module)
 
       cond do
         robot_exists? ->
-          Igniter.add_notice(igniter, launch_notice(robot_module))
+          igniter
+          |> maybe_supervise(supervise?, robot_module, options)
+          |> Igniter.add_notice(launch_notice(robot_module, options))
 
         auto_bb? or prompt_bb_install?() ->
           igniter
           |> Igniter.compose_task("bb.install", bb_install_argv(options))
-          |> Igniter.add_notice(launch_notice(robot_module))
+          |> maybe_supervise(supervise?, robot_module, options)
+          |> Igniter.add_notice(launch_notice(robot_module, options))
 
         true ->
           Igniter.add_notice(igniter, manual_install_notice(robot_module))
+      end
+    end
+
+    defp maybe_supervise(igniter, false, _robot_module, _options), do: igniter
+
+    defp maybe_supervise(igniter, true, robot_module, options) do
+      Application.add_new_child(
+        igniter,
+        {BB.TUI, {:code, child_opts_ast(robot_module, options)}}
+      )
+    end
+
+    defp child_opts_ast(robot_module, options) do
+      robot_module
+      |> child_opts_string(options)
+      |> Sourceror.parse_string!()
+    end
+
+    defp child_opts_string(robot_module, options) do
+      if Keyword.get(options, :ssh, false) do
+        port = Keyword.get(options, :port, 2222)
+        user = Keyword.get(options, :user, "admin")
+        password = Keyword.get(options, :password, "admin")
+
+        """
+        [
+          robot: #{inspect(robot_module)},
+          transport: :ssh,
+          port: #{port},
+          auto_host_key: true,
+          auth_methods: ~c"password",
+          user_passwords: [{~c"#{user}", ~c"#{password}"}]
+        ]
+        """
+      else
+        "[robot: #{inspect(robot_module)}]"
       end
     end
 
@@ -73,15 +134,40 @@ if Code.ensure_loaded?(Igniter) do
       Mix.shell().yes?("bb_tui needs a BB robot module. Scaffold one with bb.install now?")
     end
 
-    defp launch_notice(robot_module) do
-      """
-      bb_tui: launch the dashboard with
+    defp launch_notice(robot_module, options) do
+      case {Keyword.get(options, :supervise, false), Keyword.get(options, :ssh, false)} do
+        {true, true} ->
+          port = Keyword.get(options, :port, 2222)
+          user = Keyword.get(options, :user, "admin")
 
-          mix bb.tui --robot #{inspect(robot_module)}
+          """
+          bb_tui: the dashboard is supervised as part of the application and
+          will serve over SSH on application start.
 
-      or from IEx via `BB.TUI.run(#{inspect(robot_module)})`. See the BB.TUI
-      moduledoc for supervised and remote-attach options.
-      """
+              ssh #{user}@localhost -p #{port}
+
+          Adjust the credentials in the child spec before deploying.
+          """
+
+        {true, false} ->
+          """
+          bb_tui: the dashboard is supervised as part of the application and
+          will take over the terminal when the app starts.
+
+          For an interactive session against #{inspect(robot_module)}, use
+          `BB.TUI.run(#{inspect(robot_module)})` from a separate IEx shell.
+          """
+
+        {false, _} ->
+          """
+          bb_tui: launch the dashboard with
+
+              mix bb.tui --robot #{inspect(robot_module)}
+
+          or from IEx via `BB.TUI.run(#{inspect(robot_module)})`. See the BB.TUI
+          moduledoc for supervised and remote-attach options.
+          """
+      end
     end
 
     defp manual_install_notice(robot_module) do
