@@ -46,15 +46,71 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 
 ## Installation
 
-Use [Igniter](https://hex.pm/packages/igniter) to add `bb_tui` (and a `BB`
-robot) to your project in one shot:
+Use [Igniter](https://hex.pm/packages/igniter) to add `bb_tui` to a
+project. The installer imports formatter rules and prints a launch
+notice tailored to the chosen install shape.
+
+### Basic install
+
+If the project already has a `BB` robot module (typically scaffolded by
+`mix igniter.install bb`), this is all that's needed:
 
 ```sh
 mix igniter.install bb_tui
 mix igniter.install bb_tui --robot MyApp.Arm
 ```
 
-Or add it to your dependencies in `mix.exs` manually:
+### Scaffold `bb` alongside `bb_tui`
+
+When no robot module is present, the installer offers to compose
+`bb.install` to scaffold one. Pass `--auto-bb` to skip the prompt in
+non-interactive contexts:
+
+```sh
+mix igniter.install bb_tui --auto-bb
+mix igniter.install bb_tui --auto-bb --robot MyApp.Arm
+```
+
+### Boot the dashboard from the supervision tree
+
+`--supervise` appends `{BB.TUI, robot: <Robot>}` to the consumer's
+`Application.start/2` children, so the dashboard starts with the app.
+Pair with `--ssh` to serve over SSH instead of taking over the local
+terminal — handy for headless robots:
+
+```sh
+mix igniter.install bb_tui --supervise
+mix igniter.install bb_tui --supervise --ssh --port 2222
+mix igniter.install bb_tui --supervise --ssh --user pilot --password secret
+```
+
+The injection is idempotent — re-running won't duplicate the child
+spec. Change the credentials in the generated child spec before
+deploying.
+
+### Nerves: plug into `nerves_ssh` as a subsystem
+
+On Nerves devices already running `nerves_ssh`, `--nerves` adds
+`BB.TUI.subsystem(<Robot>)` to `config :nerves_ssh, :subsystems` in
+`config/runtime.exs` so the dashboard rides on the existing SSH daemon
+instead of opening a second port:
+
+```sh
+mix igniter.install bb_tui --nerves
+```
+
+Connect with the standard `ssh -t` invocation:
+
+```sh
+ssh -t nerves.local -s Elixir.BB.TUI.App
+```
+
+The `-t` flag is required — the dashboard needs PTY allocation for
+interactive input.
+
+### Manual
+
+Skip Igniter and add the dep directly:
 
 ```elixir
 def deps do
@@ -63,6 +119,8 @@ def deps do
   ]
 end
 ```
+
+See `mix help bb_tui.install` for the full option reference.
 
 ## Usage
 
