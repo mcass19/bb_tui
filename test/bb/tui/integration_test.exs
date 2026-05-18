@@ -97,21 +97,38 @@ defmodule BB.TUI.IntegrationTest do
   end
 
   describe "Command result flow" do
-    test "completion: a command that exits :normal yields {:ok, :completed}" do
+    test "completion: BB.Command.await success surfaces as {:ok, result}" do
       Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
-        cmd_pid = spawn(fn -> :ok end)
-        {:ok, cmd_pid}
+        {:ok, spawn(fn -> :ok end)}
       end)
+
+      Mimic.stub(BB.Command, :await, fn _pid, _timeout -> {:ok, :done} end)
 
       pid = start_tui_on_commands_panel!()
 
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:ok, :completed}
+        assert current_state(pid).command_result == {:ok, :done}
       end)
 
       assert current_state(pid).executing_command == nil
+    end
+
+    test "completion with options: 3-tuple surfaces as {:ok, result}" do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      Mimic.stub(BB.Command, :await, fn _pid, _timeout -> {:ok, :armed, next_state: :idle} end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).command_result == {:ok, :armed}
+      end)
     end
 
     test "execute error: a {:error, reason} from execute_command surfaces verbatim" do
@@ -128,10 +145,13 @@ defmodule BB.TUI.IntegrationTest do
       end)
     end
 
-    test "abnormal exit: a non-:normal :DOWN reason surfaces as {:error, reason}" do
+    test "await error: {:error, {:command_failed, reason}} is unwrapped to {:error, reason}" do
       Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
-        cmd_pid = spawn(fn -> exit(:boom) end)
-        {:ok, cmd_pid}
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      Mimic.stub(BB.Command, :await, fn _pid, _timeout ->
+        {:error, {:command_failed, :boom}}
       end)
 
       pid = start_tui_on_commands_panel!()
@@ -143,17 +163,35 @@ defmodule BB.TUI.IntegrationTest do
       end)
     end
 
-    test "timeout: a long-running command fires :command_timeout via send_after" do
+    test "await error: bare {:error, reason} from BB.Command.await surfaces verbatim" do
       Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
-        cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
-        {:ok, cmd_pid}
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      Mimic.stub(BB.Command, :await, fn _pid, _timeout -> {:error, :rejected} end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).command_result == {:error, :rejected}
+      end)
+    end
+
+    test "timeout: BB.Command.await enforces the timeout and yields {:error, :timeout}" do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
+        {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+      end)
+
+      Mimic.stub(BB.Command, :await, fn _pid, _timeout ->
+        {:error, {:command_failed, :timeout}}
       end)
 
       pid = start_tui_on_commands_panel!()
 
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
-      # config/test.exs sets :bb_tui, :command_timeout to 100ms.
       eventually(fn ->
         assert current_state(pid).command_result == {:error, :timeout}
       end)

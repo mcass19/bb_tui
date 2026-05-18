@@ -54,11 +54,12 @@ defmodule BB.TUI.App do
   fields, typing edits the focused field, Enter executes with the
   parsed values, and Esc exits without executing.
 
-  Execution returns a batched `Command.async/2` (which monitors the
-  spawned command pid and reports `{:command_result, _}`) plus a
-  `Command.send_after/2` for the timeout. Both end up in the same
-  `{:info, _}` mailbox, so the timeout result simply becomes another
-  `update/2` clause.
+  Execution returns a `Command.async/2` that calls
+  `BB.Command.await/2`, which waits on the spawned command via
+  `GenServer.call`, falls back to bb's `ResultCache` if the handler
+  finishes before we can await, and enforces the timeout internally.
+  The result arrives as a single `{:command_result, _}` info message
+  (success, error, or `{:error, :timeout}`).
 
   ## Side-effect convention
 
@@ -554,14 +555,6 @@ defmodule BB.TUI.App do
     {:noreply, State.set_command_result(state, result)}
   end
 
-  def update({:info, :command_timeout}, %{executing_command: nil} = state) do
-    {:noreply, state}
-  end
-
-  def update({:info, :command_timeout}, state) do
-    {:noreply, State.set_command_result(state, {:error, :timeout})}
-  end
-
   def update({:info, :throbber_tick}, state) do
     {:noreply, State.tick_throbber(state)}
   end
@@ -715,30 +708,35 @@ defmodule BB.TUI.App do
   defp execute_command_command(%State{robot: robot, node: node}, cmd, args) do
     name = cmd.name
 
-    Command.batch([
-      Command.async(
-        fn -> wait_for_command_result(robot, name, args, node) end,
-        fn result -> {:command_result, result} end
-      ),
-      Command.send_after(@command_timeout, :command_timeout)
-    ])
+    Command.async(
+      fn -> wait_for_command_result(robot, name, args, node) end,
+      fn result -> {:command_result, result} end
+    )
   end
 
   defp wait_for_command_result(robot, name, args, node) do
     case Robot.execute_command(robot, name, args, node) do
-      {:ok, cmd_pid} ->
-        ref = Process.monitor(cmd_pid)
+      {:ok, cmd_pid} -> await_command(cmd_pid)
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-        receive do
-          {:DOWN, ^ref, :process, ^cmd_pid, :normal} ->
-            {:ok, :completed}
-
-          {:DOWN, ^ref, :process, ^cmd_pid, reason} ->
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+  # BB.Command.await/2 traps `:exit, {:noproc, _}` and falls back to the
+  # command's ResultCache, so it survives the race where a fast handler
+  # (e.g. a synchronous {:stop, :normal, _}) terminates between
+  # `Robot.execute_command/4` returning the pid and us awaiting on it.
+  # The earlier Process.monitor approach surfaced that race as a
+  # spurious {:error, :noproc}; await also enforces a timeout, so we no
+  # longer need a separate Command.send_after backstop.
+  #
+  # Unwrap {:command_failed, reason} at the boundary so the panel shows
+  # the bare reason (`:timeout`, `:noproc`, etc.) consistently.
+  defp await_command(cmd_pid) do
+    case BB.Command.await(cmd_pid, @command_timeout) do
+      {:ok, result} -> {:ok, result}
+      {:ok, result, _opts} -> {:ok, result}
+      {:error, {:command_failed, reason}} -> {:error, reason}
+      {:error, _reason} = error -> error
     end
   end
 end
