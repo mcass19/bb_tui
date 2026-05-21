@@ -12,8 +12,8 @@ defmodule BB.TUI.Panels.ParametersTest do
       widget = Parameters.render(state, false)
 
       assert %Table{} = widget
-      assert widget.header == ["Parameter", "Value"]
-      assert widget.rows == [["No parameters defined", ""]]
+      assert widget.header == ["Parameter", "Value", "Type"]
+      assert widget.rows == [["No parameters defined", "", ""]]
       assert widget.block.title == " Parameters "
     end
 
@@ -119,6 +119,31 @@ defmodule BB.TUI.Panels.ParametersTest do
       state = Fixtures.sample_state(%{parameters: [], param_selected: 0})
       widget = Parameters.render(state, true)
       assert widget.selected == nil
+    end
+
+    test "Type column reflects schema metadata when present" do
+      params = [{[:speed], 100}, {[:mode], :fast}]
+
+      meta = %{
+        [:speed] => %{type: {:integer, [min: 0, max: 500]}, doc: "rpm", default: 0},
+        [:mode] => %{type: :atom, doc: nil, default: :fast}
+      }
+
+      state = Fixtures.sample_state(%{parameters: params, parameter_metadata: meta})
+      widget = Parameters.render(state, false)
+
+      [mode_row, speed_row] = widget.rows
+      assert Enum.at(mode_row, 2) == ":atom"
+      assert Enum.at(speed_row, 2) == ":integer"
+    end
+
+    test "Type column falls back to em-dash when no metadata is present" do
+      params = [{[:speed], 100}]
+      state = Fixtures.sample_state(%{parameters: params, parameter_metadata: %{}})
+      widget = Parameters.render(state, false)
+
+      [row] = widget.rows
+      assert Enum.at(row, 2) == "—"
     end
   end
 

@@ -13,41 +13,54 @@ defmodule BB.TUI.Panels.Parameters do
   alias ExRatatui.Widgets.Table
 
   @doc """
-  Renders the parameters panel as a Table widget with path and value columns.
+  Renders the parameters panel as a Table widget with path, value, and
+  schema-declared type columns.
+
+  When `state.parameter_metadata` carries no entry for a path (e.g. the
+  parameter was registered without a Spark schema), the Type column
+  falls back to `"—"`.
 
   ## Examples
 
       iex> state = %BB.TUI.State{parameters: [{[:speed], 100}, {[:controller, :kp], 0.5}]}
       iex> %ExRatatui.Widgets.Table{header: header} = BB.TUI.Panels.Parameters.render(state, false)
       iex> header
-      ["Parameter", "Value"]
+      ["Parameter", "Value", "Type"]
 
       iex> state = %BB.TUI.State{parameters: []}
       iex> %ExRatatui.Widgets.Table{rows: rows} = BB.TUI.Panels.Parameters.render(state, false)
       iex> rows
-      [["No parameters defined", ""]]
+      [["No parameters defined", "", ""]]
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{parameters: parameters, param_selected: selected}, focused?) do
+  def render(
+        %State{parameters: parameters, parameter_metadata: meta, param_selected: selected},
+        focused?
+      ) do
     rows =
       case parameters do
         [] ->
-          [["No parameters defined", ""]]
+          [["No parameters defined", "", ""]]
 
         params ->
           params
           |> Enum.sort_by(fn {path, _} -> path end)
           |> Enum.map(fn {path, value} ->
-            [format_path(path), format_value(value) <> edit_hint(value)]
+            [
+              format_path(path),
+              format_value(value) <> edit_hint(value),
+              format_type(meta[path])
+            ]
           end)
       end
 
     %Table{
       rows: rows,
-      header: ["Parameter", "Value"],
+      header: ["Parameter", "Value", "Type"],
       widths: [
-        {:percentage, 55},
-        {:percentage, 45}
+        {:percentage, 45},
+        {:percentage, 30},
+        {:percentage, 25}
       ],
       selected: if(focused? and parameters != [], do: selected),
       highlight_style: Theme.highlight_style(),
@@ -60,6 +73,42 @@ defmodule BB.TUI.Panels.Parameters do
       }
     }
   end
+
+  @doc """
+  Formats a parameter's Spark-declared type for the Type column.
+
+  Returns `"—"` when no schema metadata is present. Atom types render as
+  `":float"`; option-tagged types like `{:integer, [min: 0, max: 100]}`
+  render as their head atom — the bounds belong in the (future) edit
+  popup, not in a one-line table cell.
+
+  ## Examples
+
+      iex> BB.TUI.Panels.Parameters.format_type(nil)
+      "—"
+
+      iex> BB.TUI.Panels.Parameters.format_type(%{type: nil})
+      "—"
+
+      iex> BB.TUI.Panels.Parameters.format_type(%{type: :float})
+      ":float"
+
+      iex> BB.TUI.Panels.Parameters.format_type(%{type: {:integer, [min: 0, max: 100]}})
+      ":integer"
+
+      iex> BB.TUI.Panels.Parameters.format_type(%{type: {:custom, MyMod, :validate, []}})
+      "{:custom, MyMod, :validate, []}"
+
+      iex> BB.TUI.Panels.Parameters.format_type(%{})
+      "—"
+  """
+  @spec format_type(map() | nil) :: String.t()
+  def format_type(nil), do: "—"
+  def format_type(%{type: nil}), do: "—"
+  def format_type(%{type: type}) when is_atom(type), do: inspect(type)
+  def format_type(%{type: {head, opts}}) when is_atom(head) and is_list(opts), do: inspect(head)
+  def format_type(%{type: other}), do: inspect(other)
+  def format_type(_), do: "—"
 
   @doc """
   Returns an edit hint suffix indicating how a parameter can be edited.

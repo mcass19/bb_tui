@@ -91,6 +91,44 @@ defmodule BB.TUI.StateTest do
 
       assert state.parameters == params
     end
+
+    test "extracts metadata side-channel from BB.Parameter.list/2 maps" do
+      state = Fixtures.sample_state()
+
+      params = [
+        {[:speed], %{value: 100, type: {:integer, [min: 0, max: 500]}, doc: "rpm", default: 0}},
+        {[:mode], %{value: :fast, type: :atom}}
+      ]
+
+      state = State.update_parameters(state, params)
+
+      assert state.parameters == [{[:speed], 100}, {[:mode], :fast}]
+
+      assert state.parameter_metadata == %{
+               [:speed] => %{type: {:integer, [min: 0, max: 500]}, doc: "rpm", default: 0},
+               [:mode] => %{type: :atom, doc: nil, default: nil}
+             }
+    end
+
+    test "plain-value inputs leave metadata empty for that path" do
+      state = Fixtures.sample_state()
+      state = State.update_parameters(state, [{[:speed], 42}])
+
+      assert state.parameters == [{[:speed], 42}]
+      assert state.parameter_metadata == %{}
+    end
+
+    test "subsequent updates discard stale metadata" do
+      state = Fixtures.sample_state()
+
+      state =
+        State.update_parameters(state, [{[:speed], %{value: 1, type: :integer}}])
+
+      assert Map.has_key?(state.parameter_metadata, [:speed])
+
+      state = State.update_parameters(state, [{[:speed], 2}])
+      assert state.parameter_metadata == %{}
+    end
   end
 
   describe "append_event/3" do

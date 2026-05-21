@@ -24,6 +24,7 @@ defmodule BB.TUI.State do
     :commands,
     node: nil,
     parameters: [],
+    parameter_metadata: %{},
     events: [],
     active_panel: :safety,
     scroll_offset: 0,
@@ -51,6 +52,7 @@ defmodule BB.TUI.State do
           joints: %{atom() => %{position: float(), joint: term()}},
           events: [{DateTime.t(), list(), term()}],
           parameters: [{list(), term()}],
+          parameter_metadata: %{list() => map()},
           commands: [term()],
           node: node() | nil,
           active_panel: :safety | :commands | :joints | :events | :parameters,
@@ -237,15 +239,22 @@ defmodule BB.TUI.State do
   @doc """
   Updates parameters from a parameter list.
 
-  `BB.Parameter.list/2` returns `{path, metadata}` tuples where metadata is a
-  map with a `:value` key.  We extract the plain value so the rest of the TUI
-  works with simple `{path, value}` tuples.
+  `BB.Parameter.list/2` returns `{path, metadata}` tuples where metadata
+  is a map carrying `:value` plus schema-derived fields like `:type`,
+  `:doc`, and `:default`. The plain value is mirrored into
+  `state.parameters` so navigation code keeps working with simple
+  `{path, value}` tuples, while the rest of the metadata is stashed in
+  `state.parameter_metadata` keyed by path. Plain-value inputs (no
+  metadata map) leave the metadata side-channel untouched for that path.
 
   ## Examples
 
       iex> state = %BB.TUI.State{parameters: []}
-      iex> BB.TUI.State.update_parameters(state, [{[:speed], %{value: 100}}]).parameters
+      iex> next = BB.TUI.State.update_parameters(state, [{[:speed], %{value: 100, type: :integer, doc: "rpm"}}])
+      iex> next.parameters
       [{[:speed], 100}]
+      iex> next.parameter_metadata
+      %{[:speed] => %{type: :integer, doc: "rpm", default: nil}}
 
       iex> state = %BB.TUI.State{parameters: []}
       iex> BB.TUI.State.update_parameters(state, [{[:speed], 42}]).parameters
@@ -253,13 +262,24 @@ defmodule BB.TUI.State do
   """
   @spec update_parameters(t(), [{list(), term()}]) :: t()
   def update_parameters(%__MODULE__{} = state, parameters) do
-    params =
-      Enum.map(parameters, fn
-        {path, %{value: value}} -> {path, value}
-        {path, value} -> {path, value}
+    {params, metadata} =
+      Enum.map_reduce(parameters, %{}, fn
+        {path, %{value: value} = meta}, acc ->
+          {{path, value}, Map.put(acc, path, extract_metadata(meta))}
+
+        {path, value}, acc ->
+          {{path, value}, acc}
       end)
 
-    %{state | parameters: params}
+    %{state | parameters: params, parameter_metadata: metadata}
+  end
+
+  defp extract_metadata(meta) do
+    %{
+      type: Map.get(meta, :type),
+      doc: Map.get(meta, :doc),
+      default: Map.get(meta, :default)
+    }
   end
 
   @doc """
