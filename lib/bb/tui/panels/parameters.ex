@@ -96,7 +96,7 @@ defmodule BB.TUI.Panels.Parameters do
         {[["No remote parameters", "", ""]], 0}
 
       params when is_list(params) ->
-        sorted = Enum.sort_by(params, &remote_id_string/1)
+        sorted = Enum.sort_by(params, &State.remote_param_id/1)
         rows = Enum.map(sorted, &remote_row/1)
         {rows, length(sorted)}
     end
@@ -104,15 +104,11 @@ defmodule BB.TUI.Panels.Parameters do
 
   defp remote_row(param) do
     [
-      remote_id_string(param),
+      State.remote_param_id(param),
       param |> Map.get(:value) |> format_value() |> append_edit_hint(param),
       format_remote_type(param)
     ]
   end
-
-  defp remote_id_string(%{id: id}) when is_binary(id), do: id
-  defp remote_id_string(%{id: id}), do: to_string(id)
-  defp remote_id_string(_), do: ""
 
   defp append_edit_hint(value_str, %{value: v}) when is_number(v) or is_boolean(v),
     do: value_str <> edit_hint(v)

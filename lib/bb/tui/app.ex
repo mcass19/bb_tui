@@ -704,6 +704,13 @@ defmodule BB.TUI.App do
   end
 
   defp adjust_selected_param(state, direction, multiplier) do
+    case State.selected_parameter_tab(state) do
+      :local -> adjust_local_param(state, direction, multiplier)
+      {:bridge, name} -> adjust_remote_param(state, name, direction, multiplier)
+    end
+  end
+
+  defp adjust_local_param(state, direction, multiplier) do
     case State.selected_param(state) do
       {path, value} when is_integer(value) ->
         bounds = State.parameter_bounds(state, path)
@@ -724,6 +731,34 @@ defmodule BB.TUI.App do
     end
   end
 
+  defp adjust_remote_param(state, bridge_name, direction, multiplier) do
+    case State.selected_remote_param(state) do
+      %{value: value} = param when is_integer(value) ->
+        bounds = State.remote_param_bounds(param)
+        step = integer_step(bounds) * multiplier
+        new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
+        dispatch_remote_set(state, bridge_name, param, new_value)
+
+      %{value: value} = param when is_float(value) ->
+        bounds = State.remote_param_bounds(param)
+        step = float_step(bounds) * multiplier
+        new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
+        dispatch_remote_set(state, bridge_name, param, new_value)
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  defp dispatch_remote_set(state, bridge_name, param, new_value) do
+    id = State.remote_param_id(param)
+
+    case Robot.set_remote_parameter(state.robot, bridge_name, id, new_value, state.node) do
+      :ok -> {:noreply, refresh_selected_tab(state)}
+      {:error, _reason} -> {:noreply, state}
+    end
+  end
+
   defp integer_step({min, max}) when is_integer(min) and is_integer(max),
     do: max(div(max - min, 100), 1)
 
@@ -736,10 +771,27 @@ defmodule BB.TUI.App do
   defp apply_step(value, :decrease, step), do: value - step
 
   defp toggle_selected_param(state) do
+    case State.selected_parameter_tab(state) do
+      :local -> toggle_local_param(state)
+      {:bridge, name} -> toggle_remote_param(state, name)
+    end
+  end
+
+  defp toggle_local_param(state) do
     case State.selected_param(state) do
       {path, value} when is_boolean(value) ->
         Robot.set_parameter(state.robot, path, !value, state.node)
         {:noreply, state}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  defp toggle_remote_param(state, bridge_name) do
+    case State.selected_remote_param(state) do
+      %{value: value} = param when is_boolean(value) ->
+        dispatch_remote_set(state, bridge_name, param, !value)
 
       _ ->
         {:noreply, state}

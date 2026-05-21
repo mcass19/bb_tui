@@ -384,10 +384,15 @@ Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → 
 | `Enter`        | Toggle boolean parameter                                        |
 | `t`            | Cycle to the next bridge tab (Local → bridges → Local)          |
 
-Step size is 1% of the declared range when the Spark schema carries
-`:min` / `:max` (e.g. `{:float, min: 0.0, max: 1.0}`), and the new value
-is clamped to the bounds. Parameters without bounds use an absolute
-step of `+1` for integers and `+0.1` for floats.
+Step size is 1% of the declared range when min / max are known — the
+Spark schema's `{:float, min: 0.0, max: 1.0}` form on the Local tab, or
+the bridge's flat `:min` / `:max` keys on a bridge tab — and the new
+value is clamped to the bounds. Parameters without bounds use an
+absolute step of `+1` for integers and `+0.1` for floats. The same
+keybindings dispatch through `BB.Parameter.set` on the Local tab and
+`BB.Parameter.set_remote` on a bridge tab; a successful remote set
+refetches that bridge's parameter list so the cached values stay in
+sync.
 
 ## How It Works
 

@@ -1005,6 +1005,105 @@ defmodule BB.TUI.State do
   end
 
   @doc """
+  Returns the sort key used when rendering a remote parameter row.
+
+  Bridges typically use string ids (`"PITCH_P"`), but some (`BB.Bridge`
+  implementations are free to use atoms) return atom ids. Both
+  normalize to a binary so the panel and the navigation index agree on
+  ordering.
+
+  ## Examples
+
+      iex> BB.TUI.State.remote_param_id(%{id: "PITCH_P"})
+      "PITCH_P"
+
+      iex> BB.TUI.State.remote_param_id(%{id: :gain})
+      "gain"
+
+      iex> BB.TUI.State.remote_param_id(%{})
+      ""
+  """
+  @spec remote_param_id(map()) :: String.t()
+  def remote_param_id(%{id: id}) when is_binary(id), do: id
+  def remote_param_id(%{id: id}), do: to_string(id)
+  def remote_param_id(_), do: ""
+
+  @doc """
+  Returns the currently-focused remote parameter for the selected
+  bridge tab, or `nil` when the active tab is `:local`, the bridge has
+  no fetched list yet, or the fetch errored.
+
+  Sort order matches the panel's render (`Enum.sort_by(remote_param_id/1)`).
+
+  ## Examples
+
+      iex> remote = [%{id: "ROLL_P", value: 0.0}, %{id: "PITCH_P", value: 0.1}]
+      iex> state = %BB.TUI.State{
+      ...>   parameter_tabs: [:local, {:bridge, :mavlink}],
+      ...>   parameter_tab_selected: 1,
+      ...>   remote_parameters: %{mavlink: remote},
+      ...>   param_selected: 0
+      ...> }
+      iex> BB.TUI.State.selected_remote_param(state)
+      %{id: "PITCH_P", value: 0.1}
+
+      iex> state = %BB.TUI.State{parameter_tabs: [:local], parameter_tab_selected: 0}
+      iex> BB.TUI.State.selected_remote_param(state)
+      nil
+
+      iex> state = %BB.TUI.State{
+      ...>   parameter_tabs: [:local, {:bridge, :mavlink}],
+      ...>   parameter_tab_selected: 1,
+      ...>   remote_parameters: %{mavlink: {:error, :nodedown}}
+      ...> }
+      iex> BB.TUI.State.selected_remote_param(state)
+      nil
+  """
+  @spec selected_remote_param(t()) :: map() | nil
+  def selected_remote_param(%__MODULE__{} = state) do
+    case selected_parameter_tab(state) do
+      {:bridge, name} ->
+        case Map.get(state.remote_parameters, name) do
+          list when is_list(list) ->
+            list
+            |> Enum.sort_by(&remote_param_id/1)
+            |> Enum.at(state.param_selected)
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Returns `{min, max}` bounds for a remote parameter when the bridge
+  carries them as flat `:min` / `:max` keys (matching `bb_liveview`'s
+  shape), otherwise `nil`. Either bound may be `nil` to leave that side
+  open.
+
+  ## Examples
+
+      iex> BB.TUI.State.remote_param_bounds(%{id: "X", value: 1, min: 0, max: 100})
+      {0, 100}
+
+      iex> BB.TUI.State.remote_param_bounds(%{id: "X", value: 1, min: 0})
+      {0, nil}
+
+      iex> BB.TUI.State.remote_param_bounds(%{id: "X", value: 1})
+      nil
+  """
+  @spec remote_param_bounds(map()) :: {number() | nil, number() | nil} | nil
+  def remote_param_bounds(%{} = param) do
+    case {Map.get(param, :min), Map.get(param, :max)} do
+      {nil, nil} -> nil
+      bounds -> bounds
+    end
+  end
+
+  @doc """
   Returns `{min, max}` bounds for the parameter at `path` when the
   Spark-style metadata declares them, otherwise `nil`.
 

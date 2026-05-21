@@ -1291,6 +1291,140 @@ defmodule BB.TUI.AppTest do
       assert {:ok, [%{id: "ROLL_P"}]} = new_state.remote_parameters.mavlink
     end
 
+    test "l on a bridge tab calls set_remote_parameter with the selected param id" do
+      Fixtures.stub_bb_modules()
+
+      remote = [%{id: "PITCH_P", value: 0.10, min: 0.0, max: 1.0}]
+
+      Mimic.expect(BB.Parameter, :set_remote, fn _robot, :mavlink, "PITCH_P", value ->
+        # Range 0.0..1.0 → step = 0.01 per keypress.
+        assert_in_delta value, 0.11, 0.0001
+        :ok
+      end)
+
+      # set_remote success triggers a refresh; provide the updated list.
+      Mimic.expect(BB.Parameter, :list_remote, fn _robot, :mavlink ->
+        {:ok, [%{id: "PITCH_P", value: 0.11, min: 0.0, max: 1.0}]}
+      end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      # Cache reflects the refresh fired after :ok.
+      assert {:ok, [%{value: 0.11}]} = new_state.remote_parameters.mavlink
+    end
+
+    test "remote adjustment clamps integer to declared bounds" do
+      Fixtures.stub_bb_modules()
+
+      remote = [%{id: "RATE", value: 1000, min: 0, max: 1000}]
+
+      Mimic.expect(BB.Parameter, :set_remote, fn _robot, :mavlink, "RATE", 1000 -> :ok end)
+      Mimic.expect(BB.Parameter, :list_remote, fn _robot, :mavlink -> {:ok, remote} end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+      assert {:noreply, _} = App.update({:event, event}, state)
+    end
+
+    test "Enter on a bridge tab toggles a boolean remote param" do
+      Fixtures.stub_bb_modules()
+
+      remote = [%{id: "ARM_CHECKS", value: true}]
+
+      Mimic.expect(BB.Parameter, :set_remote, fn _robot, :mavlink, "ARM_CHECKS", false ->
+        :ok
+      end)
+
+      Mimic.expect(BB.Parameter, :list_remote, fn _robot, :mavlink ->
+        {:ok, [%{id: "ARM_CHECKS", value: false}]}
+      end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:ok, [%{value: false}]} = new_state.remote_parameters.mavlink
+    end
+
+    test "remote set returning {:error, _} leaves the cache untouched" do
+      Fixtures.stub_bb_modules()
+
+      remote = [%{id: "PITCH_P", value: 0.10, min: 0.0, max: 1.0}]
+
+      Mimic.expect(BB.Parameter, :set_remote, fn _, _, _, _ -> {:error, :nodedown} end)
+      # No Mimic.expect on list_remote — refresh must not fire on failure.
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.remote_parameters.mavlink == remote
+    end
+
+    test "remote adjustment is a no-op for a non-numeric remote param" do
+      remote = [%{id: "MODE", value: "AUTO"}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+      assert {:noreply, ^state} = App.update({:event, event}, state)
+    end
+
+    test "remote Enter is a no-op for a non-boolean remote param" do
+      remote = [%{id: "PITCH_P", value: 0.1}]
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+      assert {:noreply, ^state} = App.update({:event, event}, state)
+    end
+
     test "t key cycling back to :local does not call list_remote" do
       state =
         Fixtures.sample_state(%{
