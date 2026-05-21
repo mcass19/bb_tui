@@ -509,18 +509,21 @@ defmodule BB.TUI.Theme do
   def proximity_color(_), do: dim_text()
 
   @doc """
-  Returns the `[N]` badge prefix spans for a panel title, with the
-  number rendered bold-cyan to mirror the global number-key
-  keybinding. Returns an empty list when `n` is `nil`, so callers can
-  safely splat the result even for panels that aren't on the cycle
-  ring.
+  Returns the solid-pill badge spans for a panel title. The number
+  renders bold-black over a cyan background, mirroring the footer
+  keybind pills so the global `1`..`5` shortcuts are unmistakable in
+  the panel header. Returns an empty list when `n` is `nil`, so
+  callers can safely splat the result even for panels that aren't on
+  the cycle ring.
 
   ## Examples
 
-      iex> [%ExRatatui.Text.Span{content: " ["}, %ExRatatui.Text.Span{content: "3", style: style}, %ExRatatui.Text.Span{content: "] "}] =
+      iex> [%ExRatatui.Text.Span{content: " "}, %ExRatatui.Text.Span{content: " 3 ", style: style}, %ExRatatui.Text.Span{content: " "}] =
       ...>   BB.TUI.Theme.panel_badge_spans(3)
-      iex> style.fg
+      iex> style.bg
       :cyan
+      iex> style.fg
+      :black
       iex> :bold in style.modifiers
       true
 
@@ -532,9 +535,25 @@ defmodule BB.TUI.Theme do
 
   def panel_badge_spans(n) when is_integer(n) and n > 0 do
     [
-      %Span{content: " [", style: %Style{}},
-      %Span{content: Integer.to_string(n), style: %Style{fg: cyan(), modifiers: [:bold]}},
-      %Span{content: "] ", style: %Style{}}
+      %Span{content: " ", style: %Style{}},
+      %Span{
+        content: " #{n} ",
+        style: %Style{bg: cyan(), fg: :black, modifiers: [:bold]}
+      },
+      %Span{content: " ", style: %Style{}}
     ]
   end
+
+  @doc """
+  Bold style for panel title text, so the panel name stands shoulder
+  to shoulder with the solid number pill rendered by
+  `panel_badge_spans/1`.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.panel_title_style().modifiers
+      [:bold]
+  """
+  @spec panel_title_style() :: Style.t()
+  def panel_title_style, do: %Style{modifiers: [:bold]}
 end

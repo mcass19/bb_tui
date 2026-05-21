@@ -99,17 +99,17 @@ defmodule BB.TUI.Panels.Commands do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Commands.title_line(state)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [2] Commands (1) "
+      "  2  Commands (1) "
 
       iex> state = %BB.TUI.State{commands: []}
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Commands.title_line(state)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [2] Commands "
+      "  2  Commands "
   """
   @spec title_line(State.t()) :: Line.t()
   def title_line(%State{commands: []}) do
-    %Line{spans: badge() ++ [%Span{content: "Commands ", style: %Style{}}]}
+    %Line{spans: badge() ++ [%Span{content: "Commands ", style: Theme.panel_title_style()}]}
   end
 
   def title_line(%State{commands: cmds}) do
@@ -117,12 +117,12 @@ defmodule BB.TUI.Panels.Commands do
       spans:
         badge() ++
           [
-            %Span{content: "Commands (", style: %Style{}},
+            %Span{content: "Commands (", style: Theme.panel_title_style()},
             %Span{
               content: Integer.to_string(length(cmds)),
               style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
             },
-            %Span{content: ") ", style: %Style{}}
+            %Span{content: ") ", style: Theme.panel_title_style()}
           ]
     }
   end

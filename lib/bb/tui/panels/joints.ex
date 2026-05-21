@@ -212,7 +212,7 @@ defmodule BB.TUI.Panels.Joints do
   defp title_line do
     spans =
       Theme.panel_badge_spans(State.panel_number(:joints)) ++
-        [%Span{content: "Joint Control ", style: %Style{}}]
+        [%Span{content: "Joint Control ", style: Theme.panel_title_style()}]
 
     %Line{spans: spans}
   end

@@ -17,7 +17,7 @@ defmodule BB.TUI.Panels.CommandsTest do
 
       assert %WidgetList{} = widget
       assert widget.items == []
-      assert text(widget.block.title) == " [2] Commands "
+      assert text(widget.block.title) == "  2  Commands "
     end
 
     test "renders commands with Ready badge" do
@@ -56,7 +56,7 @@ defmodule BB.TUI.Panels.CommandsTest do
       state = Fixtures.sample_state(%{commands: commands})
       widget = Commands.render(state, false)
 
-      assert text(widget.block.title) == " [2] Commands (2) "
+      assert text(widget.block.title) == "  2  Commands (2) "
 
       %Line{spans: title_spans} = widget.block.title
       count = Enum.find(title_spans, &(&1.content == "2"))

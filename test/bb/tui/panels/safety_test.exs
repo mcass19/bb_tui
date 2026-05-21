@@ -16,7 +16,7 @@ defmodule BB.TUI.Panels.SafetyTest do
       assert widget.text =~ "ARMED"
       assert widget.text =~ "Runtime: Idle"
       assert %ExRatatui.Text.Line{spans: spans} = widget.block.title
-      assert Enum.map_join(spans, "", & &1.content) == " [1] Safety "
+      assert Enum.map_join(spans, "", & &1.content) == "  1  Safety "
     end
 
     test "returns Paragraph for disarmed state" do

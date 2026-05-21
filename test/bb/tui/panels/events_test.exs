@@ -21,7 +21,7 @@ defmodule BB.TUI.Panels.EventsTest do
 
       assert %WidgetList{} = widget
       assert widget.items == []
-      assert text(widget.block.title) == " [4] Events "
+      assert text(widget.block.title) == "  4  Events "
     end
 
     test "renders events with formatted entries" do
@@ -35,7 +35,7 @@ defmodule BB.TUI.Panels.EventsTest do
       widget = Events.render(state, true)
 
       assert length(widget.items) == 2
-      assert text(widget.block.title) == " [4] Events (2) "
+      assert text(widget.block.title) == "  4  Events (2) "
 
       first_item = text(hd(widget.items))
       assert first_item =~ "12:00:00"

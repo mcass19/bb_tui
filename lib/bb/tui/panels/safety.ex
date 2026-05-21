@@ -11,7 +11,6 @@ defmodule BB.TUI.Panels.Safety do
 
   alias BB.TUI.State
   alias BB.TUI.Theme
-  alias ExRatatui.Style
   alias ExRatatui.Text.Line
   alias ExRatatui.Text.Span
   alias ExRatatui.Widgets.Block
@@ -94,7 +93,7 @@ defmodule BB.TUI.Panels.Safety do
   defp title_line do
     spans =
       Theme.panel_badge_spans(State.panel_number(:safety)) ++
-        [%Span{content: "Safety ", style: %Style{}}]
+        [%Span{content: "Safety ", style: Theme.panel_title_style()}]
 
     %Line{spans: spans}
   end
