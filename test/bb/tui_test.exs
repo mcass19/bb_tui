@@ -218,4 +218,30 @@ defmodule BB.TUITest do
       assert {:error, :nope} = BB.TUI.run(BB.TUI.TestRobot)
     end
   end
+
+  describe "attach_telemetry_logger/1 + detach_telemetry_logger/0" do
+    test "attach succeeds and detach removes the handler" do
+      assert :ok = BB.TUI.attach_telemetry_logger()
+      assert :ok = BB.TUI.detach_telemetry_logger()
+    end
+
+    test "second attach without detach returns {:error, :already_exists}" do
+      assert :ok = BB.TUI.attach_telemetry_logger()
+
+      try do
+        assert {:error, :already_exists} = BB.TUI.attach_telemetry_logger()
+      after
+        :ok = BB.TUI.detach_telemetry_logger()
+      end
+    end
+
+    test "detach when nothing is attached returns {:error, :not_found}" do
+      assert {:error, :not_found} = BB.TUI.detach_telemetry_logger()
+    end
+
+    test "forwards keyword options through to the underlying logger" do
+      assert :ok = BB.TUI.attach_telemetry_logger(level: :info)
+      assert :ok = BB.TUI.detach_telemetry_logger()
+    end
+  end
 end
