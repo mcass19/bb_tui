@@ -4,28 +4,39 @@ defmodule BB.TUI.Panels.HelpTest do
 
   alias BB.TUI.Panels.Help
   alias ExRatatui.Text.Line
+  alias ExRatatui.Widgets.Markdown
   alias ExRatatui.Widgets.Popup
 
-  defp text(lines) when is_list(lines) do
-    lines
-    |> Enum.flat_map(fn %Line{spans: spans} -> spans end)
-    |> Enum.map_join("", & &1.content)
-  end
-
   describe "render/0" do
-    test "returns a Popup widget" do
-      assert %Popup{} = Help.render()
+    test "returns a Popup wrapping a Markdown widget" do
+      assert %Popup{content: %Markdown{}} = Help.render()
     end
 
-    test "contains keyboard shortcut labels and descriptions" do
-      widget = Help.render()
-      txt = text(widget.content.text)
+    test "markdown content carries every section heading" do
+      md = Help.markdown()
 
-      assert txt =~ "Tab"
-      assert txt =~ "Quit"
-      assert txt =~ "Arm"
-      assert txt =~ "Disarm"
-      assert txt =~ "Force disarm"
+      for heading <- [
+            "## Global",
+            "## Events panel",
+            "## Commands panel",
+            "## Command edit mode",
+            "## Joints panel",
+            "## Parameters panel"
+          ] do
+        assert md =~ heading
+      end
+    end
+
+    test "markdown content lists every documented keybinding" do
+      md = Help.markdown()
+
+      assert md =~ "`q` — Quit"
+      assert md =~ "Cycle active panel"
+      assert md =~ "Arm robot"
+      assert md =~ "Disarm robot"
+      assert md =~ "Force disarm (error state only)"
+      assert md =~ "`t`"
+      assert md =~ "Cycle enum value"
     end
 
     test "title is a rich-text Line containing 'Help'" do
@@ -34,21 +45,9 @@ defmodule BB.TUI.Panels.HelpTest do
       assert Enum.any?(title_spans, &(&1.content =~ "Help"))
     end
 
-    test "accepts scroll offset" do
+    test "scroll offset flows through to the Markdown widget" do
       widget = Help.render(5)
-      assert %Popup{} = widget
-      assert widget.content.scroll == {5, 0}
-    end
-
-    test "has cornflower-bold section headers" do
-      widget = Help.render()
-      lines = widget.content.text
-
-      assert Enum.any?(lines, fn %Line{spans: spans} ->
-               Enum.any?(spans, fn span ->
-                 span.content == "Global" and :bold in span.style.modifiers
-               end)
-             end)
+      assert %Popup{content: %Markdown{scroll: {5, 0}}} = widget
     end
   end
 end
