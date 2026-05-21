@@ -563,7 +563,7 @@ defmodule BB.TUI.State do
   Returns the current string value for an argument, falling back to the
   argument's `:default` (rendered as a string).
   """
-  @spec arg_value(t(), atom(), %{name: atom(), default: term()}) :: String.t()
+  @spec arg_value(t(), atom(), map()) :: String.t()
   def arg_value(%__MODULE__{command_form_values: form}, cmd_name, %{name: name, default: default}) do
     case form |> Map.get(cmd_name, %{}) |> Map.fetch(name) do
       {:ok, value} -> value
