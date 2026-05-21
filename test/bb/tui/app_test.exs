@@ -1136,6 +1136,145 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, ^state} = App.update({:event, event}, state)
     end
 
+    test "l/right scales float step to 1% of declared range" do
+      Fixtures.stub_bb_modules()
+
+      # Range 0.0..1.0 → step = (1.0 - 0.0) / 100 = 0.01 per keypress.
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:kp], val ->
+        assert_in_delta val, 0.51, 0.0001
+        :ok
+      end)
+
+      params = [{[:kp], 0.5}]
+      meta = %{[:kp] => %{type: {:float, [min: 0.0, max: 1.0]}}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "L scales float step to 10% of declared range" do
+      Fixtures.stub_bb_modules()
+
+      # Range 0.0..1.0 → 10x step = 0.1.
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:kp], val ->
+        assert_in_delta val, 0.6, 0.0001
+        :ok
+      end)
+
+      params = [{[:kp], 0.5}]
+      meta = %{[:kp] => %{type: {:float, [min: 0.0, max: 1.0]}}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "l/right clamps float value at upper bound" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:kp], val ->
+        assert_in_delta val, 1.0, 0.0001
+        :ok
+      end)
+
+      params = [{[:kp], 1.0}]
+      meta = %{[:kp] => %{type: {:float, [min: 0.0, max: 1.0]}}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "h/left clamps integer value at lower bound" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 0 -> :ok end)
+
+      params = [{[:count], 0}]
+      meta = %{[:count] => %{type: {:integer, [min: 0, max: 1_000]}}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "H", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "l/right scales integer step to 1% of declared range" do
+      Fixtures.stub_bb_modules()
+
+      # Range 0..1_000 → step = div(1_000 - 0, 100) = 10 per keypress.
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 110 -> :ok end)
+
+      params = [{[:count], 100}]
+      meta = %{[:count] => %{type: {:integer, [min: 0, max: 1_000]}}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "integer step is at least 1 even for tiny ranges" do
+      Fixtures.stub_bb_modules()
+
+      # Range 0..10 → div(10, 100) would be 0, so the floor kicks in.
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 6 -> :ok end)
+
+      params = [{[:count], 5}]
+      meta = %{[:count] => %{type: {:integer, [min: 0, max: 10]}}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
     test "parameter adjustment does nothing with empty parameters" do
       state =
         Fixtures.sample_state(%{active_panel: :parameters, parameters: [], param_selected: 0})

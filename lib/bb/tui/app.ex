@@ -685,14 +685,16 @@ defmodule BB.TUI.App do
   defp adjust_selected_param(state, direction, multiplier) do
     case State.selected_param(state) do
       {path, value} when is_integer(value) ->
-        step = multiplier
-        new_value = if direction == :increase, do: value + step, else: value - step
+        bounds = State.parameter_bounds(state, path)
+        step = integer_step(bounds) * multiplier
+        new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
         Robot.set_parameter(state.robot, path, new_value, state.node)
         {:noreply, state}
 
       {path, value} when is_float(value) ->
-        step = 0.1 * multiplier
-        new_value = if direction == :increase, do: value + step, else: value - step
+        bounds = State.parameter_bounds(state, path)
+        step = float_step(bounds) * multiplier
+        new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
         Robot.set_parameter(state.robot, path, new_value, state.node)
         {:noreply, state}
 
@@ -700,6 +702,17 @@ defmodule BB.TUI.App do
         {:noreply, state}
     end
   end
+
+  defp integer_step({min, max}) when is_integer(min) and is_integer(max),
+    do: max(div(max - min, 100), 1)
+
+  defp integer_step(_), do: 1
+
+  defp float_step({min, max}) when is_number(min) and is_number(max), do: (max - min) / 100
+  defp float_step(_), do: 0.1
+
+  defp apply_step(value, :increase, step), do: value + step
+  defp apply_step(value, :decrease, step), do: value - step
 
   defp toggle_selected_param(state) do
     case State.selected_param(state) do
