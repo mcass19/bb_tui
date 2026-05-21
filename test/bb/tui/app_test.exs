@@ -1253,6 +1253,60 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, _new_state} = App.update({:event, event}, state)
     end
 
+    test "t key on local tab is a no-op when no bridges are discovered" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local],
+          parameter_tab_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "t", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.parameter_tab_selected == 0
+      assert new_state.remote_parameters == %{}
+    end
+
+    test "t key cycles to a bridge tab and fetches its parameters" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :list_remote, fn _robot, :mavlink ->
+        {:ok, [%{id: "ROLL_P", value: 0.1, type: :float}]}
+      end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 0,
+          param_selected: 3
+        })
+
+      event = %ExRatatui.Event.Key{code: "t", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.parameter_tab_selected == 1
+      assert new_state.param_selected == 0
+      assert {:ok, [%{id: "ROLL_P"}]} = new_state.remote_parameters.mavlink
+    end
+
+    test "t key cycling back to :local does not call list_remote" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: []}
+        })
+
+      # No Mimic.expect — if list_remote were called the test would fail.
+      event = %ExRatatui.Event.Key{code: "t", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.parameter_tab_selected == 0
+    end
+
     test "integer step is at least 1 even for tiny ranges" do
       Fixtures.stub_bb_modules()
 

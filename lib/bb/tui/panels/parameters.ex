@@ -2,23 +2,29 @@ defmodule BB.TUI.Panels.Parameters do
   @moduledoc """
   Parameters panel — displays robot parameters grouped by path.
 
-  Shows parameter paths and their current values in a table format.
+  Renders a tab strip in the title when remote bridges have been
+  discovered. The `Local` tab shows parameters from `state.parameters`
+  (with schema metadata from `state.parameter_metadata`). Bridge tabs
+  show entries from `state.remote_parameters[bridge_name]`, which the
+  app populates by calling `BB.Parameter.list_remote/2` whenever the
+  user switches to that tab.
 
   Pure function — takes state, returns a widget struct.
   """
 
   alias BB.TUI.State
   alias BB.TUI.Theme
+  alias ExRatatui.Style
+  alias ExRatatui.Text.Line
+  alias ExRatatui.Text.Span
   alias ExRatatui.Widgets.Block
   alias ExRatatui.Widgets.Table
 
   @doc """
-  Renders the parameters panel as a Table widget with path, value, and
-  schema-declared type columns.
-
-  When `state.parameter_metadata` carries no entry for a path (e.g. the
-  parameter was registered without a Spark schema), the Type column
-  falls back to `"—"`.
+  Renders the parameters panel as a Table widget. Columns depend on the
+  selected tab: the local tab shows `Parameter | Value | Type`, while a
+  bridge tab shows `Parameter | Value | Type` populated from the remote
+  fetch result.
 
   ## Examples
 
@@ -33,26 +39,9 @@ defmodule BB.TUI.Panels.Parameters do
       [["No parameters defined", "", ""]]
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(
-        %State{parameters: parameters, parameter_metadata: meta, param_selected: selected},
-        focused?
-      ) do
-    rows =
-      case parameters do
-        [] ->
-          [["No parameters defined", "", ""]]
-
-        params ->
-          params
-          |> Enum.sort_by(fn {path, _} -> path end)
-          |> Enum.map(fn {path, value} ->
-            [
-              format_path(path),
-              format_value(value) <> edit_hint(value),
-              format_type(meta[path])
-            ]
-          end)
-      end
+  def render(state, focused?) do
+    tab = State.selected_parameter_tab(state)
+    {rows, count} = rows_and_count(state, tab)
 
     %Table{
       rows: rows,
@@ -62,17 +51,89 @@ defmodule BB.TUI.Panels.Parameters do
         {:percentage, 30},
         {:percentage, 25}
       ],
-      selected: if(focused? and parameters != [], do: selected),
+      selected: if(focused? and selectable_rows?(rows), do: state.param_selected),
       highlight_style: Theme.highlight_style(),
       highlight_symbol: "\u{25B6} ",
       block: %Block{
-        title: title(length(parameters)),
+        title: title_line(state.parameter_tabs, state.parameter_tab_selected, count),
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(focused?)
       }
     }
   end
+
+  defp rows_and_count(state, :local) do
+    case state.parameters do
+      [] ->
+        {[["No parameters defined", "", ""]], 0}
+
+      params ->
+        sorted = Enum.sort_by(params, fn {path, _} -> path end)
+
+        rows =
+          Enum.map(sorted, fn {path, value} ->
+            [
+              format_path(path),
+              format_value(value) <> edit_hint(value),
+              format_type(state.parameter_metadata[path])
+            ]
+          end)
+
+        {rows, length(sorted)}
+    end
+  end
+
+  defp rows_and_count(state, {:bridge, name}) do
+    case state.remote_parameters[name] do
+      nil ->
+        {[["Loading…", "", ""]], 0}
+
+      {:error, reason} ->
+        {[["Error: #{inspect(reason)}", "", ""]], 0}
+
+      [] ->
+        {[["No remote parameters", "", ""]], 0}
+
+      params when is_list(params) ->
+        sorted = Enum.sort_by(params, &remote_id_string/1)
+        rows = Enum.map(sorted, &remote_row/1)
+        {rows, length(sorted)}
+    end
+  end
+
+  defp remote_row(param) do
+    [
+      remote_id_string(param),
+      param |> Map.get(:value) |> format_value() |> append_edit_hint(param),
+      format_remote_type(param)
+    ]
+  end
+
+  defp remote_id_string(%{id: id}) when is_binary(id), do: id
+  defp remote_id_string(%{id: id}), do: to_string(id)
+  defp remote_id_string(_), do: ""
+
+  defp append_edit_hint(value_str, %{value: v}) when is_number(v) or is_boolean(v),
+    do: value_str <> edit_hint(v)
+
+  defp append_edit_hint(value_str, _), do: value_str
+
+  defp format_remote_type(%{type: type}) when is_atom(type) and not is_nil(type),
+    do: inspect(type)
+
+  defp format_remote_type(%{type: type}) when is_binary(type), do: type
+  defp format_remote_type(_), do: "—"
+
+  defp selectable_rows?([[only_label | _]])
+       when only_label in ["No parameters defined", "Loading…", "No remote parameters"],
+       do: false
+
+  defp selectable_rows?([[label | _]]) when is_binary(label) do
+    not String.starts_with?(label, "Error: ")
+  end
+
+  defp selectable_rows?(_), do: true
 
   @doc """
   Formats a parameter's Spark-declared type for the Type column.
@@ -133,19 +194,95 @@ defmodule BB.TUI.Panels.Parameters do
   def edit_hint(_val), do: ""
 
   @doc """
-  Builds the panel title with parameter count.
+  Builds the panel title as a rich `%Line{}` carrying the tab strip.
+
+  Single-tab (local-only) state renders as ` Parameters (N) ` with a
+  bold-cyan count. Multi-tab state renders ` Parameters · Local | mavlink ` etc.,
+  with the active tab bold-cyan and a trailing `[t]` hint that mirrors
+  the keybinding documented in the README.
 
   ## Examples
 
-      iex> BB.TUI.Panels.Parameters.title(0)
+      iex> %ExRatatui.Text.Line{spans: spans} =
+      ...>   BB.TUI.Panels.Parameters.title_line([:local], 0, 5)
+      iex> Enum.map_join(spans, "", & &1.content)
+      " Parameters (5) "
+
+      iex> %ExRatatui.Text.Line{spans: spans} =
+      ...>   BB.TUI.Panels.Parameters.title_line([:local], 0, 0)
+      iex> Enum.map_join(spans, "", & &1.content)
       " Parameters "
 
-      iex> BB.TUI.Panels.Parameters.title(5)
-      " Parameters (5) "
+      iex> %ExRatatui.Text.Line{spans: spans} =
+      ...>   BB.TUI.Panels.Parameters.title_line([:local, {:bridge, :mavlink}], 1, 12)
+      iex> Enum.map_join(spans, "", & &1.content)
+      " Parameters · Local | mavlink (12) [t] "
   """
-  @spec title(non_neg_integer()) :: String.t()
-  def title(0), do: " Parameters "
-  def title(count), do: " Parameters (#{count}) "
+  @spec title_line([atom() | {:bridge, atom()}], non_neg_integer(), non_neg_integer()) :: Line.t()
+  def title_line([:local], _idx, 0) do
+    %Line{spans: [%Span{content: " Parameters ", style: %Style{}}]}
+  end
+
+  def title_line([:local], _idx, count) do
+    %Line{
+      spans: [
+        %Span{content: " Parameters (", style: %Style{}},
+        %Span{
+          content: Integer.to_string(count),
+          style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+        },
+        %Span{content: ") ", style: %Style{}}
+      ]
+    }
+  end
+
+  def title_line(tabs, idx, count) do
+    tab_spans =
+      tabs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {tab, i} -> tab_span(tab, i == idx, count) end)
+      |> drop_trailing_separator()
+
+    %Line{
+      spans:
+        [%Span{content: " Parameters · ", style: %Style{}}] ++
+          tab_spans ++ [%Span{content: " [t] ", style: %Style{fg: Theme.dim_text()}}]
+    }
+  end
+
+  defp tab_span(:local, active?, count), do: labeled_span("Local", active?, count) ++ separator()
+
+  defp tab_span({:bridge, name}, active?, count),
+    do: labeled_span(Atom.to_string(name), active?, count) ++ separator()
+
+  defp labeled_span(label, true, count) when count > 0 do
+    [
+      %Span{
+        content: "#{label} (#{count})",
+        style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+      }
+    ]
+  end
+
+  defp labeled_span(label, true, _count) do
+    [
+      %Span{
+        content: label,
+        style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+      }
+    ]
+  end
+
+  defp labeled_span(label, false, _count) do
+    [%Span{content: label, style: %Style{fg: Theme.dim_text()}}]
+  end
+
+  defp separator, do: [%Span{content: " | ", style: %Style{fg: Theme.dim_text()}}]
+
+  # tab_span/3 always emits a `" | "` separator after the tab label, so
+  # the last entry in the flat-mapped span list is guaranteed to be a
+  # separator we can drop unconditionally.
+  defp drop_trailing_separator(spans), do: Enum.drop(spans, -1)
 
   @doc """
   Formats a parameter path list as a dot-separated string.

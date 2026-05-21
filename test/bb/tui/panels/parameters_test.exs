@@ -14,7 +14,7 @@ defmodule BB.TUI.Panels.ParametersTest do
       assert %Table{} = widget
       assert widget.header == ["Parameter", "Value", "Type"]
       assert widget.rows == [["No parameters defined", "", ""]]
-      assert widget.block.title == " Parameters "
+      assert %ExRatatui.Text.Line{spans: [%{content: " Parameters "}]} = widget.block.title
     end
 
     test "renders parameters with path, value, and edit hints" do
@@ -23,7 +23,8 @@ defmodule BB.TUI.Panels.ParametersTest do
       widget = Parameters.render(state, true)
 
       assert length(widget.rows) == 2
-      assert widget.block.title == " Parameters (2) "
+      assert %ExRatatui.Text.Line{spans: spans} = widget.block.title
+      assert Enum.map_join(spans, "", & &1.content) == " Parameters (2) "
 
       # Numeric values get [h/l] edit hint
       [_first, second] = widget.rows
@@ -144,6 +145,138 @@ defmodule BB.TUI.Panels.ParametersTest do
 
       [row] = widget.rows
       assert Enum.at(row, 2) == "—"
+    end
+  end
+
+  describe "render/2 — bridge tabs" do
+    test "renders 'Loading…' row when the bridge has not yet been fetched" do
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{}
+        })
+
+      widget = Parameters.render(state, true)
+
+      assert widget.rows == [["Loading…", "", ""]]
+      assert widget.selected == nil
+    end
+
+    test "renders an Error row when list_remote returned {:error, reason}" do
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: {:error, :nodedown}}
+        })
+
+      widget = Parameters.render(state, true)
+
+      assert [["Error: :nodedown", "", ""]] = widget.rows
+      assert widget.selected == nil
+    end
+
+    test "renders 'No remote parameters' for an empty list" do
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: []}
+        })
+
+      widget = Parameters.render(state, true)
+      assert widget.rows == [["No remote parameters", "", ""]]
+      assert widget.selected == nil
+    end
+
+    test "renders one row per remote parameter sorted by id" do
+      remote = [
+        %{id: "ROLL_P", value: 0.05, type: :float},
+        %{id: "PITCH_P", value: 0.1, type: "float"}
+      ]
+
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote},
+          param_selected: 0
+        })
+
+      widget = Parameters.render(state, true)
+
+      # Atom :type renders with leading colon; string :type renders as-is.
+      assert [["PITCH_P", value_p, "float"], ["ROLL_P", _, ":float"]] = widget.rows
+      assert value_p =~ "0.100"
+      # Numeric values pick up the [h/l] hint.
+      assert value_p =~ "[h/l]"
+      assert widget.selected == 0
+    end
+
+    test "atom ids and missing types render cleanly" do
+      remote = [%{id: :gain, value: true}]
+
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote}
+        })
+
+      widget = Parameters.render(state, false)
+      [[id, value, type]] = widget.rows
+      assert id == "gain"
+      assert value == "true [enter]"
+      assert type == "—"
+    end
+
+    test "remote rows with no :id key fall back to an empty label" do
+      remote = [%{value: 1}]
+
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote}
+        })
+
+      widget = Parameters.render(state, false)
+      [[id | _]] = widget.rows
+      assert id == ""
+    end
+
+    test "non-numeric remote values get no edit hint" do
+      remote = [%{id: "MODE", value: "AUTO"}]
+
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: remote}
+        })
+
+      widget = Parameters.render(state, false)
+      [[_id, value, _type]] = widget.rows
+      refute value =~ "[h/l]"
+      refute value =~ "[enter]"
+    end
+
+    test "title strip lists tabs with the active one highlighted" do
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: [%{id: "ROLL_P", value: 0.0, type: :float}]}
+        })
+
+      widget = Parameters.render(state, true)
+      assert %ExRatatui.Text.Line{spans: spans} = widget.block.title
+      rendered = Enum.map_join(spans, "", & &1.content)
+      assert rendered =~ "Local"
+      assert rendered =~ "mavlink"
+      assert rendered =~ "[t]"
+      assert rendered =~ "(1)"
     end
   end
 

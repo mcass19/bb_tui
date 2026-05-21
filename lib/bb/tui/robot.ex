@@ -103,6 +103,115 @@ defmodule BB.TUI.Robot do
   def list_parameters(robot, opts, node), do: rpc(node, BB.Parameter, :list, [robot, opts])
 
   @doc """
+  Returns the list of declared parameter bridges for the robot.
+
+  Each bridge is rendered down to `%{name: atom(), simulation: atom()}` for
+  the UI; the underlying `BB.Dsl.Bridge` struct is not exposed so callers
+  don't depend on Spark internals. Bridges where `:simulation` is `:omit`
+  while the robot is in simulation mode are filtered out (matching
+  `bb_liveview`'s discovery rules).
+
+  Returns `[]` when the DSL is unavailable or raises.
+  """
+  @spec list_bridges(module(), maybe_node()) :: [map()]
+  def list_bridges(robot, nil) do
+    if Code.ensure_loaded?(Info) and function_exported?(Info, :parameters, 1) do
+      sim_mode = local_simulation_mode(robot)
+
+      robot
+      |> Info.parameters()
+      |> filter_bridges(sim_mode)
+    else
+      []
+    end
+  rescue
+    _ -> []
+  end
+
+  def list_bridges(robot, node) do
+    sim_mode = remote_simulation_mode(robot, node)
+
+    case Rpc.call(node, BB.Dsl.Info, :parameters, [robot]) do
+      {:badrpc, _} -> []
+      result when is_list(result) -> filter_bridges(result, sim_mode)
+      _ -> []
+    end
+  rescue
+    _ -> []
+  end
+
+  @doc """
+  Lists parameters exposed by a remote bridge.
+
+  Returns the bridge's flat parameter list (each entry a map carrying
+  `:id`, `:value`, `:type`, optionally `:min`, `:max`, `:doc`). Returns
+  `{:error, reason}` when the bridge is unavailable or the call fails.
+  """
+  @spec list_remote_parameters(module(), atom(), maybe_node()) ::
+          {:ok, [map()]} | {:error, term()}
+  def list_remote_parameters(robot, bridge_name, nil) do
+    BB.Parameter.list_remote(robot, bridge_name)
+  rescue
+    e -> {:error, Exception.message(e)}
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  def list_remote_parameters(robot, bridge_name, node) do
+    case Rpc.call(node, BB.Parameter, :list_remote, [robot, bridge_name]) do
+      {:badrpc, reason} -> {:error, reason}
+      result -> result
+    end
+  end
+
+  @doc """
+  Sets a parameter value on a remote bridge.
+  """
+  @spec set_remote_parameter(module(), atom(), term(), term(), maybe_node()) ::
+          :ok | {:error, term()}
+  def set_remote_parameter(robot, bridge_name, param_id, value, nil) do
+    BB.Parameter.set_remote(robot, bridge_name, param_id, value)
+  rescue
+    e -> {:error, Exception.message(e)}
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  def set_remote_parameter(robot, bridge_name, param_id, value, node) do
+    case Rpc.call(node, BB.Parameter, :set_remote, [robot, bridge_name, param_id, value]) do
+      {:badrpc, reason} -> {:error, reason}
+      result -> result
+    end
+  end
+
+  defp local_simulation_mode(robot) do
+    Runtime.simulation_mode(robot)
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
+  end
+
+  defp remote_simulation_mode(robot, node) do
+    case Rpc.call(node, BB.Robot.Runtime, :simulation_mode, [robot]) do
+      {:badrpc, _} -> nil
+      mode when is_atom(mode) -> mode
+      _ -> nil
+    end
+  end
+
+  defp filter_bridges(entities, sim_mode) do
+    entities
+    |> Enum.filter(&match?(%BB.Dsl.Bridge{}, &1))
+    |> Enum.reject(fn bridge ->
+      sim_mode != nil and bridge.simulation == :omit
+    end)
+    |> Enum.map(fn bridge ->
+      %{name: bridge.name, simulation: bridge.simulation}
+    end)
+  end
+
+  @doc """
   Returns the list of declared commands for the robot, normalized for the
   UI. Returns `[]` if the command DSL is not available or raises.
 
