@@ -71,6 +71,20 @@ defmodule BB.TUI.App do
   routing through a no-op result mapper would dwarf the call. Only
   `Robot.execute_command/4`, which monitors a spawned command process
   and waits for its `:DOWN`, goes through `Command.async/2`.
+
+  ## Configuration
+
+  The wait window for `BB.Command.await/2` is compile-time configurable
+  via `Application.compile_env/3`:
+
+      # config/config.exs
+      config :bb_tui, command_timeout: 30_000
+
+  Default is `30_000` ms. The test suite overrides this to `100` ms in
+  `config/test.exs` to keep timeout assertions snappy. Because the
+  value is read with `compile_env`, downstream apps need to recompile
+  `:bb_tui` after changing the config (`mix deps.compile bb_tui
+  --force`).
   """
 
   use ExRatatui.App, runtime: :reducer

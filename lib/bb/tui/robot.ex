@@ -170,6 +170,7 @@ defmodule BB.TUI.Robot do
 
   defp format_type(type) when is_atom(type), do: Atom.to_string(type)
   defp format_type({:in, values}), do: "enum:#{inspect(values)}"
+  defp format_type(other), do: inspect(other)
 
   # ── Write calls ────────────────────────────────────────────
 
