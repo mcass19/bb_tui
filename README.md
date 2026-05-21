@@ -349,16 +349,24 @@ config :bb_tui, command_timeout: 30_000
 
 Active when the selected command declares arguments and Enter is pressed.
 
-| Key             | Action                            |
-|-----------------|-----------------------------------|
-| `Tab` / `Down`  | Focus next argument               |
-| `Shift+Tab` / `Up` | Focus previous argument        |
-| Printable key   | Append to focused argument        |
-| `Backspace`     | Delete last char of focused arg   |
-| `Enter`         | Execute with current values       |
-| `Esc`           | Exit edit mode (keeps values)     |
+| Key             | Action                                                  |
+|-----------------|---------------------------------------------------------|
+| `Tab` / `Down`  | Focus next argument                                     |
+| `Shift+Tab` / `Up` | Focus previous argument                              |
+| Printable key   | Append to focused argument                              |
+| `Backspace`     | Delete last char of focused arg                         |
+| `←` / `h`       | Cycle to previous value (enum args only)                |
+| `→` / `l`       | Cycle to next value (enum args only)                    |
+| `Enter`         | Execute with current values                             |
+| `Esc`           | Exit edit mode (keeps values)                           |
 
-Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → atom, numeric → integer or float, otherwise string.
+Enum-typed args (`{:in, [...]}` in the Spark schema) render as
+`‹ value ›` chevrons and respond to `←/→` (or `h/l`) instead of needing
+the atom typed literally. For non-enum args, `h`/`l` continue to append
+to the buffer; `←`/`→` are no-ops outside of enum picks.
+
+Values are parsed before dispatch: `"true"`/`"false"` → boolean,
+`":foo"` → atom, numeric → integer or float, otherwise string.
 
 ### Joints panel
 

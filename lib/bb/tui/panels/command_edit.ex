@@ -58,7 +58,7 @@ defmodule BB.TUI.Panels.CommandEdit do
         arg_lines(state, cmd_name, arg, i == state.command_focused_arg)
       end)
 
-    text = line_groups ++ [%Line{spans: []}, hint_line()]
+    text = line_groups ++ [%Line{spans: []}, hint_line(args)]
 
     content = %Paragraph{text: text, style: %Style{fg: :white}}
 
@@ -92,6 +92,27 @@ defmodule BB.TUI.Panels.CommandEdit do
     [field_line(state, cmd_name, arg, focused?) | doc_line(arg)]
   end
 
+  defp field_line(state, cmd_name, %{enum_values: [_ | _]} = arg, focused?) do
+    name = to_string(arg.name)
+    type = arg.type
+    value = State.arg_value(state, cmd_name, arg)
+    prefix = if focused?, do: " › ", else: "   "
+    required_marker = if Map.get(arg, :required, false), do: "*", else: ""
+
+    %Line{
+      spans: [
+        %Span{content: prefix, style: %Style{fg: Theme.cyan()}},
+        %Span{content: name, style: %Style{fg: :white, modifiers: [:bold]}},
+        %Span{content: required_marker, style: %Style{fg: Theme.red(), modifiers: [:bold]}},
+        %Span{content: " (#{type})", style: %Style{fg: Theme.dim_text()}},
+        %Span{content: ": ", style: %Style{fg: Theme.dim_text()}},
+        %Span{content: "‹ ", style: %Style{fg: Theme.cyan()}},
+        %Span{content: enum_display(value), style: value_style(focused?)},
+        %Span{content: " ›", style: %Style{fg: Theme.cyan()}}
+      ]
+    }
+  end
+
   defp field_line(state, cmd_name, arg, focused?) do
     name = to_string(arg.name)
     type = arg.type
@@ -113,6 +134,9 @@ defmodule BB.TUI.Panels.CommandEdit do
     }
   end
 
+  defp enum_display(":" <> rest) when byte_size(rest) > 0, do: rest
+  defp enum_display(value), do: value
+
   defp doc_line(arg) do
     case Map.get(arg, :doc) do
       doc when is_binary(doc) and byte_size(doc) > 0 ->
@@ -126,11 +150,16 @@ defmodule BB.TUI.Panels.CommandEdit do
   defp value_style(true), do: %Style{fg: :white, modifiers: [:bold]}
   defp value_style(false), do: %Style{fg: Theme.dim_text()}
 
-  defp hint_line do
+  defp hint_line(args) do
+    base = " [Tab] next  [⇧Tab] prev  [⏎] execute  [Esc] cancel"
+
+    extra =
+      if Enum.any?(args, &match?(%{enum_values: [_ | _]}, &1)), do: "  [←/→] cycle", else: ""
+
     %Line{
       spans: [
         %Span{
-          content: " [Tab] next  [⇧Tab] prev  [⏎] execute  [Esc] cancel",
+          content: base <> extra,
           style: %Style{fg: Theme.dim_text()}
         }
       ]

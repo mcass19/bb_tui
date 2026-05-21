@@ -392,6 +392,14 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: code, kind: "press"}},
         %{active_panel: :commands, command_edit_mode: true} = state
       )
+      when code in ["left", "right", "h", "l"] do
+    handle_arg_horizontal_key(state, code)
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      )
       when byte_size(code) == 1 do
     {:noreply, State.append_to_focused_arg(state, code)}
   end
@@ -793,6 +801,20 @@ defmodule BB.TUI.App do
     case State.selected_remote_param(state) do
       %{value: value} = param when is_boolean(value) ->
         dispatch_remote_set(state, bridge_name, param, !value)
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  defp handle_arg_horizontal_key(state, code) do
+    case State.focused_arg_enum_values(state) do
+      [_ | _] ->
+        direction = if code in ["right", "l"], do: :next, else: :prev
+        {:noreply, State.cycle_focused_enum(state, direction)}
+
+      _ when byte_size(code) == 1 ->
+        {:noreply, State.append_to_focused_arg(state, code)}
 
       _ ->
         {:noreply, state}

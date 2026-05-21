@@ -96,8 +96,10 @@ defmodule BB.TUI.RobotTest do
       [%{arguments: [angle_arg, side_arg]}] = Robot.discover_commands(@robot, nil)
       assert angle_arg.type == "float"
       assert angle_arg.required == true
+      assert angle_arg.enum_values == nil
       assert side_arg.type == "enum:[:left, :right]"
       assert side_arg.required == false
+      assert side_arg.enum_values == [:left, :right]
     end
 
     test "returns [] when BB.Dsl.Info.commands raises" do

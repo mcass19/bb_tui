@@ -593,6 +593,81 @@ defmodule BB.TUI.AppTest do
       assert new_state.command_form_values == %{move: %{angle: "1."}}
     end
 
+    test "right arrow cycles the focused enum forward" do
+      enum_cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{
+            name: :side,
+            type: "enum:[:left, :right]",
+            enum_values: [:left, :right],
+            default: :left
+          }
+        ]
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: [enum_cmd],
+          command_selected: 0,
+          command_edit_mode: true,
+          command_focused_arg: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "right", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_form_values == %{move: %{side: ":right"}}
+    end
+
+    test "h cycles the focused enum backward when the focused arg is enum-typed" do
+      enum_cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{
+            name: :side,
+            type: "enum:[:left, :right]",
+            enum_values: [:left, :right],
+            default: :left
+          }
+        ]
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: [enum_cmd],
+          command_selected: 0,
+          command_edit_mode: true,
+          command_focused_arg: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_form_values == %{move: %{side: ":right"}}
+    end
+
+    test "h on a non-enum arg falls through to the append handler" do
+      state = edit_mode_state(%{command_focused_arg: 0})
+
+      event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.command_form_values == %{move: %{angle: "1.5h"}}
+    end
+
+    test "left arrow on a non-enum arg is a no-op" do
+      state = edit_mode_state(%{command_focused_arg: 0})
+
+      event = %ExRatatui.Event.Key{code: "left", kind: "press"}
+
+      assert {:noreply, ^state} = App.update({:event, event}, state)
+    end
+
     test "enter in edit mode executes with parsed args and exits edit mode" do
       state =
         edit_mode_state(%{

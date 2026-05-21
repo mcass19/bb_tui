@@ -268,9 +268,12 @@ defmodule BB.TUI.Robot do
   end
 
   defp format_argument(arg) do
+    raw_type = Map.get(arg, :type, :string)
+
     %{
       name: arg.name,
-      type: format_type(Map.get(arg, :type, :string)),
+      type: format_type(raw_type),
+      enum_values: enum_values(raw_type),
       required: Map.get(arg, :required, false),
       default: Map.get(arg, :default),
       doc: Map.get(arg, :doc)
@@ -280,6 +283,9 @@ defmodule BB.TUI.Robot do
   defp format_type(type) when is_atom(type), do: Atom.to_string(type)
   defp format_type({:in, values}), do: "enum:#{inspect(values)}"
   defp format_type(other), do: inspect(other)
+
+  defp enum_values({:in, values}) when is_list(values), do: values
+  defp enum_values(_), do: nil
 
   # ── Write calls ────────────────────────────────────────────
 
