@@ -36,14 +36,16 @@ defmodule BB.TUI.Panels.Joints do
     rows =
       joints
       |> Enum.sort_by(fn {name, _} -> name end)
-      |> Enum.map(fn {name, %{position: pos, joint: joint}} ->
+      |> Enum.map(fn {name, joint_data} ->
+        %{position: pos, joint: joint} = joint_data
+        target = Map.get(joint_data, :target)
         proximity = State.limit_proximity(pos, joint)
 
         [
           name_span(name, joint),
           format_type(joint),
           position_span(pos, joint, proximity),
-          position_bar_line(pos, joint, proximity)
+          position_bar_line(pos, joint, proximity, target)
         ]
       end)
 
@@ -210,38 +212,60 @@ defmodule BB.TUI.Panels.Joints do
   defp position_modifiers(:normal), do: []
   defp position_modifiers(_), do: [:bold]
 
-  defp position_bar_line(nil, _joint, _proximity), do: ""
-  defp position_bar_line(_pos, %{type: :continuous}, _proximity), do: ""
+  defp position_bar_line(nil, _joint, _proximity, _target), do: ""
+  defp position_bar_line(_pos, %{type: :continuous}, _proximity, _target), do: ""
 
-  defp position_bar_line(pos, joint, proximity) do
+  defp position_bar_line(pos, joint, proximity, target) do
     case get_limits(joint) do
       {lower, upper} when upper > lower ->
-        ratio = (pos - lower) / (upper - lower)
-        ratio = max(0.0, min(1.0, ratio))
-        marker_pos = round(ratio * (@bar_width - 1))
-        marker = marker_char(proximity)
-
-        track_left = String.duplicate("\u{2500}", marker_pos)
-        track_right = String.duplicate("\u{2500}", @bar_width - 1 - marker_pos)
-
+        marker_pos = ratio_to_cell(pos, lower, upper)
+        target_cell = target_cell(target, lower, upper, marker_pos)
+        track_spans = bar_track_spans(marker_pos, target_cell, proximity)
         low_label = format_limit(lower, joint)
         high_label = format_limit(upper, joint)
 
         %Line{
-          spans: [
-            %Span{content: "#{low_label} ", style: %Style{fg: Theme.dim_text()}},
-            %Span{content: track_left, style: %Style{fg: Theme.dim_border()}},
-            %Span{
-              content: marker,
-              style: %Style{fg: Theme.proximity_color(proximity), modifiers: [:bold]}
-            },
-            %Span{content: track_right, style: %Style{fg: Theme.dim_border()}},
-            %Span{content: " #{high_label}", style: %Style{fg: Theme.dim_text()}}
-          ]
+          spans:
+            [%Span{content: "#{low_label} ", style: %Style{fg: Theme.dim_text()}}] ++
+              track_spans ++
+              [%Span{content: " #{high_label}", style: %Style{fg: Theme.dim_text()}}]
         }
 
       _ ->
         ""
     end
   end
+
+  defp bar_track_spans(marker_pos, target_cell, proximity) do
+    marker_style = %Style{fg: Theme.proximity_color(proximity), modifiers: [:bold]}
+    marker = marker_char(proximity)
+
+    0..(@bar_width - 1)
+    |> Enum.map(&cell_span(&1, marker_pos, marker, marker_style, target_cell))
+  end
+
+  defp cell_span(cell, marker_pos, marker, marker_style, _target_cell) when cell == marker_pos,
+    do: %Span{content: marker, style: marker_style}
+
+  defp cell_span(cell, _marker_pos, _marker, _marker_style, target_cell) when cell == target_cell,
+    do: %Span{content: target_marker(), style: target_style()}
+
+  defp cell_span(_cell, _marker_pos, _marker, _marker_style, _target_cell),
+    do: %Span{content: "\u{2500}", style: %Style{fg: Theme.dim_border()}}
+
+  defp ratio_to_cell(value, lower, upper) do
+    ratio = (value - lower) / (upper - lower)
+    ratio = max(0.0, min(1.0, ratio))
+    round(ratio * (@bar_width - 1))
+  end
+
+  defp target_cell(nil, _lower, _upper, _marker_cell), do: nil
+
+  defp target_cell(target, lower, upper, marker_cell) do
+    cell = ratio_to_cell(target, lower, upper)
+    if cell == marker_cell, do: nil, else: cell
+  end
+
+  defp target_marker, do: "\u{25CB}"
+  defp target_style, do: %Style{fg: Theme.cyan(), modifiers: [:bold]}
 end

@@ -127,7 +127,7 @@ defmodule BB.TUI.App do
       robot_struct
       |> BB.Robot.joints_in_order()
       |> Enum.filter(&Joint.movable?/1)
-      |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0}})
+      |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0, target: nil}})
 
     commands = Robot.discover_commands(robot, node)
     bridges = Robot.list_bridges(robot, node)
@@ -658,6 +658,7 @@ defmodule BB.TUI.App do
           |> State.clamp_position(joint)
 
         actuator = find_actuator_for_joint(state.robot_struct, name)
+        state = State.set_joint_target(state, name, new_pos)
 
         if actuator do
           Robot.set_actuator(state.robot, actuator, new_pos, state.node)

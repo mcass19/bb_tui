@@ -787,7 +787,7 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{shoulder: %{joint: %{}, position: 0.0}}
+      iex> joints = %{shoulder: %{joint: %{}, position: 0.0, target: nil}}
       iex> state = %BB.TUI.State{joints: joints}
       iex> BB.TUI.State.set_joint_position(state, :shoulder, 1.5).joints.shoulder.position
       1.5
@@ -797,6 +797,33 @@ defmodule BB.TUI.State do
     case Map.fetch(joints, name) do
       {:ok, joint_data} ->
         %{state | joints: Map.put(joints, name, %{joint_data | position: position})}
+
+      :error ->
+        state
+    end
+  end
+
+  @doc """
+  Records the last-commanded target position for a joint. The panel
+  renders it as a secondary marker on the position bar so the operator
+  can see what the joint is moving toward. Pass `nil` to clear the
+  target (e.g. when the joint has reached it).
+
+  ## Examples
+
+      iex> joints = %{shoulder: %{joint: %{}, position: 0.0, target: nil}}
+      iex> state = %BB.TUI.State{joints: joints}
+      iex> BB.TUI.State.set_joint_target(state, :shoulder, 1.5).joints.shoulder.target
+      1.5
+
+      iex> BB.TUI.State.set_joint_target(%BB.TUI.State{joints: %{}}, :missing, 1.5).joints
+      %{}
+  """
+  @spec set_joint_target(t(), atom(), float() | nil) :: t()
+  def set_joint_target(%__MODULE__{joints: joints} = state, name, target) do
+    case Map.fetch(joints, name) do
+      {:ok, joint_data} ->
+        %{state | joints: Map.put(joints, name, Map.put(joint_data, :target, target))}
 
       :error ->
         state

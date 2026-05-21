@@ -669,6 +669,31 @@ defmodule BB.TUI.AppTest do
       assert new_state.joints.shoulder.position > 0.0
     end
 
+    test "adjusting a joint records the commanded target alongside the new position" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: nil
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      target = new_state.joints.shoulder.target
+      assert is_float(target)
+      assert target == new_state.joints.shoulder.position
+    end
+
     test "h/left decreases simulated joint position when armed" do
       joints = %{
         shoulder: %{
