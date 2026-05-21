@@ -22,7 +22,10 @@ defmodule BB.TUI.Panels.Help do
   ## Global
 
   - `q` — Quit
-  - `Tab` — Cycle active panel
+  - `Tab` — Cycle to the next panel
+  - `Shift+Tab` — Cycle to the previous panel
+  - `1` / `2` / `3` / `4` / `5` — Jump directly to the panel whose
+    title shows the matching `[N]` badge
   - `?` — Toggle this help
   - `a` — Arm robot
   - `d` — Disarm robot

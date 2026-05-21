@@ -124,6 +124,107 @@ defmodule BB.TUI.State do
   end
 
   @doc """
+  Cycles the active panel to the previous one in order (Shift+Tab).
+
+  When `active_panel` is unknown, resets to the last panel so a stale
+  state still lands somewhere navigable.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{active_panel: :commands}
+      iex> BB.TUI.State.cycle_panel_back(state).active_panel
+      :safety
+
+      iex> state = %BB.TUI.State{active_panel: :safety}
+      iex> BB.TUI.State.cycle_panel_back(state).active_panel
+      :parameters
+
+      iex> state = %BB.TUI.State{active_panel: :unknown}
+      iex> BB.TUI.State.cycle_panel_back(state).active_panel
+      :parameters
+  """
+  @spec cycle_panel_back(t()) :: t()
+  def cycle_panel_back(%__MODULE__{active_panel: current} = state) when current in @panels do
+    count = length(@panels)
+    idx = Enum.find_index(@panels, &(&1 == current))
+    prev = Enum.at(@panels, rem(idx - 1 + count, count))
+    %{state | active_panel: prev}
+  end
+
+  def cycle_panel_back(%__MODULE__{} = state) do
+    %{state | active_panel: List.last(@panels)}
+  end
+
+  @doc """
+  Returns the 1-based number of a panel, suitable for number-key jump
+  hints in panel titles and help text. Returns `nil` for unknown
+  panels.
+
+  ## Examples
+
+      iex> BB.TUI.State.panel_number(:safety)
+      1
+
+      iex> BB.TUI.State.panel_number(:parameters)
+      5
+
+      iex> BB.TUI.State.panel_number(:unknown)
+      nil
+  """
+  @spec panel_number(atom()) :: pos_integer() | nil
+  def panel_number(panel) when panel in @panels do
+    Enum.find_index(@panels, &(&1 == panel)) + 1
+  end
+
+  def panel_number(_), do: nil
+
+  @doc """
+  Returns the panel atom at a 1-based index, or `nil` when the index is
+  out of range. Mirror of `panel_number/1`, used by the number-key
+  jump handler.
+
+  ## Examples
+
+      iex> BB.TUI.State.panel_at(1)
+      :safety
+
+      iex> BB.TUI.State.panel_at(5)
+      :parameters
+
+      iex> BB.TUI.State.panel_at(9)
+      nil
+  """
+  @spec panel_at(pos_integer()) :: atom() | nil
+  def panel_at(n) when is_integer(n) and n >= 1 and n <= length(@panels) do
+    Enum.at(@panels, n - 1)
+  end
+
+  def panel_at(_), do: nil
+
+  @doc """
+  Jumps directly to the named panel, leaving everything else
+  unchanged. A no-op when the target isn't a known panel — so a
+  stray key never silently parks the dashboard in an unreachable
+  state.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{active_panel: :safety}
+      iex> BB.TUI.State.jump_to_panel(state, :events).active_panel
+      :events
+
+      iex> state = %BB.TUI.State{active_panel: :safety}
+      iex> BB.TUI.State.jump_to_panel(state, :unknown).active_panel
+      :safety
+  """
+  @spec jump_to_panel(t(), atom()) :: t()
+  def jump_to_panel(%__MODULE__{} = state, panel) when panel in @panels do
+    %{state | active_panel: panel}
+  end
+
+  def jump_to_panel(%__MODULE__{} = state, _panel), do: state
+
+  @doc """
   Toggles the help overlay.
 
   ## Examples

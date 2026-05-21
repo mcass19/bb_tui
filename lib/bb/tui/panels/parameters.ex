@@ -202,33 +202,35 @@ defmodule BB.TUI.Panels.Parameters do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local], 0, 5)
       iex> Enum.map_join(spans, "", & &1.content)
-      " Parameters (5) "
+      " [5] Parameters (5) "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local], 0, 0)
       iex> Enum.map_join(spans, "", & &1.content)
-      " Parameters "
+      " [5] Parameters "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local, {:bridge, :mavlink}], 1, 12)
       iex> Enum.map_join(spans, "", & &1.content)
-      " Parameters · Local | mavlink (12) [t] "
+      " [5] Parameters · Local | mavlink (12) [t] "
   """
   @spec title_line([atom() | {:bridge, atom()}], non_neg_integer(), non_neg_integer()) :: Line.t()
   def title_line([:local], _idx, 0) do
-    %Line{spans: [%Span{content: " Parameters ", style: %Style{}}]}
+    %Line{spans: badge() ++ [%Span{content: "Parameters ", style: %Style{}}]}
   end
 
   def title_line([:local], _idx, count) do
     %Line{
-      spans: [
-        %Span{content: " Parameters (", style: %Style{}},
-        %Span{
-          content: Integer.to_string(count),
-          style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
-        },
-        %Span{content: ") ", style: %Style{}}
-      ]
+      spans:
+        badge() ++
+          [
+            %Span{content: "Parameters (", style: %Style{}},
+            %Span{
+              content: Integer.to_string(count),
+              style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+            },
+            %Span{content: ") ", style: %Style{}}
+          ]
     }
   end
 
@@ -241,10 +243,13 @@ defmodule BB.TUI.Panels.Parameters do
 
     %Line{
       spans:
-        [%Span{content: " Parameters · ", style: %Style{}}] ++
+        badge() ++
+          [%Span{content: "Parameters · ", style: %Style{}}] ++
           tab_spans ++ [%Span{content: " [t] ", style: %Style{fg: Theme.dim_text()}}]
     }
   end
+
+  defp badge, do: Theme.panel_badge_spans(State.panel_number(:parameters))
 
   defp tab_span(:local, active?, count), do: labeled_span("Local", active?, count) ++ separator()
 

@@ -270,8 +270,28 @@ defmodule BB.TUI.App do
     {:noreply, State.focus_next_arg(state)}
   end
 
+  def update(
+        {:event, %Event.Key{code: "backtab", kind: "press"}},
+        %{active_panel: :commands, command_edit_mode: true} = state
+      ) do
+    {:noreply, State.focus_prev_arg(state)}
+  end
+
   def update({:event, %Event.Key{code: "tab", kind: "press"}}, state) do
     {:noreply, State.cycle_panel(state)}
+  end
+
+  def update({:event, %Event.Key{code: "backtab", kind: "press"}}, state) do
+    {:noreply, State.cycle_panel_back(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{command_edit_mode: false} = state
+      )
+      when code in ["1", "2", "3", "4", "5"] do
+    panel = State.panel_at(String.to_integer(code))
+    {:noreply, State.jump_to_panel(state, panel)}
   end
 
   def update({:event, %Event.Key{code: "?", kind: "press"}}, state) do
@@ -365,13 +385,6 @@ defmodule BB.TUI.App do
       )
       when code in ["tab", "down"] do
     {:noreply, State.focus_next_arg(state)}
-  end
-
-  def update(
-        {:event, %Event.Key{code: "backtab", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
-      ) do
-    {:noreply, State.focus_prev_arg(state)}
   end
 
   def update(

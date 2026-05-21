@@ -99,31 +99,35 @@ defmodule BB.TUI.Panels.Commands do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Commands.title_line(state)
       iex> Enum.map_join(spans, "", & &1.content)
-      " Commands (1) "
+      " [2] Commands (1) "
 
       iex> state = %BB.TUI.State{commands: []}
-      iex> %ExRatatui.Text.Line{spans: [%{content: only}]} =
+      iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Commands.title_line(state)
-      iex> only
-      " Commands "
+      iex> Enum.map_join(spans, "", & &1.content)
+      " [2] Commands "
   """
   @spec title_line(State.t()) :: Line.t()
   def title_line(%State{commands: []}) do
-    %Line{spans: [%Span{content: " Commands ", style: %Style{}}]}
+    %Line{spans: badge() ++ [%Span{content: "Commands ", style: %Style{}}]}
   end
 
   def title_line(%State{commands: cmds}) do
     %Line{
-      spans: [
-        %Span{content: " Commands (", style: %Style{}},
-        %Span{
-          content: Integer.to_string(length(cmds)),
-          style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
-        },
-        %Span{content: ") ", style: %Style{}}
-      ]
+      spans:
+        badge() ++
+          [
+            %Span{content: "Commands (", style: %Style{}},
+            %Span{
+              content: Integer.to_string(length(cmds)),
+              style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+            },
+            %Span{content: ") ", style: %Style{}}
+          ]
     }
   end
+
+  defp badge, do: Theme.panel_badge_spans(State.panel_number(:commands))
 
   @doc """
   Checks whether a command can execute in the current runtime state.

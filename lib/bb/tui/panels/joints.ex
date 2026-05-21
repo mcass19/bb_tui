@@ -62,7 +62,7 @@ defmodule BB.TUI.Panels.Joints do
       highlight_style: Theme.highlight_style(),
       highlight_symbol: "\u{25B6} ",
       block: %Block{
-        title: " Joint Control ",
+        title: title_line(),
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(focused?)
@@ -207,6 +207,14 @@ defmodule BB.TUI.Panels.Joints do
     text = format_position(pos, joint) <> proximity_suffix(proximity)
     style = %Style{fg: Theme.proximity_color(proximity), modifiers: position_modifiers(proximity)}
     %Span{content: text, style: style}
+  end
+
+  defp title_line do
+    spans =
+      Theme.panel_badge_spans(State.panel_number(:joints)) ++
+        [%Span{content: "Joint Control ", style: %Style{}}]
+
+    %Line{spans: spans}
   end
 
   defp position_modifiers(:normal), do: []

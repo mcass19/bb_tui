@@ -360,14 +360,20 @@ config :bb_tui, command_timeout: 30_000
 
 ### Global
 
-| Key   | Action                    |
-|-------|---------------------------|
-| `q`   | Quit                      |
-| `Tab` | Cycle active panel        |
-| `?`   | Toggle help overlay       |
-| `a`   | Arm robot                 |
-| `d`   | Disarm robot              |
-| `f`   | Force disarm (error only) |
+| Key             | Action                                                         |
+|-----------------|----------------------------------------------------------------|
+| `q`             | Quit                                                           |
+| `Tab`           | Cycle to the next panel                                        |
+| `Shift+Tab`     | Cycle to the previous panel                                    |
+| `1` `2` `3` `4` `5` | Jump directly to the panel whose title shows `[N]`         |
+| `?`             | Toggle help overlay                                            |
+| `a`             | Arm robot                                                      |
+| `d`             | Disarm robot                                                   |
+| `f`             | Force disarm (error only)                                      |
+
+Each panel's title carries a bold-cyan `[N]` badge that mirrors the
+number key for that panel: `[1]` Safety, `[2]` Commands, `[3]` Joints,
+`[4]` Events, `[5]` Parameters.
 
 ### Events panel
 
