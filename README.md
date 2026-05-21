@@ -473,6 +473,21 @@ Or via the mix task:
 mix bb.tui --robot Dev.TestRobot
 ```
 
+`Dev.TestRobot` exercises every panel feature end-to-end:
+
+- Commands with all argument shapes — `home` (no args), `move`
+  (enum + float), `log` (string + integer), `wobble` (always returns
+  `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber
+  is visible).
+- Parameter groups covering every primitive type — float, integer,
+  boolean, atom — most with `:min` / `:max` so 1%-of-range stepping
+  applies.
+- A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter
+  list (`PITCH_P`, `PITCH_I`, `MAX_RATE`, `ARM_CHECKS`, `FLIGHT_MODE`)
+  and in-memory writes — press `t` in the Parameters panel to cycle
+  to the Bridge tab and edit those params via the same h/l/H/L/Enter
+  keys.
+
 ### Testing SSH locally
 
 Start the SSH daemon against the simulated robot:

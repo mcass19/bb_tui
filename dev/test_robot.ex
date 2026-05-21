@@ -56,12 +56,27 @@ defmodule Dev.TestRobot do
         doc("Severity 1..5; higher is louder.")
       end
     end
+
+    # Always-fails command — exercises the `{:error, _}` event-stream
+    # rendering and the Commands panel's error result formatting.
+    command :wobble do
+      handler(Dev.WobbleHandler)
+      allowed_states([:idle])
+    end
+
+    # Slow command (~2s) — exercises the executing-command throbber and
+    # the `command.started`/`command.succeeded` event pair.
+    command :calibrate do
+      handler(Dev.CalibrateHandler)
+      allowed_states([:idle])
+    end
   end
 
   parameters do
     group :motion do
       param(:max_speed, type: :float, default: 1.0, min: 0.0, max: 5.0)
       param(:acceleration, type: :float, default: 0.5, min: 0.0, max: 2.0)
+      param(:mode, type: :atom, default: :auto)
     end
 
     group :controller do
@@ -79,6 +94,8 @@ defmodule Dev.TestRobot do
       param(:force, type: :integer, default: 50, min: 0, max: 100)
       param(:grip_speed, type: :integer, default: 75, min: 1, max: 100)
     end
+
+    bridge(:mavlink, Dev.MockBridge)
   end
 
   topology do
