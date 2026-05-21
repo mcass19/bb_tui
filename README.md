@@ -303,6 +303,17 @@ ExRatatui.Runtime.disable_trace(pid)
 ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "press"})
 ```
 
+## Configuration
+
+| Key                       | Default     | Notes                                                                 |
+|---------------------------|-------------|-----------------------------------------------------------------------|
+| `:bb_tui, :command_timeout` | `30_000` ms | Wait window for `BB.Command.await/2` on commands dispatched from the UI. Compile-time only — downstream apps need `mix deps.compile bb_tui --force` after changing it. |
+
+```elixir
+# config/config.exs
+config :bb_tui, command_timeout: 30_000
+```
+
 ## Keybindings
 
 ### Global

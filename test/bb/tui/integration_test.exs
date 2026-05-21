@@ -202,10 +202,13 @@ defmodule BB.TUI.IntegrationTest do
     test "dormant when nothing is animating" do
       pid = start_tui!()
 
-      # In :idle / :armed there's no throbber subscription, so the
-      # throbber_step never advances on its own.
-      Process.sleep(150)
+      # In :idle / :armed (no executing command) subscriptions/1 returns
+      # [], so the runtime registers no timer. Asserting on the snapshot
+      # is deterministic — no need to sleep waiting for ticks that won't
+      # fire.
+      snapshot = Runtime.snapshot(pid)
 
+      assert snapshot.subscription_count == 0
       assert current_state(pid).throbber_step == 0
     end
 

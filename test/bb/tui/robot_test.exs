@@ -104,6 +104,22 @@ defmodule BB.TUI.RobotTest do
       Mimic.stub(BB.Dsl.Info, :commands, fn _ -> raise "boom" end)
       assert Robot.discover_commands(@robot, nil) == []
     end
+
+    test "renders unknown argument-type shapes via inspect/1 fallback" do
+      Mimic.stub(BB.Dsl.Info, :commands, fn BB.TUI.TestRobot ->
+        [
+          %{
+            name: :weird,
+            arguments: [
+              %{name: :payload, type: {:struct, SomeFutureType, []}}
+            ]
+          }
+        ]
+      end)
+
+      [%{arguments: [arg]}] = Robot.discover_commands(@robot, nil)
+      assert arg.type == "{:struct, SomeFutureType, []}"
+    end
   end
 
   describe "write calls (local)" do

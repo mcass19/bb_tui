@@ -87,6 +87,9 @@ defmodule BB.TUI.State do
   @doc """
   Cycles the active panel to the next one in order.
 
+  When `active_panel` is unknown (e.g. set out-of-band to a stale
+  value), resets to the first panel.
+
   ## Examples
 
       iex> state = %BB.TUI.State{active_panel: :safety}
@@ -96,12 +99,20 @@ defmodule BB.TUI.State do
       iex> state = %BB.TUI.State{active_panel: :parameters}
       iex> BB.TUI.State.cycle_panel(state).active_panel
       :safety
+
+      iex> state = %BB.TUI.State{active_panel: :unknown}
+      iex> BB.TUI.State.cycle_panel(state).active_panel
+      :safety
   """
   @spec cycle_panel(t()) :: t()
-  def cycle_panel(%__MODULE__{active_panel: current} = state) do
+  def cycle_panel(%__MODULE__{active_panel: current} = state) when current in @panels do
     idx = Enum.find_index(@panels, &(&1 == current))
     next = Enum.at(@panels, rem(idx + 1, length(@panels)))
     %{state | active_panel: next}
+  end
+
+  def cycle_panel(%__MODULE__{} = state) do
+    %{state | active_panel: hd(@panels)}
   end
 
   @doc """
@@ -265,6 +276,12 @@ defmodule BB.TUI.State do
     %{state | events: Enum.take([event | events], @max_events)}
   end
 
+  # Prefer the wall_time carried on %BB.Message{} so timestamps in the
+  # events panel reflect when the publisher fired, not when this process
+  # observed the message. Plain-map payloads (e.g. ad-hoc `BB.publish/3`
+  # without `BB.Message.new/2`) fall back to `DateTime.utc_now/0` and
+  # therefore look fresh on every reconnect — use BB.Message.new/2 to
+  # preserve causality across distribution.
   defp event_timestamp(%BB.Message{wall_time: wall_time}) when is_integer(wall_time) do
     DateTime.from_unix!(wall_time, :nanosecond)
   end
