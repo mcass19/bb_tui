@@ -112,5 +112,101 @@ defmodule BB.TUI.Panels.CommandEditTest do
       assert Enum.any?(texts, &String.contains?(&1, "angle* (float): 2.5"))
       assert Enum.any?(texts, &String.contains?(&1, "side (atom): :left"))
     end
+
+    test "enum chevron renders the buffer verbatim when there is no leading colon" do
+      enum_cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{
+            name: :side,
+            type: "enum:[:left, :right]",
+            enum_values: [:left, :right],
+            default: :left,
+            required: false,
+            doc: nil
+          }
+        ]
+      }
+
+      s =
+        Fixtures.sample_state(%{
+          commands: [enum_cmd],
+          command_selected: 0,
+          command_edit_mode: true,
+          # Stale buffer with no leading colon — exercises the enum_display/1 fallback.
+          command_form_values: %{move: %{side: "garbage"}}
+        })
+
+      assert %Popup{content: %{text: lines}} = CommandEdit.render(s)
+      texts = Enum.map(lines, &text/1)
+
+      assert Enum.any?(texts, &String.contains?(&1, "‹ garbage ›"))
+    end
+
+    test "renders enum args inside chevrons and strips the leading colon from the value" do
+      enum_cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{
+            name: :side,
+            type: "enum:[:left, :right]",
+            enum_values: [:left, :right],
+            default: :left,
+            required: false,
+            doc: nil
+          }
+        ]
+      }
+
+      s =
+        Fixtures.sample_state(%{
+          commands: [enum_cmd],
+          command_selected: 0,
+          command_edit_mode: true
+        })
+
+      assert %Popup{content: %{text: lines}} = CommandEdit.render(s)
+      texts = Enum.map(lines, &text/1)
+
+      assert Enum.any?(texts, &String.contains?(&1, "‹ left ›"))
+    end
+
+    test "appends a ←/→ cycle hint to the footer when any arg is enum-typed" do
+      enum_cmd = %{
+        name: :move,
+        allowed_states: [:idle],
+        arguments: [
+          %{
+            name: :side,
+            type: "enum:[:left, :right]",
+            enum_values: [:left, :right],
+            default: :left,
+            required: false,
+            doc: nil
+          }
+        ]
+      }
+
+      s =
+        Fixtures.sample_state(%{
+          commands: [enum_cmd],
+          command_selected: 0,
+          command_edit_mode: true
+        })
+
+      assert %Popup{content: %{text: lines}} = CommandEdit.render(s)
+      texts = Enum.map(lines, &text/1)
+
+      assert Enum.any?(texts, &String.contains?(&1, "[←/→] cycle"))
+    end
+
+    test "omits the cycle hint when no enum arg is present" do
+      assert %Popup{content: %{text: lines}} = CommandEdit.render(state(%{}))
+      texts = Enum.map(lines, &text/1)
+
+      refute Enum.any?(texts, &String.contains?(&1, "cycle"))
+    end
   end
 end

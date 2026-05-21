@@ -647,4 +647,76 @@ defmodule BB.TUI.StateTest do
       assert State.clamp_position(99.0, joint) == 99.0
     end
   end
+
+  describe "cycle_focused_enum/2" do
+    setup do
+      cmd = %{
+        name: :move,
+        arguments: [
+          %{
+            name: :side,
+            type: "enum:[:left, :right, :up]",
+            enum_values: [:left, :right, :up],
+            default: :left
+          },
+          %{name: :angle, type: "float", enum_values: nil, default: 0.0}
+        ]
+      }
+
+      state = %BB.TUI.State{
+        commands: [cmd],
+        command_selected: 0,
+        command_edit_mode: true,
+        command_focused_arg: 0,
+        command_form_values: %{}
+      }
+
+      {:ok, state: state}
+    end
+
+    test "cycles forward through enum values, wrapping at the end", %{state: state} do
+      next = State.cycle_focused_enum(state, :next)
+      assert next.command_form_values[:move][:side] == ":right"
+
+      next = State.cycle_focused_enum(next, :next)
+      assert next.command_form_values[:move][:side] == ":up"
+
+      next = State.cycle_focused_enum(next, :next)
+      assert next.command_form_values[:move][:side] == ":left"
+    end
+
+    test "cycles backward through enum values, wrapping at the start", %{state: state} do
+      prev = State.cycle_focused_enum(state, :prev)
+      assert prev.command_form_values[:move][:side] == ":up"
+
+      prev = State.cycle_focused_enum(prev, :prev)
+      assert prev.command_form_values[:move][:side] == ":right"
+    end
+
+    test "starts from the first value when the current buffer is garbage", %{state: state} do
+      seeded = %{state | command_form_values: %{move: %{side: "not_an_atom"}}}
+
+      next = State.cycle_focused_enum(seeded, :next)
+      # Garbage parses to a string, so cycle_enum_value falls back to index 0,
+      # then advances by +1.
+      assert next.command_form_values[:move][:side] == ":right"
+    end
+
+    test "is a no-op when not in edit mode", %{state: state} do
+      out = State.cycle_focused_enum(%{state | command_edit_mode: false}, :next)
+      assert out == %{state | command_edit_mode: false}
+    end
+
+    test "is a no-op for non-enum args", %{state: state} do
+      out = State.cycle_focused_enum(%{state | command_focused_arg: 1}, :next)
+      assert out == %{state | command_focused_arg: 1}
+    end
+  end
+
+  describe "focused_arg_enum_values/1" do
+    test "returns nil when the selected command has no args" do
+      state = %BB.TUI.State{commands: [], command_selected: 0, command_focused_arg: 0}
+      assert State.focused_arg_enum_values(state) == nil
+    end
+  end
 end

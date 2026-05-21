@@ -594,6 +594,85 @@ defmodule BB.TUI.State do
     end)
   end
 
+  @doc """
+  Returns the currently-focused command argument map, or `nil` when the
+  selected command has no arguments.
+
+  ## Examples
+
+      iex> cmd = %{name: :move, arguments: [%{name: :angle}, %{name: :side}]}
+      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0, command_focused_arg: 1}
+      iex> BB.TUI.State.focused_arg(state)
+      %{name: :side}
+
+      iex> BB.TUI.State.focused_arg(%BB.TUI.State{commands: []})
+      nil
+  """
+  @spec focused_arg(t()) :: map() | nil
+  def focused_arg(%__MODULE__{command_focused_arg: idx} = state) do
+    case selected_command(state) do
+      %{arguments: [_ | _] = args} -> Enum.at(args, idx)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Returns the enum-value list for the focused argument when the arg is
+  enum-typed (`{:in, [...]}` in the underlying Spark schema), otherwise
+  `nil`.
+
+  ## Examples
+
+      iex> cmd = %{name: :move, arguments: [%{name: :side, enum_values: [:left, :right]}]}
+      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0, command_focused_arg: 0}
+      iex> BB.TUI.State.focused_arg_enum_values(state)
+      [:left, :right]
+
+      iex> cmd = %{name: :move, arguments: [%{name: :angle, enum_values: nil}]}
+      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0, command_focused_arg: 0}
+      iex> BB.TUI.State.focused_arg_enum_values(state)
+      nil
+  """
+  @spec focused_arg_enum_values(t()) :: [atom()] | nil
+  def focused_arg_enum_values(%__MODULE__{} = state) do
+    case focused_arg(state) do
+      %{enum_values: [_ | _] = values} -> values
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Cycles the focused argument to the next (or previous) value in its
+  enum list. A no-op when not in edit mode or when the focused arg
+  isn't enum-typed.
+
+  Stores the chosen value as the leading-colon atom literal (`":foo"`)
+  so `parsed_args_for_selected/1` decodes it back to `:foo` when the
+  command executes.
+  """
+  @spec cycle_focused_enum(t(), :next | :prev) :: t()
+  def cycle_focused_enum(%__MODULE__{command_edit_mode: false} = state, _direction), do: state
+
+  def cycle_focused_enum(%__MODULE__{} = state, direction) do
+    case focused_arg(state) do
+      %{enum_values: [_ | _] = values} = arg ->
+        cmd_name = selected_command(state).name
+        current = parse_value(arg_value(state, cmd_name, arg))
+        next_value = cycle_enum_value(values, current, direction)
+        update_focused_arg(state, fn _ -> ":" <> Atom.to_string(next_value) end)
+
+      _ ->
+        state
+    end
+  end
+
+  defp cycle_enum_value(values, current, direction) do
+    count = length(values)
+    idx = Enum.find_index(values, &(&1 == current)) || 0
+    shift = if direction == :next, do: 1, else: -1
+    Enum.at(values, rem(idx + shift + count, count))
+  end
+
   defp update_focused_arg(
          %__MODULE__{command_focused_arg: idx, command_form_values: form} = state,
          fun
