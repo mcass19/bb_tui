@@ -136,45 +136,47 @@ defmodule BB.TUI.Panels.Events do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Events.title_line(47, false)
       iex> Enum.map_join(spans, "", & &1.content)
-      " Events (47) "
+      " [4] Events (47) "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Events.title_line(47, true)
       iex> Enum.map_join(spans, "", & &1.content)
-      " Events (47)  ⏸ PAUSED "
+      " [4] Events (47)  ⏸ PAUSED "
 
-      iex> %ExRatatui.Text.Line{spans: [%{content: only}]} =
+      iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Events.title_line(0, false)
-      iex> only
-      " Events "
+      iex> Enum.map_join(spans, "", & &1.content)
+      " [4] Events "
   """
   @spec title_line(non_neg_integer(), boolean()) :: Line.t()
   def title_line(0, false) do
-    %Line{spans: [%Span{content: " Events ", style: %Style{}}]}
+    %Line{spans: badge() ++ [%Span{content: "Events ", style: %Style{}}]}
   end
 
   def title_line(count, false) do
     %Line{
-      spans: [
-        %Span{content: " Events (", style: %Style{}},
-        %Span{
-          content: Integer.to_string(count),
-          style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
-        },
-        %Span{content: ") ", style: %Style{}}
-      ]
+      spans:
+        badge() ++
+          [
+            %Span{content: "Events (", style: %Style{}},
+            %Span{
+              content: Integer.to_string(count),
+              style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+            },
+            %Span{content: ") ", style: %Style{}}
+          ]
     }
   end
 
   def title_line(count, true) do
-    base =
+    label =
       case count do
         0 ->
-          [%Span{content: " Events ", style: %Style{}}]
+          [%Span{content: "Events ", style: %Style{}}]
 
         _ ->
           [
-            %Span{content: " Events (", style: %Style{}},
+            %Span{content: "Events (", style: %Style{}},
             %Span{
               content: Integer.to_string(count),
               style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
@@ -185,7 +187,8 @@ defmodule BB.TUI.Panels.Events do
 
     %Line{
       spans:
-        base ++
+        badge() ++
+          label ++
           [
             %Span{
               content: " \u{23F8} PAUSED ",
@@ -194,6 +197,8 @@ defmodule BB.TUI.Panels.Events do
           ]
     }
   end
+
+  defp badge, do: Theme.panel_badge_spans(State.panel_number(:events))
 
   @doc ~S"""
   Builds a rich-text `%Line{}` for a single event.

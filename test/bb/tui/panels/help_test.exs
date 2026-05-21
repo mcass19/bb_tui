@@ -31,7 +31,9 @@ defmodule BB.TUI.Panels.HelpTest do
       md = Help.markdown()
 
       assert md =~ "`q` — Quit"
-      assert md =~ "Cycle active panel"
+      assert md =~ "Cycle to the next panel"
+      assert md =~ "Cycle to the previous panel"
+      assert md =~ "Jump directly to the panel"
       assert md =~ "Arm robot"
       assert md =~ "Disarm robot"
       assert md =~ "Force disarm (error state only)"

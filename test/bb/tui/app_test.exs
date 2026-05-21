@@ -230,6 +230,54 @@ defmodule BB.TUI.AppTest do
       assert new_state.active_panel == :commands
     end
 
+    test "shift+tab (code: backtab) cycles to the previous panel" do
+      state = Fixtures.sample_state(%{active_panel: :commands})
+      event = %ExRatatui.Event.Key{code: "backtab", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.active_panel == :safety
+    end
+
+    test "number keys 1..5 jump directly to the matching panel" do
+      state = Fixtures.sample_state(%{active_panel: :safety})
+
+      for {code, panel} <- [
+            {"1", :safety},
+            {"2", :commands},
+            {"3", :joints},
+            {"4", :events},
+            {"5", :parameters}
+          ] do
+        event = %ExRatatui.Event.Key{code: code, kind: "press"}
+        assert {:noreply, new_state} = App.update({:event, event}, state)
+        assert new_state.active_panel == panel
+      end
+    end
+
+    test "number keys are inert inside command edit mode (so digits can be typed into args)" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: [
+            %{
+              name: :log,
+              allowed_states: [:idle],
+              arguments: [%{name: :level, type: "integer", default: 1}]
+            }
+          ],
+          command_selected: 0,
+          command_edit_mode: true,
+          command_focused_arg: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "3", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      # Did NOT jump to :joints; the digit was appended to the focused arg.
+      assert new_state.active_panel == :commands
+      assert new_state.command_form_values == %{log: %{level: "13"}}
+    end
+
     test "? key toggles help" do
       state = Fixtures.sample_state(%{show_help: false})
       event = %ExRatatui.Event.Key{code: "?", kind: "press"}

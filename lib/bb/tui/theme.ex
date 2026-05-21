@@ -507,4 +507,34 @@ defmodule BB.TUI.Theme do
   def proximity_color(:warning), do: yellow()
   def proximity_color(:danger), do: red()
   def proximity_color(_), do: dim_text()
+
+  @doc """
+  Returns the `[N]` badge prefix spans for a panel title, with the
+  number rendered bold-cyan to mirror the global number-key
+  keybinding. Returns an empty list when `n` is `nil`, so callers can
+  safely splat the result even for panels that aren't on the cycle
+  ring.
+
+  ## Examples
+
+      iex> [%ExRatatui.Text.Span{content: " ["}, %ExRatatui.Text.Span{content: "3", style: style}, %ExRatatui.Text.Span{content: "] "}] =
+      ...>   BB.TUI.Theme.panel_badge_spans(3)
+      iex> style.fg
+      :cyan
+      iex> :bold in style.modifiers
+      true
+
+      iex> BB.TUI.Theme.panel_badge_spans(nil)
+      []
+  """
+  @spec panel_badge_spans(pos_integer() | nil) :: [Span.t()]
+  def panel_badge_spans(nil), do: []
+
+  def panel_badge_spans(n) when is_integer(n) and n > 0 do
+    [
+      %Span{content: " [", style: %Style{}},
+      %Span{content: Integer.to_string(n), style: %Style{fg: cyan(), modifiers: [:bold]}},
+      %Span{content: "] ", style: %Style{}}
+    ]
+  end
 end

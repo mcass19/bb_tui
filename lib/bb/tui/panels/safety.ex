@@ -11,6 +11,9 @@ defmodule BB.TUI.Panels.Safety do
 
   alias BB.TUI.State
   alias BB.TUI.Theme
+  alias ExRatatui.Style
+  alias ExRatatui.Text.Line
+  alias ExRatatui.Text.Span
   alias ExRatatui.Widgets.Block
   alias ExRatatui.Widgets.Paragraph
   alias ExRatatui.Widgets.Throbber
@@ -81,10 +84,18 @@ defmodule BB.TUI.Panels.Safety do
 
   defp block(focused?) do
     %Block{
-      title: " Safety ",
+      title: title_line(),
       borders: [:all],
       border_type: :rounded,
       border_style: Theme.border_style(focused?)
     }
+  end
+
+  defp title_line do
+    spans =
+      Theme.panel_badge_spans(State.panel_number(:safety)) ++
+        [%Span{content: "Safety ", style: %Style{}}]
+
+    %Line{spans: spans}
   end
 end

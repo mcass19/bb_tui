@@ -14,7 +14,8 @@ defmodule BB.TUI.Panels.ParametersTest do
       assert %Table{} = widget
       assert widget.header == ["Parameter", "Value", "Type"]
       assert widget.rows == [["No parameters defined", "", ""]]
-      assert %ExRatatui.Text.Line{spans: [%{content: " Parameters "}]} = widget.block.title
+      assert %ExRatatui.Text.Line{spans: spans} = widget.block.title
+      assert Enum.map_join(spans, "", & &1.content) == " [5] Parameters "
     end
 
     test "renders parameters with path, value, and edit hints" do
@@ -24,7 +25,7 @@ defmodule BB.TUI.Panels.ParametersTest do
 
       assert length(widget.rows) == 2
       assert %ExRatatui.Text.Line{spans: spans} = widget.block.title
-      assert Enum.map_join(spans, "", & &1.content) == " Parameters (2) "
+      assert Enum.map_join(spans, "", & &1.content) == " [5] Parameters (2) "
 
       # Numeric values get [h/l] edit hint
       [_first, second] = widget.rows
