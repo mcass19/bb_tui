@@ -249,6 +249,56 @@ defmodule BB.TUI.Panels.JointsTest do
       row = hd(widget.rows)
       assert cell_text(Enum.at(row, 2)) == "0.0 mm !!"
     end
+
+    test "renders a target marker on the position bar when target ≠ position" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: 0.8
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+      bar = cell_text(Enum.at(hd(widget.rows), 3))
+
+      # Current marker is filled, target marker is hollow.
+      assert bar =~ "\u{25CF}"
+      assert bar =~ "\u{25CB}"
+    end
+
+    test "drops the target marker when target lands in the same cell as the current marker" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: 0.0
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+      bar = cell_text(Enum.at(hd(widget.rows), 3))
+
+      refute bar =~ "\u{25CB}"
+    end
+
+    test "renders no target marker when target is nil" do
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: nil
+        }
+      }
+
+      state = Fixtures.sample_state(%{joints: joints})
+      widget = Joints.render(state, false)
+      bar = cell_text(Enum.at(hd(widget.rows), 3))
+
+      refute bar =~ "\u{25CB}"
+    end
   end
 
   describe "limit warnings" do
