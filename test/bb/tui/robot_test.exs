@@ -1,10 +1,10 @@
 defmodule BB.TUI.RobotTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use Mimic
 
   alias BB.TUI.Robot
 
-  setup :set_mimic_global
+  setup :set_mimic_private
 
   @robot BB.TUI.TestRobot
 
@@ -386,41 +386,9 @@ defmodule BB.TUI.RobotTest do
     end
   end
 
-  describe "subscribe/3 (remote)" do
-    test "spawns a relay process on the remote node that forwards :bb messages" do
-      test_pid = self()
-      remote = :"robot@127.0.0.1"
-
-      # Capture the relay function and run it locally so we can inspect its
-      # behavior without needing real distribution.
-      Mimic.expect(BB.TUI.Rpc, :spawn_link, fn ^remote, fun when is_function(fun, 0) ->
-        spawn_link(fn ->
-          send(test_pid, {:relay_started, self()})
-          fun.()
-        end)
-      end)
-
-      Mimic.expect(BB, :subscribe, fn BB.TUI.TestRobot, [:state_machine] -> :ok end)
-      Mimic.expect(BB, :subscribe, fn BB.TUI.TestRobot, [:sensor] -> :ok end)
-
-      assert :ok =
-               Robot.subscribe(@robot, [[:state_machine], [:sensor]], remote)
-
-      assert_receive {:relay_started, relay_pid}
-
-      # The relay should forward {:bb, _, _} messages back to us.
-      send(relay_pid, {:bb, [:state_machine], %{from: :idle, to: :armed}})
-      assert_receive {:bb, [:state_machine], %{from: :idle, to: :armed}}
-
-      # Other messages are silently dropped (loop continues).
-      send(relay_pid, :ignored)
-      send(relay_pid, {:bb, [:sensor], %{payload: :ok}})
-      assert_receive {:bb, [:sensor], %{payload: :ok}}
-
-      Process.unlink(relay_pid)
-      Process.exit(relay_pid, :kill)
-    end
-  end
+  # `subscribe/3 (remote)` lives in
+  # `test/bb/tui/robot_subscribe_remote_test.exs` because the spawned
+  # relay process needs `:set_mimic_global` to see BB.subscribe stubs.
 
   describe "read calls (remote)" do
     @remote :"robot@127.0.0.1"
