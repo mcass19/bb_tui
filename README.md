@@ -303,6 +303,48 @@ ExRatatui.Runtime.disable_trace(pid)
 ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "press"})
 ```
 
+## Telemetry
+
+Every BB.TUI session rides on ExRatatui's `:telemetry` instrumentation.
+The runtime wraps `mount`, every input event, every PubSub/info
+dispatch, and every frame in spans with `:start`/`:stop`/`:exception`
+events; transport connect/disconnect and session open/close fire as
+single events. All metadata carries `:mod` (`BB.TUI.App` for any TUI
+session) and `:transport` (`:local`, `:ssh`, `:distributed`, or
+`:cell_session`).
+
+A one-call default Logger handler is exposed for development:
+
+```elixir
+BB.TUI.attach_telemetry_logger()
+# or, scoped to a single level / event subset
+BB.TUI.attach_telemetry_logger(level: :info)
+BB.TUI.detach_telemetry_logger()
+```
+
+For production observability, attach a custom handler that ships into
+Telemetry.Metrics, OpenTelemetry, or whatever the consumer app already
+uses:
+
+```elixir
+:telemetry.attach_many(
+  "my-app-bb-tui",
+  [
+    [:ex_ratatui, :runtime, :event, :stop],
+    [:ex_ratatui, :render, :frame, :stop],
+    [:ex_ratatui, :render, :dropped],
+    [:ex_ratatui, :transport, :disconnect]
+  ],
+  fn event, measurements, %{mod: BB.TUI.App} = meta, _ ->
+    MyApp.Metrics.observe(event, measurements, meta)
+  end,
+  nil
+)
+```
+
+See `ExRatatui.Telemetry` for the full event reference (event names,
+measurement units, and metadata shapes).
+
 ## Configuration
 
 | Key                       | Default     | Notes                                                                 |

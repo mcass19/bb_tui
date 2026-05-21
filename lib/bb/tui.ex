@@ -119,6 +119,22 @@ defmodule BB.TUI do
 
   See `ExRatatui.Runtime` for the full API.
 
+  ## Telemetry
+
+  Every TUI session emits `:ex_ratatui`-prefixed `:telemetry` events
+  (mount, every keyboard/info dispatch, every frame, transport
+  connect/disconnect, session lifecycle). Metadata carries
+  `:mod` (always `BB.TUI.App` here) and `:transport`, so consumers
+  running multiple ex_ratatui apps can filter accordingly. For local
+  debugging, attach the default Logger handler:
+
+      BB.TUI.attach_telemetry_logger()
+      BB.TUI.detach_telemetry_logger()
+
+  For production observability, attach a custom `:telemetry` handler.
+  See `ExRatatui.Telemetry` for the event surface and the README's
+  Telemetry section for a Telemetry.Metrics-style wiring example.
+
   ## Reducer runtime
 
   `BB.TUI.App` is built on the ExRatatui **reducer runtime**
@@ -355,6 +371,37 @@ defmodule BB.TUI do
     args = Keyword.update(args, :app_opts, [robot: robot], &Keyword.put(&1, :robot, robot))
     {name, {mod, args}}
   end
+
+  @doc """
+  Attaches a development-time Logger handler to every `:ex_ratatui`
+  telemetry event the runtime emits. Convenience delegate to
+  `ExRatatui.Telemetry.attach_default_logger/1`.
+
+  ExRatatui exposes spans for `mount`, every `handle_event`/`handle_info`
+  dispatch, every frame draw, transport connect/disconnect, and
+  session open/close. Every event's metadata carries `:mod` —
+  `BB.TUI.App` for any TUI session — so consumers running multiple
+  ex_ratatui apps can filter by metadata in their own handlers.
+
+  Pass `level: :info` to bump the verbosity, or `events: [...]` to
+  narrow which events the logger picks up. The same `:already_exists`
+  return value flows back from `:telemetry.attach_many/4` on a
+  second attach.
+  """
+  @spec attach_telemetry_logger(keyword()) :: :ok | {:error, :already_exists}
+  defdelegate attach_telemetry_logger(opts \\ []),
+    to: ExRatatui.Telemetry,
+    as: :attach_default_logger
+
+  @doc """
+  Detaches the Logger handler previously installed by
+  `attach_telemetry_logger/1`. Returns `{:error, :not_found}` when no
+  handler is attached.
+  """
+  @spec detach_telemetry_logger() :: :ok | {:error, :not_found}
+  defdelegate detach_telemetry_logger,
+    to: ExRatatui.Telemetry,
+    as: :detach_default_logger
 
   # Moves :robot and :node into :app_opts so they reach each SSH
   # client's mount/1 via the daemon. The daemon passes :app_opts to
