@@ -11,7 +11,7 @@ defmodule BB.TUI do
       # Interactive — from IEx when robot is already running
       BB.TUI.run(MyApp.Robot)
 
-      # Supervised — add to your app's supervision tree
+      # Supervised — add to the app's supervision tree
       children = [
         {BB.Supervisor, MyApp.Robot},
         {BB.TUI, robot: MyApp.Robot}
@@ -35,7 +35,7 @@ defmodule BB.TUI do
   ## SSH transport
 
   When the robot runs on a headless device (Nerves board, container, remote
-  host), you can serve the dashboard over SSH so any SSH client can connect
+  host), the dashboard can be served over SSH so any SSH client can connect
   without a local Elixir node or distribution setup on the client side:
 
       # In the robot's supervision tree
@@ -62,14 +62,14 @@ defmodule BB.TUI do
   ## Distributed transport (attach from a connected node)
 
   As an alternative to the `:node` option — which keeps mount/render local
-  and routes data calls through `:rpc` — you can run the TUI app _on the
-  robot node_ and attach to it from any connected BEAM node. This is the
+  and routes data calls through `:rpc` — the TUI app can run _on the robot
+  node_ and be attached from any connected BEAM node. This is the
   `ExRatatui.Distributed` transport: the remote node runs the app
-  (mount/render/handle_event), and your local node only renders the
+  (mount/render/handle_event), and the local node only renders the
   widgets it receives and forwards terminal events back.
 
   **1. On the robot node**, add the Distributed listener to its
-  supervision tree (in addition to whatever app you normally supervise):
+  supervision tree (alongside whatever else the node normally supervises):
 
       children = [
         {BB.Supervisor, MyApp.Robot},
@@ -104,7 +104,7 @@ defmodule BB.TUI do
   ## Runtime inspection and tracing
 
   The supervising runtime exposes a few debugging hooks — handy when
-  something goes wrong inside an SSH session you can't easily peek into:
+  something goes wrong inside an SSH session that isn't otherwise observable:
 
       # Quick headless-or-not check plus dimensions, render count, etc.
       ExRatatui.Runtime.snapshot(pid)
@@ -315,7 +315,7 @@ defmodule BB.TUI do
   Returns a subsystem tuple for plugging into an existing SSH daemon.
 
   Use this when the robot already runs `nerves_ssh` (or any OTP
-  `:ssh.daemon/2`) and you want to add the dashboard as an SSH
+  `:ssh.daemon/2`) and the dashboard should be added as an SSH
   subsystem instead of spinning up a separate daemon.
 
   ## Nerves example

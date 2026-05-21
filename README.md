@@ -20,7 +20,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Keyboard-driven navigation** — Tab to cycle panels, vim-style j/k/h/l within panels
 - **SSH transport** — serve the dashboard over SSH; multiple operators can connect simultaneously, each with their own isolated session
 - **Distribution attach** — run the TUI on the robot node and attach a thin renderer from any connected BEAM node (built on ExRatatui v0.7's `:distributed` transport)
-- **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime` — useful for debugging SSH sessions you can't otherwise peek into
+- **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime` — useful for debugging SSH sessions that aren't otherwise observable
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
 - **Headless test suite** — full coverage using Mimic + ExRatatui test backend, including end-to-end tests that drive a real server with `ExRatatui.Runtime.inject_event/2`
 
@@ -150,7 +150,7 @@ children = [
 
 ### Remote attach (distribution)
 
-When the robot is running on a different BEAM node, you can render the dashboard on the robot terminal, or on your local terminal while pulling all data from the robot node.
+When the robot is running on a different BEAM node, the dashboard can render either on the robot's terminal or on the local terminal while pulling all data from the robot node.
 
 **1. Spawn the TUI on the robot node (renders on the robot's terminal):**
 
@@ -180,7 +180,7 @@ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
 
 ### Distribution attach (renderer-only local node)
 
-An alternative to the `--node` / `:node` option: run the TUI _on the robot node_ and attach to it from any connected BEAM node. The remote node runs the app callbacks (mount/render/handle_event); your local node only renders the widgets it receives and forwards terminal events back. No robot code required on the local node.
+An alternative to the `--node` / `:node` option: run the TUI _on the robot node_ and attach to it from any connected BEAM node. The remote node runs the app callbacks (mount/render/handle_event); the local node only renders the widgets it receives and forwards terminal events back. No robot code required on the local node.
 
 **1. On the robot node**, add the listener to the supervision tree:
 
@@ -433,9 +433,9 @@ BB.TUI.start_ssh(Dev.TestRobot,
 )
 ```
 
-Then connect from another terminal. You can open multiple SSH sessions simultaneously — each gets its own independent dashboard.
+Then connect from another terminal. Multiple SSH sessions can run simultaneously — each gets its own independent dashboard.
 
-> **Tip:** If you see a host key warning on reconnect (after recompiling), remove the old key with `ssh-keygen -R "[localhost]:2222"`.
+> **Tip:** A host key warning on reconnect (after recompiling) can be cleared with `ssh-keygen -R "[localhost]:2222"`.
 
 ### Testing distribution locally
 
