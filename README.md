@@ -373,15 +373,20 @@ Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → 
 
 ### Parameters panel
 
-| Key            | Action                                   |
-|----------------|------------------------------------------|
-| `j` / `Down`   | Select next parameter                    |
-| `k` / `Up`     | Select previous parameter                |
-| `l` / `Right`  | Increase value (+1 int, +0.1 float)      |
-| `h` / `Left`   | Decrease value (-1 int, -0.1 float)      |
-| `L`            | Increase value x10                        |
-| `H`            | Decrease value x10                        |
-| `Enter`        | Toggle boolean parameter                  |
+| Key            | Action                                                          |
+|----------------|-----------------------------------------------------------------|
+| `j` / `Down`   | Select next parameter                                           |
+| `k` / `Up`     | Select previous parameter                                       |
+| `l` / `Right`  | Increase value by one step                                      |
+| `h` / `Left`   | Decrease value by one step                                      |
+| `L`            | Increase value by ten steps                                     |
+| `H`            | Decrease value by ten steps                                     |
+| `Enter`        | Toggle boolean parameter                                        |
+
+Step size is 1% of the declared range when the Spark schema carries
+`:min` / `:max` (e.g. `{:float, min: 0.0, max: 1.0}`), and the new value
+is clamped to the bounds. Parameters without bounds use an absolute
+step of `+1` for integers and `+0.1` for floats.
 
 ## How It Works
 

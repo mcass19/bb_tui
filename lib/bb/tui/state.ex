@@ -904,6 +904,93 @@ defmodule BB.TUI.State do
     |> Enum.at(idx)
   end
 
+  @doc """
+  Returns `{min, max}` bounds for the parameter at `path` when the
+  Spark-style metadata declares them, otherwise `nil`.
+
+  Looks at `state.parameter_metadata[path].type` for the standard
+  `{head, opts}` shape used by `Spark.Options` and extracts the
+  `:min` / `:max` keyword values. Either bound may be absent (returned
+  as `nil`); both absent collapses to `nil` (no bounds).
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameter_metadata: %{[:speed] => %{type: {:integer, [min: 0, max: 100]}}}}
+      iex> BB.TUI.State.parameter_bounds(state, [:speed])
+      {0, 100}
+
+      iex> state = %BB.TUI.State{parameter_metadata: %{[:gain] => %{type: {:float, [min: 0.0]}}}}
+      iex> BB.TUI.State.parameter_bounds(state, [:gain])
+      {0.0, nil}
+
+      iex> state = %BB.TUI.State{parameter_metadata: %{[:speed] => %{type: :integer}}}
+      iex> BB.TUI.State.parameter_bounds(state, [:speed])
+      nil
+
+      iex> state = %BB.TUI.State{parameter_metadata: %{[:speed] => %{type: {:integer, [doc: "rpm"]}}}}
+      iex> BB.TUI.State.parameter_bounds(state, [:speed])
+      nil
+
+      iex> state = %BB.TUI.State{parameter_metadata: %{}}
+      iex> BB.TUI.State.parameter_bounds(state, [:unknown])
+      nil
+  """
+  @spec parameter_bounds(t(), list()) :: {number() | nil, number() | nil} | nil
+  def parameter_bounds(%__MODULE__{parameter_metadata: meta}, path) do
+    case meta[path] do
+      %{type: {head, opts}} when is_atom(head) and is_list(opts) ->
+        case {Keyword.get(opts, :min), Keyword.get(opts, :max)} do
+          {nil, nil} -> nil
+          bounds -> bounds
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Clamps a numeric value into `{min, max}` bounds. Either bound may be
+  `nil` to leave that side open. A `nil` bounds tuple returns `value`
+  unchanged.
+
+  ## Examples
+
+      iex> BB.TUI.State.clamp_to_bounds(5, {0, 10})
+      5
+
+      iex> BB.TUI.State.clamp_to_bounds(-3, {0, 10})
+      0
+
+      iex> BB.TUI.State.clamp_to_bounds(99, {0, 10})
+      10
+
+      iex> BB.TUI.State.clamp_to_bounds(99, {nil, 10})
+      10
+
+      iex> BB.TUI.State.clamp_to_bounds(-3, {0, nil})
+      0
+
+      iex> BB.TUI.State.clamp_to_bounds(7, nil)
+      7
+  """
+  @spec clamp_to_bounds(number(), {number() | nil, number() | nil} | nil) :: number()
+  def clamp_to_bounds(value, nil), do: value
+
+  def clamp_to_bounds(value, {min, max}) do
+    value
+    |> apply_lower(min)
+    |> apply_upper(max)
+  end
+
+  defp apply_lower(value, nil), do: value
+  defp apply_lower(value, min) when value < min, do: min
+  defp apply_lower(value, _min), do: value
+
+  defp apply_upper(value, nil), do: value
+  defp apply_upper(value, max) when value > max, do: max
+  defp apply_upper(value, _max), do: value
+
   # ── Joint limit proximity ────────────────────────────────────
 
   @warning_threshold 0.15
