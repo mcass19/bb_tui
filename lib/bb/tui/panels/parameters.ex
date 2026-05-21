@@ -202,21 +202,21 @@ defmodule BB.TUI.Panels.Parameters do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local], 0, 5)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [5] Parameters (5) "
+      "  5  Parameters (5) "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local], 0, 0)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [5] Parameters "
+      "  5  Parameters "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local, {:bridge, :mavlink}], 1, 12)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [5] Parameters · Local | mavlink (12) [t] "
+      "  5  Parameters · Local | mavlink (12) [t] "
   """
   @spec title_line([atom() | {:bridge, atom()}], non_neg_integer(), non_neg_integer()) :: Line.t()
   def title_line([:local], _idx, 0) do
-    %Line{spans: badge() ++ [%Span{content: "Parameters ", style: %Style{}}]}
+    %Line{spans: badge() ++ [%Span{content: "Parameters ", style: Theme.panel_title_style()}]}
   end
 
   def title_line([:local], _idx, count) do
@@ -224,12 +224,12 @@ defmodule BB.TUI.Panels.Parameters do
       spans:
         badge() ++
           [
-            %Span{content: "Parameters (", style: %Style{}},
+            %Span{content: "Parameters (", style: Theme.panel_title_style()},
             %Span{
               content: Integer.to_string(count),
               style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
             },
-            %Span{content: ") ", style: %Style{}}
+            %Span{content: ") ", style: Theme.panel_title_style()}
           ]
     }
   end
@@ -244,7 +244,7 @@ defmodule BB.TUI.Panels.Parameters do
     %Line{
       spans:
         badge() ++
-          [%Span{content: "Parameters · ", style: %Style{}}] ++
+          [%Span{content: "Parameters · ", style: Theme.panel_title_style()}] ++
           tab_spans ++ [%Span{content: " [t] ", style: %Style{fg: Theme.dim_text()}}]
     }
   end

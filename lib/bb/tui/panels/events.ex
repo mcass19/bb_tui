@@ -136,21 +136,21 @@ defmodule BB.TUI.Panels.Events do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Events.title_line(47, false)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [4] Events (47) "
+      "  4  Events (47) "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Events.title_line(47, true)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [4] Events (47)  ⏸ PAUSED "
+      "  4  Events (47)  ⏸ PAUSED "
 
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Events.title_line(0, false)
       iex> Enum.map_join(spans, "", & &1.content)
-      " [4] Events "
+      "  4  Events "
   """
   @spec title_line(non_neg_integer(), boolean()) :: Line.t()
   def title_line(0, false) do
-    %Line{spans: badge() ++ [%Span{content: "Events ", style: %Style{}}]}
+    %Line{spans: badge() ++ [%Span{content: "Events ", style: Theme.panel_title_style()}]}
   end
 
   def title_line(count, false) do
@@ -158,12 +158,12 @@ defmodule BB.TUI.Panels.Events do
       spans:
         badge() ++
           [
-            %Span{content: "Events (", style: %Style{}},
+            %Span{content: "Events (", style: Theme.panel_title_style()},
             %Span{
               content: Integer.to_string(count),
               style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
             },
-            %Span{content: ") ", style: %Style{}}
+            %Span{content: ") ", style: Theme.panel_title_style()}
           ]
     }
   end
@@ -172,16 +172,16 @@ defmodule BB.TUI.Panels.Events do
     label =
       case count do
         0 ->
-          [%Span{content: "Events ", style: %Style{}}]
+          [%Span{content: "Events ", style: Theme.panel_title_style()}]
 
         _ ->
           [
-            %Span{content: "Events (", style: %Style{}},
+            %Span{content: "Events (", style: Theme.panel_title_style()},
             %Span{
               content: Integer.to_string(count),
               style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
             },
-            %Span{content: ") ", style: %Style{}}
+            %Span{content: ") ", style: Theme.panel_title_style()}
           ]
       end
 
