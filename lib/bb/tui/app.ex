@@ -130,6 +130,7 @@ defmodule BB.TUI.App do
       |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0}})
 
     commands = Robot.discover_commands(robot, node)
+    bridges = Robot.list_bridges(robot, node)
 
     state =
       %State{
@@ -147,6 +148,7 @@ defmodule BB.TUI.App do
         confirm_force_disarm: false
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
+      |> State.set_parameter_tabs(bridges)
 
     {:ok, state}
   end
@@ -525,6 +527,14 @@ defmodule BB.TUI.App do
     toggle_selected_param(state)
   end
 
+  def update(
+        {:event, %Event.Key{code: "t", kind: "press"}},
+        %{active_panel: :parameters} = state
+      ) do
+    state = State.cycle_parameter_tab(state)
+    {:noreply, refresh_selected_tab(state)}
+  end
+
   # ── Update — PubSub + async info messages ────────────────────
 
   def update({:info, {:bb, [:state_machine | _] = path, msg}}, state) do
@@ -681,6 +691,17 @@ defmodule BB.TUI.App do
   end
 
   defp find_actuator_for_joint(_, _joint_name), do: nil
+
+  defp refresh_selected_tab(state) do
+    case State.selected_parameter_tab(state) do
+      :local ->
+        state
+
+      {:bridge, name} ->
+        payload = Robot.list_remote_parameters(state.robot, name, state.node)
+        State.put_remote_parameters(state, name, payload)
+    end
+  end
 
   defp adjust_selected_param(state, direction, multiplier) do
     case State.selected_param(state) do

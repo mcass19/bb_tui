@@ -382,6 +382,7 @@ Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → 
 | `L`            | Increase value by ten steps                                     |
 | `H`            | Decrease value by ten steps                                     |
 | `Enter`        | Toggle boolean parameter                                        |
+| `t`            | Cycle to the next bridge tab (Local → bridges → Local)          |
 
 Step size is 1% of the declared range when the Spark schema carries
 `:min` / `:max` (e.g. `{:float, min: 0.0, max: 1.0}`), and the new value

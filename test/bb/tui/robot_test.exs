@@ -122,6 +122,228 @@ defmodule BB.TUI.RobotTest do
     end
   end
 
+  describe "list_bridges/2 (local)" do
+    test "returns bridge structs as plain maps, filtering :omit in sim mode" do
+      Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn BB.TUI.TestRobot -> :mock end)
+
+      Mimic.stub(BB.Dsl.Info, :parameters, fn BB.TUI.TestRobot ->
+        [
+          %BB.Dsl.Bridge{name: :mavlink, simulation: :start},
+          %BB.Dsl.Bridge{name: :ros, simulation: :omit},
+          %BB.Dsl.Param{}
+        ]
+      end)
+
+      bridges = Robot.list_bridges(@robot, nil)
+      assert bridges == [%{name: :mavlink, simulation: :start}]
+    end
+
+    test "keeps :omit bridges when no simulation mode is reported" do
+      Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn _ -> nil end)
+
+      Mimic.stub(BB.Dsl.Info, :parameters, fn _ ->
+        [%BB.Dsl.Bridge{name: :ros, simulation: :omit}]
+      end)
+
+      assert Robot.list_bridges(@robot, nil) == [%{name: :ros, simulation: :omit}]
+    end
+
+    test "tolerates simulation_mode raising" do
+      Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn _ -> raise "boom" end)
+      Mimic.stub(BB.Dsl.Info, :parameters, fn _ -> [] end)
+
+      assert Robot.list_bridges(@robot, nil) == []
+    end
+
+    test "tolerates simulation_mode exiting" do
+      Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn _ -> exit(:noproc) end)
+      Mimic.stub(BB.Dsl.Info, :parameters, fn _ -> [] end)
+
+      assert Robot.list_bridges(@robot, nil) == []
+    end
+
+    test "returns [] when BB.Dsl.Info.parameters raises" do
+      Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn _ -> nil end)
+      Mimic.stub(BB.Dsl.Info, :parameters, fn _ -> raise "boom" end)
+
+      assert Robot.list_bridges(@robot, nil) == []
+    end
+  end
+
+  describe "list_remote_parameters/3 (local)" do
+    test "delegates to BB.Parameter.list_remote and returns its tuple" do
+      Mimic.expect(BB.Parameter, :list_remote, fn BB.TUI.TestRobot, :mavlink ->
+        {:ok, [%{id: "PITCH_P", value: 0.1}]}
+      end)
+
+      assert Robot.list_remote_parameters(@robot, :mavlink, nil) ==
+               {:ok, [%{id: "PITCH_P", value: 0.1}]}
+    end
+
+    test "wraps raised exceptions as {:error, message}" do
+      Mimic.expect(BB.Parameter, :list_remote, fn _, _ -> raise "boom" end)
+
+      assert {:error, "boom"} = Robot.list_remote_parameters(@robot, :mavlink, nil)
+    end
+
+    test "wraps caller exit as {:error, reason}" do
+      Mimic.expect(BB.Parameter, :list_remote, fn _, _ -> exit(:noproc) end)
+
+      assert {:error, :noproc} = Robot.list_remote_parameters(@robot, :mavlink, nil)
+    end
+  end
+
+  describe "set_remote_parameter/5 (local)" do
+    test "delegates to BB.Parameter.set_remote" do
+      Mimic.expect(BB.Parameter, :set_remote, fn BB.TUI.TestRobot, :mavlink, "PITCH_P", 0.2 ->
+        :ok
+      end)
+
+      assert Robot.set_remote_parameter(@robot, :mavlink, "PITCH_P", 0.2, nil) == :ok
+    end
+
+    test "wraps raised exceptions" do
+      Mimic.expect(BB.Parameter, :set_remote, fn _, _, _, _ -> raise "boom" end)
+
+      assert {:error, "boom"} =
+               Robot.set_remote_parameter(@robot, :mavlink, "PITCH_P", 0.2, nil)
+    end
+
+    test "wraps caller exit" do
+      Mimic.expect(BB.Parameter, :set_remote, fn _, _, _, _ -> exit(:noproc) end)
+
+      assert {:error, :noproc} =
+               Robot.set_remote_parameter(@robot, :mavlink, "PITCH_P", 0.2, nil)
+    end
+  end
+
+  describe "remote bridge calls via :rpc.call" do
+    @remote :"robot@127.0.0.1"
+
+    test "list_bridges routes through :rpc.call" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        nil
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        [%BB.Dsl.Bridge{name: :mavlink, simulation: :start}]
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) ==
+               [%{name: :mavlink, simulation: :start}]
+    end
+
+    test "list_bridges returns [] when :rpc.call yields {:badrpc, _}" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        nil
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) == []
+    end
+
+    test "list_bridges returns [] when :rpc.call yields a non-list value" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        nil
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        :something_unexpected
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) == []
+    end
+
+    test "list_bridges returns [] when :rpc.call raises" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        nil
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        raise "boom"
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) == []
+    end
+
+    test "list_bridges filters :omit when simulation_mode RPC reports a mode" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        :mock
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        [
+          %BB.Dsl.Bridge{name: :mavlink, simulation: :start},
+          %BB.Dsl.Bridge{name: :ros, simulation: :omit}
+        ]
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) == [
+               %{name: :mavlink, simulation: :start}
+             ]
+    end
+
+    test "list_bridges treats :badrpc from simulation_mode as 'no sim mode'" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        {:badrpc, :nodedown}
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        [%BB.Dsl.Bridge{name: :ros, simulation: :omit}]
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) == [%{name: :ros, simulation: :omit}]
+    end
+
+    test "list_bridges treats non-atom simulation_mode response as nil" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Robot.Runtime, :simulation_mode, _ ->
+        "unexpected"
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :parameters, _ ->
+        [%BB.Dsl.Bridge{name: :ros, simulation: :omit}]
+      end)
+
+      assert Robot.list_bridges(@robot, @remote) == [%{name: :ros, simulation: :omit}]
+    end
+
+    test "list_remote_parameters routes through :rpc.call" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Parameter, :list_remote, _ ->
+        {:ok, [%{id: "PITCH_P", value: 0.1}]}
+      end)
+
+      assert Robot.list_remote_parameters(@robot, :mavlink, @remote) ==
+               {:ok, [%{id: "PITCH_P", value: 0.1}]}
+    end
+
+    test "list_remote_parameters maps {:badrpc, _} to {:error, _}" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Parameter, :list_remote, _ ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.list_remote_parameters(@robot, :mavlink, @remote) ==
+               {:error, :nodedown}
+    end
+
+    test "set_remote_parameter routes through :rpc.call" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Parameter, :set_remote, _ -> :ok end)
+
+      assert Robot.set_remote_parameter(@robot, :mavlink, "PITCH_P", 0.2, @remote) == :ok
+    end
+
+    test "set_remote_parameter maps {:badrpc, _} to {:error, _}" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Parameter, :set_remote, _ ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.set_remote_parameter(@robot, :mavlink, "PITCH_P", 0.2, @remote) ==
+               {:error, :nodedown}
+    end
+  end
+
   describe "write calls (local)" do
     test "arm/2 delegates locally when node is nil" do
       Mimic.expect(BB.Safety, :arm, fn BB.TUI.TestRobot -> :armed end)

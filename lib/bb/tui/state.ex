@@ -25,6 +25,9 @@ defmodule BB.TUI.State do
     node: nil,
     parameters: [],
     parameter_metadata: %{},
+    parameter_tabs: [:local],
+    parameter_tab_selected: 0,
+    remote_parameters: %{},
     events: [],
     active_panel: :safety,
     scroll_offset: 0,
@@ -53,6 +56,9 @@ defmodule BB.TUI.State do
           events: [{DateTime.t(), list(), term()}],
           parameters: [{list(), term()}],
           parameter_metadata: %{list() => map()},
+          parameter_tabs: [:local | {:bridge, atom()}],
+          parameter_tab_selected: non_neg_integer(),
+          remote_parameters: %{atom() => [map()] | {:error, term()}},
           commands: [term()],
           node: node() | nil,
           active_panel: :safety | :commands | :joints | :events | :parameters,
@@ -902,6 +908,100 @@ defmodule BB.TUI.State do
     params
     |> Enum.sort_by(fn {path, _} -> path end)
     |> Enum.at(idx)
+  end
+
+  @doc """
+  Replaces the discovered parameter tabs and resets the selected tab.
+
+  Always keeps `:local` at the head, so cycling never lands in a state
+  where no local-parameter view is reachable.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{}
+      iex> next = BB.TUI.State.set_parameter_tabs(state, [%{name: :mavlink}])
+      iex> next.parameter_tabs
+      [:local, {:bridge, :mavlink}]
+      iex> next.parameter_tab_selected
+      0
+  """
+  @spec set_parameter_tabs(t(), [map()]) :: t()
+  def set_parameter_tabs(%__MODULE__{} = state, bridges) do
+    tabs = [:local | Enum.map(bridges, fn %{name: name} -> {:bridge, name} end)]
+    %{state | parameter_tabs: tabs, parameter_tab_selected: 0, param_selected: 0}
+  end
+
+  @doc """
+  Returns the currently selected parameter tab.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameter_tabs: [:local, {:bridge, :mavlink}], parameter_tab_selected: 1}
+      iex> BB.TUI.State.selected_parameter_tab(state)
+      {:bridge, :mavlink}
+
+      iex> state = %BB.TUI.State{parameter_tabs: [:local], parameter_tab_selected: 0}
+      iex> BB.TUI.State.selected_parameter_tab(state)
+      :local
+  """
+  @spec selected_parameter_tab(t()) :: :local | {:bridge, atom()}
+  def selected_parameter_tab(%__MODULE__{
+        parameter_tabs: tabs,
+        parameter_tab_selected: idx
+      }) do
+    Enum.at(tabs, idx, :local)
+  end
+
+  @doc """
+  Cycles to the next parameter tab, wrapping back to `:local`.
+
+  Resets `param_selected` so the new tab starts at the first row.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameter_tabs: [:local, {:bridge, :mavlink}], parameter_tab_selected: 0, param_selected: 3}
+      iex> next = BB.TUI.State.cycle_parameter_tab(state)
+      iex> next.parameter_tab_selected
+      1
+      iex> next.param_selected
+      0
+
+      iex> state = %BB.TUI.State{parameter_tabs: [:local, {:bridge, :mavlink}], parameter_tab_selected: 1}
+      iex> BB.TUI.State.cycle_parameter_tab(state).parameter_tab_selected
+      0
+
+      iex> state = %BB.TUI.State{parameter_tabs: [:local], parameter_tab_selected: 0}
+      iex> BB.TUI.State.cycle_parameter_tab(state).parameter_tab_selected
+      0
+  """
+  @spec cycle_parameter_tab(t()) :: t()
+  def cycle_parameter_tab(%__MODULE__{parameter_tabs: tabs} = state)
+      when length(tabs) <= 1 do
+    %{state | parameter_tab_selected: 0, param_selected: 0}
+  end
+
+  def cycle_parameter_tab(%__MODULE__{} = state) do
+    next = rem(state.parameter_tab_selected + 1, length(state.parameter_tabs))
+    %{state | parameter_tab_selected: next, param_selected: 0}
+  end
+
+  @doc """
+  Stores the latest remote-parameter snapshot for a bridge.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{remote_parameters: %{}}
+      iex> next = BB.TUI.State.put_remote_parameters(state, :mavlink, [%{id: "PITCH_P", value: 0.1}])
+      iex> next.remote_parameters
+      %{mavlink: [%{id: "PITCH_P", value: 0.1}]}
+  """
+  @spec put_remote_parameters(t(), atom(), [map()] | {:error, term()}) :: t()
+  def put_remote_parameters(
+        %__MODULE__{remote_parameters: existing} = state,
+        bridge_name,
+        payload
+      ) do
+    %{state | remote_parameters: Map.put(existing, bridge_name, payload)}
   end
 
   @doc """
