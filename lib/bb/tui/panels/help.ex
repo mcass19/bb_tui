@@ -2,40 +2,102 @@ defmodule BB.TUI.Panels.Help do
   @moduledoc """
   Help popup — overlay showing all available keyboard shortcuts.
 
-  Renders the keyboard reference as a list of `%ExRatatui.Text.Line{}`
-  rows, with cornflower-bold section headers and the same key-pill
-  vocabulary used in the status bar (`BB.TUI.Theme.key_pill/2`,
-  `dim_span/1`). Scrollable with `j` / `k` via the Paragraph's
-  `:scroll` field.
+  Renders the keyboard reference as a single `ExRatatui.Widgets.Markdown`
+  widget so the content is a plain markdown string (`@help_markdown`)
+  rather than 50+ hand-built `Text.Line` rows. Markdown handles section
+  headings, bullet lists, inline code (used for keybindings), and
+  scroll offsets natively.
 
   Pure function — returns a Popup widget struct.
   """
 
-  alias BB.TUI.Theme
   alias ExRatatui.Style
-  alias ExRatatui.Text.{Line, Span}
+  alias ExRatatui.Text.Line
+  alias ExRatatui.Text.Span
   alias ExRatatui.Widgets.Block
-  alias ExRatatui.Widgets.Paragraph
+  alias ExRatatui.Widgets.Markdown
   alias ExRatatui.Widgets.Popup
+
+  @help_markdown """
+  ## Global
+
+  - `q` — Quit
+  - `Tab` — Cycle active panel
+  - `?` — Toggle this help
+  - `a` — Arm robot
+  - `d` — Disarm robot
+  - `f` — Force disarm (error state only)
+
+  ## Events panel
+
+  - `j` / `↓` — Scroll down
+  - `k` / `↑` — Scroll up
+  - `⏎` — Show event details
+  - `p` — Pause / resume stream
+  - `c` — Clear all events
+
+  ## Commands panel
+
+  - `j` / `↓` — Select next command
+  - `k` / `↑` — Select previous command
+  - `⏎` — Execute (or enter argument edit mode)
+
+  ## Command edit mode
+
+  - `Tab` / `↓` — Focus next argument
+  - `Shift+Tab` / `↑` — Focus previous argument
+  - `⏎` — Execute with current values
+  - `Esc` — Exit edit mode (keeps values)
+  - `Backspace` — Delete last char of focused arg
+  - `←` / `→` — Cycle enum value (enum-typed args only)
+  - `h` / `l` — Cycle enum, or append to non-enum buffer
+
+  ## Joints panel
+
+  - `j` / `↓` — Select next joint
+  - `k` / `↑` — Select previous joint
+  - `l` / `→` — Increase position (1% of range)
+  - `h` / `←` — Decrease position (1% of range)
+  - `L` — Increase position (10% of range)
+  - `H` — Decrease position (10% of range)
+
+  Commanded targets render as a hollow marker on the position bar.
+
+  ## Parameters panel
+
+  - `j` / `↓` — Select next parameter
+  - `k` / `↑` — Select previous parameter
+  - `l` / `→` — Increase value (1% of range, or +1 / +0.1 when unbounded)
+  - `h` / `←` — Decrease value (1% of range, or -1 / -0.1 when unbounded)
+  - `L` — 10× step
+  - `H` — 10× step (down)
+  - `⏎` — Toggle boolean parameter
+  - `t` — Cycle to the next bridge tab
+
+  Bridge-tab edits route through `BB.Parameter.set_remote`.
+
+  ---
+
+  `j` / `k` scroll this popup. Any other key closes it.
+  """
 
   @doc """
   Renders the help popup as a Popup widget with optional scroll offset.
 
   ## Examples
 
-      iex> %ExRatatui.Widgets.Popup{} = BB.TUI.Panels.Help.render(0)
-
-      iex> %ExRatatui.Widgets.Popup{content: %ExRatatui.Widgets.Paragraph{text: lines}} =
+      iex> %ExRatatui.Widgets.Popup{content: %ExRatatui.Widgets.Markdown{}} =
       ...>   BB.TUI.Panels.Help.render(0)
-      iex> Enum.any?(lines, fn %ExRatatui.Text.Line{spans: spans} ->
-      ...>   Enum.any?(spans, &(&1.content == "Global"))
-      ...> end)
+
+      iex> %ExRatatui.Widgets.Popup{content: %ExRatatui.Widgets.Markdown{content: md}} =
+      ...>   BB.TUI.Panels.Help.render(5)
+      iex> md =~ "## Global"
       true
   """
   @spec render(non_neg_integer()) :: struct()
   def render(scroll_offset \\ 0) do
-    content = %Paragraph{
-      text: lines(),
+    content = %Markdown{
+      content: @help_markdown,
       wrap: true,
       scroll: {scroll_offset, 0}
     }
@@ -53,100 +115,19 @@ defmodule BB.TUI.Panels.Help do
     }
   end
 
+  @doc """
+  Returns the full markdown source rendered inside the popup. Exposed
+  so callers (and tests) can introspect the help content without
+  spinning up the widget tree.
+  """
+  @spec markdown() :: String.t()
+  def markdown, do: @help_markdown
+
   defp title_line do
     %Line{
       spans: [
         %Span{content: " 🤖 ", style: %Style{}},
         %Span{content: "Help ", style: %Style{fg: :white, modifiers: [:bold]}}
-      ]
-    }
-  end
-
-  defp lines do
-    [
-      blank(),
-      section("Global"),
-      row("q", "Quit", :quit),
-      row("Tab", "Cycle active panel"),
-      row("?", "Toggle this help"),
-      row("a", "Arm robot"),
-      row("d", "Disarm robot"),
-      row("f", "Force disarm (error state only)"),
-      blank(),
-      section("Events panel"),
-      row("j / ↓", "Scroll down"),
-      row("k / ↑", "Scroll up"),
-      row("⏎", "Show event details"),
-      row("p", "Pause / resume stream"),
-      row("c", "Clear all events"),
-      blank(),
-      section("Commands panel"),
-      row("j / ↓", "Select next command"),
-      row("k / ↑", "Select previous command"),
-      row("⏎", "Execute (or enter argument edit mode)"),
-      blank(),
-      section("Command edit mode"),
-      row("Tab / ↓", "Focus next argument"),
-      row("Shift+Tab / ↑", "Focus previous argument"),
-      row("⏎", "Execute with current values"),
-      row("Esc", "Exit edit mode (keeps values)"),
-      row("Backspace", "Delete last char of focused arg"),
-      blank(),
-      section("Joints panel"),
-      row("j / ↓", "Select next joint"),
-      row("k / ↑", "Select previous joint"),
-      row("l / →", "Increase position (1% step)"),
-      row("h / ←", "Decrease position (1% step)"),
-      row("L", "Increase position (10% step)"),
-      row("H", "Decrease position (10% step)"),
-      blank(),
-      section("Parameters panel"),
-      row("j / ↓", "Select next parameter"),
-      row("k / ↑", "Select previous parameter"),
-      row("l / →", "Increase value (+1 int, +0.1 float)"),
-      row("h / ←", "Decrease value (-1 int, -0.1 float)"),
-      row("L", "Increase value × 10"),
-      row("H", "Decrease value × 10"),
-      row("⏎", "Toggle boolean parameter"),
-      blank(),
-      footer_line()
-    ]
-  end
-
-  defp section(label) do
-    %Line{
-      spans: [
-        %Span{content: "  ── ", style: %Style{fg: Theme.dim_text()}},
-        %Span{content: label, style: %Style{fg: :cyan, modifiers: [:bold]}},
-        %Span{content: " ──", style: %Style{fg: Theme.dim_text()}}
-      ]
-    }
-  end
-
-  defp row(keys, description, kind \\ :default) do
-    %Line{
-      spans: [
-        %Span{content: "    ", style: %Style{}},
-        Theme.key_pill(keys, kind),
-        %Span{content: "  ", style: %Style{}},
-        %Span{content: description, style: %Style{fg: :white}}
-      ]
-    }
-  end
-
-  defp blank, do: %Line{spans: [%Span{content: "", style: %Style{}}]}
-
-  defp footer_line do
-    %Line{
-      spans: [
-        %Span{content: "  ", style: %Style{}},
-        Theme.key_pill("j/k"),
-        %Span{content: "  ", style: %Style{}},
-        %Span{content: "scroll", style: %Style{fg: Theme.dim_text()}},
-        %Span{content: "    ", style: %Style{}},
-        Theme.key_pill("any other"),
-        %Span{content: "  ", style: %Style{}},
-        %Span{content: "close", style: %Style{fg: Theme.dim_text()}}
       ]
     }
   end
