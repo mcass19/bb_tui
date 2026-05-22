@@ -720,7 +720,12 @@ defmodule BB.TUI.App do
         state
 
       {:bridge, name} ->
-        payload = Robot.list_remote_parameters(state.robot, name, state.node)
+        payload =
+          case Robot.list_remote_parameters(state.robot, name, state.node) do
+            {:ok, params} -> params
+            {:error, _} = error -> error
+          end
+
         State.put_remote_parameters(state, name, payload)
     end
   end
