@@ -276,7 +276,7 @@ defmodule BB.TUI.Panels.ParametersTest do
       rendered = Enum.map_join(spans, "", & &1.content)
       assert rendered =~ "Local"
       assert rendered =~ "mavlink"
-      assert rendered =~ "[t]"
+      refute rendered =~ "[t]"
       assert rendered =~ "(1)"
     end
   end
