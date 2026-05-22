@@ -95,7 +95,7 @@ defmodule Dev.TestRobot do
       param(:grip_speed, type: :integer, default: 75, min: 1, max: 100)
     end
 
-    bridge(:mavlink, Dev.MockBridge, simulation: :mock)
+    bridge(:mavlink, Dev.MockBridge, simulation: :start)
   end
 
   topology do
