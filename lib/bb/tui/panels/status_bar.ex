@@ -80,7 +80,7 @@ defmodule BB.TUI.Panels.StatusBar do
     }
   end
 
-  defp key_hints(%State{active_panel: panel, safety_state: safety}) do
+  defp key_hints(%State{active_panel: panel, safety_state: safety} = state) do
     base =
       [
         Theme.key_pill("Tab"),
@@ -91,9 +91,15 @@ defmodule BB.TUI.Panels.StatusBar do
         Theme.dim_span(" quit ")
       ]
 
-    case panel_keys(panel, safety) do
+    extras =
+      case panel do
+        :parameters -> parameters_keys(state)
+        _ -> panel_keys(panel, safety)
+      end
+
+    case extras do
       [] -> base
-      extras -> base ++ [Theme.dim_span("  ") | extras]
+      _ -> base ++ [Theme.dim_span("  ") | extras]
     end
   end
 
@@ -143,8 +149,10 @@ defmodule BB.TUI.Panels.StatusBar do
     [Theme.key_pill("j/k"), Theme.dim_span(" select ")]
   end
 
-  defp panel_keys(:parameters, _safety) do
-    [
+  defp panel_keys(_, _), do: []
+
+  defp parameters_keys(%State{parameter_tabs: tabs}) do
+    base = [
       Theme.key_pill("j/k"),
       Theme.dim_span(" select "),
       Theme.key_pill("h/l"),
@@ -152,7 +160,11 @@ defmodule BB.TUI.Panels.StatusBar do
       Theme.key_pill("⏎"),
       Theme.dim_span(" toggle ")
     ]
-  end
 
-  defp panel_keys(_, _), do: []
+    if length(tabs) > 1 do
+      base ++ [Theme.key_pill("t"), Theme.dim_span(" tab ")]
+    else
+      base
+    end
+  end
 end

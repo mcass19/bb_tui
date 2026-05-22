@@ -194,8 +194,8 @@ defmodule BB.TUI.Panels.Parameters do
 
   Single-tab (local-only) state renders as ` Parameters (N) ` with a
   bold-cyan count. Multi-tab state renders ` Parameters · Local | mavlink ` etc.,
-  with the active tab bold-cyan and a trailing `[t]` hint that mirrors
-  the keybinding documented in the README.
+  with the active tab bold-cyan. The `t` shortcut to cycle tabs is
+  surfaced in the bottom status bar.
 
   ## Examples
 
@@ -212,7 +212,7 @@ defmodule BB.TUI.Panels.Parameters do
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Parameters.title_line([:local, {:bridge, :mavlink}], 1, 12)
       iex> Enum.map_join(spans, "", & &1.content)
-      "  5  Parameters · Local | mavlink (12) [t] "
+      "  5  Parameters · Local | mavlink (12) "
   """
   @spec title_line([atom() | {:bridge, atom()}], non_neg_integer(), non_neg_integer()) :: Line.t()
   def title_line([:local], _idx, 0) do
@@ -245,7 +245,7 @@ defmodule BB.TUI.Panels.Parameters do
       spans:
         badge() ++
           [%Span{content: "Parameters · ", style: Theme.panel_title_style()}] ++
-          tab_spans ++ [%Span{content: " [t] ", style: %Style{fg: Theme.dim_text()}}]
+          tab_spans ++ [%Span{content: " ", style: %Style{}}]
     }
   end
 

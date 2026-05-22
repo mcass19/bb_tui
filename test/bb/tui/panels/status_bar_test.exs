@@ -123,13 +123,27 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert txt =~ "adjust"
     end
 
-    test "shows parameters panel hints (select / adjust / toggle)" do
+    test "shows parameters panel hints (select / adjust / toggle) without tab pill on single tab" do
       state = Fixtures.sample_state(%{active_panel: :parameters})
       txt = text(StatusBar.render(state))
 
       assert txt =~ "select"
       assert txt =~ "adjust"
       assert txt =~ "toggle"
+      refute txt =~ " tab "
+    end
+
+    test "shows t / tab pill on parameters panel when bridge tabs are present" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}]
+        })
+
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ " t "
+      assert txt =~ " tab "
     end
 
     test "shows Disarmed dim badge" do
