@@ -1436,7 +1436,27 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} = App.update({:event, event}, state)
       assert new_state.parameter_tab_selected == 1
       assert new_state.param_selected == 0
-      assert {:ok, [%{id: "ROLL_P"}]} = new_state.remote_parameters.mavlink
+      assert [%{id: "ROLL_P"}] = new_state.remote_parameters.mavlink
+    end
+
+    test "t key stores {:error, _} as-is when list_remote fails" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :list_remote, fn _robot, :mavlink ->
+        {:error, :nodedown}
+      end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "t", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.remote_parameters.mavlink == {:error, :nodedown}
     end
 
     test "l on a bridge tab calls set_remote_parameter with the selected param id" do
@@ -1468,7 +1488,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # Cache reflects the refresh fired after :ok.
-      assert {:ok, [%{value: 0.11}]} = new_state.remote_parameters.mavlink
+      assert [%{value: 0.11}] = new_state.remote_parameters.mavlink
     end
 
     test "remote adjustment clamps integer to declared bounds" do
@@ -1516,7 +1536,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert {:ok, [%{value: false}]} = new_state.remote_parameters.mavlink
+      assert [%{value: false}] = new_state.remote_parameters.mavlink
     end
 
     test "remote set returning {:error, _} leaves the cache untouched" do
