@@ -305,13 +305,8 @@ ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "pre
 
 ## Telemetry
 
-Every BB.TUI session rides on ExRatatui's `:telemetry` instrumentation.
-The runtime wraps `mount`, every input event, every PubSub/info
-dispatch, and every frame in spans with `:start`/`:stop`/`:exception`
-events; transport connect/disconnect and session open/close fire as
-single events. All metadata carries `:mod` (`BB.TUI.App` for any TUI
-session) and `:transport` (`:local`, `:ssh`, `:distributed`, or
-`:cell_session`).
+Every BB.TUI session rides on ExRatatui's `:telemetry` instrumentation. The runtime wraps `mount`, every input event, every PubSub/info
+dispatch, and every frame in spans with `:start`/`:stop`/`:exception` events; transport connect/disconnect and session open/close fire as single events. All metadata carries `:mod` (`BB.TUI.App` for any TUI session) and `:transport` (`:local`, `:ssh`, `:distributed`, or `:cell_session`).
 
 A one-call default Logger handler is exposed for development:
 
@@ -322,28 +317,7 @@ BB.TUI.attach_telemetry_logger(level: :info)
 BB.TUI.detach_telemetry_logger()
 ```
 
-For production observability, attach a custom handler that ships into
-Telemetry.Metrics, OpenTelemetry, or whatever the consumer app already
-uses:
-
-```elixir
-:telemetry.attach_many(
-  "my-app-bb-tui",
-  [
-    [:ex_ratatui, :runtime, :event, :stop],
-    [:ex_ratatui, :render, :frame, :stop],
-    [:ex_ratatui, :render, :dropped],
-    [:ex_ratatui, :transport, :disconnect]
-  ],
-  fn event, measurements, %{mod: BB.TUI.App} = meta, _ ->
-    MyApp.Metrics.observe(event, measurements, meta)
-  end,
-  nil
-)
-```
-
-See `ExRatatui.Telemetry` for the full event reference (event names,
-measurement units, and metadata shapes).
+For production observability, attach a custom handler that ships into Telemetry.Metrics, OpenTelemetry, or whatever the consumer app already uses. See `ExRatatui.Telemetry` for the full event reference (event names, measurement units, and metadata shapes).
 
 ## Configuration
 
@@ -371,9 +345,7 @@ config :bb_tui, command_timeout: 30_000
 | `d`             | Disarm robot                                                   |
 | `f`             | Force disarm (error only)                                      |
 
-Each panel's title carries a bold-cyan `[N]` badge that mirrors the
-number key for that panel: `[1]` Safety, `[2]` Commands, `[3]` Joints,
-`[4]` Events, `[5]` Parameters.
+Each panel's title carries a bold-cyan `[N]` badge that mirrors the number key for that panel: `[1]` Safety, `[2]` Commands, `[3]` Joints, `[4]` Events, `[5]` Parameters.
 
 ### Events panel
 
@@ -408,13 +380,9 @@ Active when the selected command declares arguments and Enter is pressed.
 | `Enter`         | Execute with current values                             |
 | `Esc`           | Exit edit mode (keeps values)                           |
 
-Enum-typed args (`{:in, [...]}` in the Spark schema) render as
-`‹ value ›` chevrons and respond to `←/→` (or `h/l`) instead of needing
-the atom typed literally. For non-enum args, `h`/`l` continue to append
-to the buffer; `←`/`→` are no-ops outside of enum picks.
+Enum-typed args (`{:in, [...]}` in the Spark schema) render as `‹ value ›` chevrons and respond to `←/→` (or `h/l`) instead of needing the atom typed literally. For non-enum args, `h`/`l` continue to append to the buffer; `←`/`→` are no-ops outside of enum picks.
 
-Values are parsed before dispatch: `"true"`/`"false"` → boolean,
-`":foo"` → atom, numeric → integer or float, otherwise string.
+Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → atom, numeric → integer or float, otherwise string.
 
 ### Joints panel
 
@@ -440,15 +408,7 @@ Values are parsed before dispatch: `"true"`/`"false"` → boolean,
 | `Enter`        | Toggle boolean parameter                                        |
 | `t`            | Cycle to the next bridge tab (Local → bridges → Local)          |
 
-Step size is 1% of the declared range when min / max are known — the
-Spark schema's `{:float, min: 0.0, max: 1.0}` form on the Local tab, or
-the bridge's flat `:min` / `:max` keys on a bridge tab — and the new
-value is clamped to the bounds. Parameters without bounds use an
-absolute step of `+1` for integers and `+0.1` for floats. The same
-keybindings dispatch through `BB.Parameter.set` on the Local tab and
-`BB.Parameter.set_remote` on a bridge tab; a successful remote set
-refetches that bridge's parameter list so the cached values stay in
-sync.
+Step size is 1% of the declared range when min / max are known — the Spark schema's `{:float, min: 0.0, max: 1.0}` form on the Local tab, or the bridge's flat `:min` / `:max` keys on a bridge tab — and the new value is clamped to the bounds. Parameters without bounds use an absolute step of `+1` for integers and `+0.1` for floats. The same keybindings dispatch through `BB.Parameter.set` on the Local tab and `BB.Parameter.set_remote` on a bridge tab; a successful remote set refetches that bridge's parameter list so the cached values stay in sync.
 
 ## How It Works
 
@@ -481,18 +441,9 @@ mix bb.tui --robot Dev.TestRobot
 
 `Dev.TestRobot` exercises every panel feature end-to-end:
 
-- Commands with all argument shapes — `home` (no args), `move`
-  (enum + float), `log` (string + integer), `wobble` (always returns
-  `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber
-  is visible).
-- Parameter groups covering every primitive type — float, integer,
-  boolean, atom — most with `:min` / `:max` so 1%-of-range stepping
-  applies.
-- A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter
-  list (`PITCH_P`, `PITCH_I`, `MAX_RATE`, `ARM_CHECKS`, `FLIGHT_MODE`)
-  and in-memory writes — press `t` in the Parameters panel to cycle
-  to the Bridge tab and edit those params via the same h/l/H/L/Enter
-  keys.
+- Commands with all argument shapes — `home` (no args), `move` (enum + float), `log` (string + integer), `wobble` (always returns `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber is visible).
+- Parameter groups covering every primitive type — float, integer, boolean, atom — most with `:min` / `:max` so 1%-of-range stepping applies.
+- A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list (`PITCH_P`, `PITCH_I`, `MAX_RATE`, `ARM_CHECKS`, `FLIGHT_MODE`) and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab and edit those params via the same h/l/H/L/Enter keys.
 
 ### Testing SSH locally
 

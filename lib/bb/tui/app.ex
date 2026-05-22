@@ -271,7 +271,7 @@ defmodule BB.TUI.App do
   end
 
   def update(
-        {:event, %Event.Key{code: "backtab", kind: "press"}},
+        {:event, %Event.Key{code: "back_tab", kind: "press"}},
         %{active_panel: :commands, command_edit_mode: true} = state
       ) do
     {:noreply, State.focus_prev_arg(state)}
@@ -281,7 +281,7 @@ defmodule BB.TUI.App do
     {:noreply, State.cycle_panel(state)}
   end
 
-  def update({:event, %Event.Key{code: "backtab", kind: "press"}}, state) do
+  def update({:event, %Event.Key{code: "back_tab", kind: "press"}}, state) do
     {:noreply, State.cycle_panel_back(state)}
   end
 

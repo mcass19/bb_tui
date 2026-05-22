@@ -230,9 +230,9 @@ defmodule BB.TUI.AppTest do
       assert new_state.active_panel == :commands
     end
 
-    test "shift+tab (code: backtab) cycles to the previous panel" do
+    test "shift+tab (code: back_tab) cycles to the previous panel" do
       state = Fixtures.sample_state(%{active_panel: :commands})
-      event = %ExRatatui.Event.Key{code: "backtab", kind: "press"}
+      event = %ExRatatui.Event.Key{code: "back_tab", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       assert new_state.active_panel == :safety
@@ -610,10 +610,10 @@ defmodule BB.TUI.AppTest do
       end
     end
 
-    test "backtab/up focuses the previous arg in edit mode" do
+    test "back_tab/up focuses the previous arg in edit mode" do
       state = edit_mode_state(%{command_focused_arg: 1})
 
-      for code <- ["backtab", "up"] do
+      for code <- ["back_tab", "up"] do
         event = %ExRatatui.Event.Key{code: code, kind: "press"}
         assert {:noreply, new_state} = App.update({:event, event}, state)
         assert new_state.command_focused_arg == 0
