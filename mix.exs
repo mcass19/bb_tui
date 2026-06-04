@@ -19,7 +19,11 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.Fixtures
         ]
       ],
-      dialyzer: [plt_add_apps: [:mix]]
+      dialyzer: [
+        plt_local_path: "plts",
+        plt_core_path: "plts/core",
+        plt_add_apps: [:mix]
+      ]
     ]
   end
 
