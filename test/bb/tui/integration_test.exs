@@ -57,13 +57,13 @@ defmodule BB.TUI.IntegrationTest do
     test "toggling help flips the show_help flag" do
       pid = start_tui!()
 
-      refute current_state(pid).show_help
+      refute current_state(pid).ui.show_help?
 
       :ok = Runtime.inject_event(pid, %Key{code: "?", kind: "press"})
-      assert current_state(pid).show_help
+      assert current_state(pid).ui.show_help?
 
       :ok = Runtime.inject_event(pid, %Key{code: "?", kind: "press"})
-      refute current_state(pid).show_help
+      refute current_state(pid).ui.show_help?
     end
 
     test "enabling trace captures injected events" do
@@ -209,7 +209,7 @@ defmodule BB.TUI.IntegrationTest do
       snapshot = Runtime.snapshot(pid)
 
       assert snapshot.subscription_count == 0
-      assert current_state(pid).throbber_step == 0
+      assert current_state(pid).ui.throbber_step == 0
     end
 
     test "advances while safety_state is :disarming" do
@@ -225,7 +225,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "noop", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).throbber_step > 0
+        assert current_state(pid).ui.throbber_step > 0
       end)
     end
   end
@@ -250,7 +250,7 @@ defmodule BB.TUI.IntegrationTest do
   end
 
   defp current_panel(pid) do
-    current_state(pid).active_panel
+    current_state(pid).ui.active_panel
   end
 
   defp start_tui_on_commands_panel! do
@@ -260,7 +260,7 @@ defmodule BB.TUI.IntegrationTest do
     update_user_state(pid, fn state ->
       %{
         state
-        | active_panel: :commands,
+        | ui: %{state.ui | active_panel: :commands},
           commands: [%{name: :home, allowed_states: [:idle]}],
           command_selected: 0,
           safety: %{state.safety | runtime: :idle}

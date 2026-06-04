@@ -164,9 +164,7 @@ defmodule BB.TUI.App do
           runtime: Robot.runtime_state(robot, node)
         },
         joints: %State.Joints{entries: joints},
-        commands: commands,
-        active_panel: :safety,
-        show_help: false
+        commands: commands
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
@@ -219,13 +217,13 @@ defmodule BB.TUI.App do
     panels =
       [
         {Panels.TitleBar.render(state), title_bar_area},
-        {Panels.Safety.render(state, state.active_panel == :safety), safety_area},
-        {Panels.Commands.render(state, state.active_panel == :commands), commands_area},
-        {Panels.Joints.render(state, state.active_panel == :joints), joints_area}
+        {Panels.Safety.render(state, state.ui.active_panel == :safety), safety_area},
+        {Panels.Commands.render(state, state.ui.active_panel == :commands), commands_area},
+        {Panels.Joints.render(state, state.ui.active_panel == :joints), joints_area}
       ] ++
-        Panels.Events.render_panes(state, state.active_panel == :events, events_area) ++
+        Panels.Events.render_panes(state, state.ui.active_panel == :events, events_area) ++
         [
-          {Panels.Parameters.render(state, state.active_panel == :parameters), params_area},
+          {Panels.Parameters.render(state, state.ui.active_panel == :parameters), params_area},
           {Panels.StatusBar.render(state), status_bar_area}
         ]
 
@@ -237,7 +235,7 @@ defmodule BB.TUI.App do
   @impl true
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{show_help: true} = state
+        %{ui: %{show_help?: true}} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.scroll_help_down(state)}
@@ -245,13 +243,13 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{show_help: true} = state
+        %{ui: %{show_help?: true}} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.scroll_help_up(state)}
   end
 
-  def update({:event, %Event.Key{kind: "press"}}, %{show_help: true} = state) do
+  def update({:event, %Event.Key{kind: "press"}}, %{ui: %{show_help?: true}} = state) do
     {:noreply, State.toggle_help(state)}
   end
 
@@ -289,14 +287,14 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "tab", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       ) do
     {:noreply, State.focus_next_arg(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "back_tab", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       ) do
     {:noreply, State.focus_prev_arg(state)}
   end
@@ -344,7 +342,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :events} = state
+        %{ui: %{active_panel: :events}} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.scroll_down(state)}
@@ -352,7 +350,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :events} = state
+        %{ui: %{active_panel: :events}} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.scroll_up(state)}
@@ -360,21 +358,21 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "p", kind: "press"}},
-        %{active_panel: :events} = state
+        %{ui: %{active_panel: :events}} = state
       ) do
     {:noreply, State.toggle_events_pause(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "c", kind: "press"}},
-        %{active_panel: :events} = state
+        %{ui: %{active_panel: :events}} = state
       ) do
     {:noreply, State.clear_events(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "enter", kind: "press"}},
-        %{active_panel: :events} = state
+        %{ui: %{active_panel: :events}} = state
       ) do
     if State.selected_event(state) do
       {:noreply, State.toggle_event_detail(state)}
@@ -391,21 +389,21 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "esc", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       ) do
     {:noreply, State.exit_command_edit_mode(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "enter", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       ) do
     execute_selected_command(state)
   end
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       )
       when code in ["tab", "down"] do
     {:noreply, State.focus_next_arg(state)}
@@ -413,21 +411,21 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "up", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       ) do
     {:noreply, State.focus_prev_arg(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "backspace", kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       ) do
     {:noreply, State.backspace_focused_arg(state)}
   end
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       )
       when code in ["left", "right", "h", "l"] do
     handle_arg_horizontal_key(state, code)
@@ -435,7 +433,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :commands, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
       )
       when byte_size(code) == 1 do
     {:noreply, State.append_to_focused_arg(state, code)}
@@ -445,7 +443,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :commands} = state
+        %{ui: %{active_panel: :commands}} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.select_next_command(state)}
@@ -453,7 +451,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :commands} = state
+        %{ui: %{active_panel: :commands}} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_command(state)}
@@ -461,7 +459,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "enter", kind: "press"}},
-        %{active_panel: :commands} = state
+        %{ui: %{active_panel: :commands}} = state
       ) do
     case State.selected_command(state) do
       %{arguments: [_ | _]} -> {:noreply, State.enter_command_edit_mode(state)}
@@ -473,7 +471,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :joints} = state
+        %{ui: %{active_panel: :joints}} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.select_next_joint(state)}
@@ -481,7 +479,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :joints} = state
+        %{ui: %{active_panel: :joints}} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_joint(state)}
@@ -489,7 +487,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :joints} = state
+        %{ui: %{active_panel: :joints}} = state
       )
       when code in ["l", "right"] do
     adjust_selected_joint(state, :increase, 1)
@@ -497,7 +495,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :joints} = state
+        %{ui: %{active_panel: :joints}} = state
       )
       when code in ["h", "left"] do
     adjust_selected_joint(state, :decrease, 1)
@@ -505,14 +503,14 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "L", kind: "press"}},
-        %{active_panel: :joints} = state
+        %{ui: %{active_panel: :joints}} = state
       ) do
     adjust_selected_joint(state, :increase, 10)
   end
 
   def update(
         {:event, %Event.Key{code: "H", kind: "press"}},
-        %{active_panel: :joints} = state
+        %{ui: %{active_panel: :joints}} = state
       ) do
     adjust_selected_joint(state, :decrease, 10)
   end
@@ -521,7 +519,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       )
       when code in ["j", "down"] do
     {:noreply, State.select_next_param(state)}
@@ -529,7 +527,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_param(state)}
@@ -537,7 +535,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       )
       when code in ["l", "right"] do
     adjust_selected_param(state, :increase, 1)
@@ -545,7 +543,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       )
       when code in ["h", "left"] do
     adjust_selected_param(state, :decrease, 1)
@@ -553,28 +551,28 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "L", kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       ) do
     adjust_selected_param(state, :increase, 10)
   end
 
   def update(
         {:event, %Event.Key{code: "H", kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       ) do
     adjust_selected_param(state, :decrease, 10)
   end
 
   def update(
         {:event, %Event.Key{code: "enter", kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       ) do
     toggle_selected_param(state)
   end
 
   def update(
         {:event, %Event.Key{code: "t", kind: "press"}},
-        %{active_panel: :parameters} = state
+        %{ui: %{active_panel: :parameters}} = state
       ) do
     state = State.cycle_parameter_tab(state)
     {:noreply, refresh_selected_tab(state)}
@@ -678,7 +676,7 @@ defmodule BB.TUI.App do
   defp needs_throbber?(%State{executing_command: marker}) when marker != nil, do: true
   defp needs_throbber?(_), do: false
 
-  defp maybe_add_popup(panels, %{show_help: true, help_scroll_offset: offset}, full) do
+  defp maybe_add_popup(panels, %{ui: %{show_help?: true, help_scroll_offset: offset}}, full) do
     panels ++ [{Panels.Help.render(offset), full}]
   end
 

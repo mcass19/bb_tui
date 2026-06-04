@@ -15,19 +15,19 @@ defmodule BB.TUI.StateTest do
     test "cycles through panels in order" do
       state = Fixtures.sample_state(%{active_panel: :safety})
       state = State.cycle_panel(state)
-      assert state.active_panel == :commands
+      assert state.ui.active_panel == :commands
 
       state = State.cycle_panel(state)
-      assert state.active_panel == :joints
+      assert state.ui.active_panel == :joints
 
       state = State.cycle_panel(state)
-      assert state.active_panel == :events
+      assert state.ui.active_panel == :events
 
       state = State.cycle_panel(state)
-      assert state.active_panel == :parameters
+      assert state.ui.active_panel == :parameters
 
       state = State.cycle_panel(state)
-      assert state.active_panel == :safety
+      assert state.ui.active_panel == :safety
     end
   end
 
@@ -35,10 +35,10 @@ defmodule BB.TUI.StateTest do
     test "toggles help overlay on and off" do
       state = Fixtures.sample_state(%{show_help: false})
       state = State.toggle_help(state)
-      assert state.show_help
+      assert state.ui.show_help?
 
       state = State.toggle_help(state)
-      refute state.show_help
+      refute state.ui.show_help?
     end
   end
 
@@ -286,7 +286,7 @@ defmodule BB.TUI.StateTest do
     test "increments throbber step" do
       state = Fixtures.sample_state(%{throbber_step: 5})
       state = State.tick_throbber(state)
-      assert state.throbber_step == 6
+      assert state.ui.throbber_step == 6
     end
   end
 

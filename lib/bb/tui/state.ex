@@ -13,8 +13,8 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{active_panel: :safety, show_help: false}
-      iex> state.active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :safety, show_help?: false}}
+      iex> state.ui.active_panel
       :safety
   """
 
@@ -22,6 +22,7 @@ defmodule BB.TUI.State do
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
+  alias BB.TUI.State.UI
 
   @max_events 100
 
@@ -35,10 +36,6 @@ defmodule BB.TUI.State do
     parameter_tabs: [:local],
     parameter_tab_selected: 0,
     remote_parameters: %{},
-    active_panel: :safety,
-    show_help: false,
-    help_scroll_offset: 0,
-    throbber_step: 0,
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
@@ -46,6 +43,7 @@ defmodule BB.TUI.State do
     command_focused_arg: 0,
     command_form_values: %{},
     param_selected: 0,
+    ui: %UI{},
     events: %Events{},
     joints: %Joints{},
     safety: %Safety{},
@@ -62,10 +60,6 @@ defmodule BB.TUI.State do
           remote_parameters: %{atom() => [map()] | {:error, term()}},
           commands: [term()],
           node: node() | nil,
-          active_panel: :safety | :commands | :joints | :events | :parameters,
-          show_help: boolean(),
-          help_scroll_offset: non_neg_integer(),
-          throbber_step: non_neg_integer(),
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
           executing_command: term() | nil,
@@ -73,6 +67,7 @@ defmodule BB.TUI.State do
           command_focused_arg: non_neg_integer(),
           command_form_values: %{atom() => %{atom() => String.t()}},
           param_selected: non_neg_integer(),
+          ui: UI.t(),
           events: Events.t(),
           joints: Joints.t(),
           safety: Safety.t(),
@@ -100,27 +95,27 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{active_panel: :safety}
-      iex> BB.TUI.State.cycle_panel(state).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :safety}}
+      iex> BB.TUI.State.cycle_panel(state).ui.active_panel
       :commands
 
-      iex> state = %BB.TUI.State{active_panel: :parameters}
-      iex> BB.TUI.State.cycle_panel(state).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :parameters}}
+      iex> BB.TUI.State.cycle_panel(state).ui.active_panel
       :safety
 
-      iex> state = %BB.TUI.State{active_panel: :unknown}
-      iex> BB.TUI.State.cycle_panel(state).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :unknown}}
+      iex> BB.TUI.State.cycle_panel(state).ui.active_panel
       :safety
   """
   @spec cycle_panel(t()) :: t()
-  def cycle_panel(%__MODULE__{active_panel: current} = state) when current in @panels do
+  def cycle_panel(%__MODULE__{ui: %{active_panel: current}} = state) when current in @panels do
     idx = Enum.find_index(@panels, &(&1 == current))
     next = Enum.at(@panels, rem(idx + 1, length(@panels)))
-    %{state | active_panel: next}
+    %{state | ui: %{state.ui | active_panel: next}}
   end
 
   def cycle_panel(%__MODULE__{} = state) do
-    %{state | active_panel: hd(@panels)}
+    %{state | ui: %{state.ui | active_panel: hd(@panels)}}
   end
 
   @doc """
@@ -131,28 +126,29 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{active_panel: :commands}
-      iex> BB.TUI.State.cycle_panel_back(state).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :commands}}
+      iex> BB.TUI.State.cycle_panel_back(state).ui.active_panel
       :safety
 
-      iex> state = %BB.TUI.State{active_panel: :safety}
-      iex> BB.TUI.State.cycle_panel_back(state).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :safety}}
+      iex> BB.TUI.State.cycle_panel_back(state).ui.active_panel
       :parameters
 
-      iex> state = %BB.TUI.State{active_panel: :unknown}
-      iex> BB.TUI.State.cycle_panel_back(state).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :unknown}}
+      iex> BB.TUI.State.cycle_panel_back(state).ui.active_panel
       :parameters
   """
   @spec cycle_panel_back(t()) :: t()
-  def cycle_panel_back(%__MODULE__{active_panel: current} = state) when current in @panels do
+  def cycle_panel_back(%__MODULE__{ui: %{active_panel: current}} = state)
+      when current in @panels do
     count = length(@panels)
     idx = Enum.find_index(@panels, &(&1 == current))
     prev = Enum.at(@panels, rem(idx - 1 + count, count))
-    %{state | active_panel: prev}
+    %{state | ui: %{state.ui | active_panel: prev}}
   end
 
   def cycle_panel_back(%__MODULE__{} = state) do
-    %{state | active_panel: List.last(@panels)}
+    %{state | ui: %{state.ui | active_panel: List.last(@panels)}}
   end
 
   @doc """
@@ -209,17 +205,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{active_panel: :safety}
-      iex> BB.TUI.State.jump_to_panel(state, :events).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :safety}}
+      iex> BB.TUI.State.jump_to_panel(state, :events).ui.active_panel
       :events
 
-      iex> state = %BB.TUI.State{active_panel: :safety}
-      iex> BB.TUI.State.jump_to_panel(state, :unknown).active_panel
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :safety}}
+      iex> BB.TUI.State.jump_to_panel(state, :unknown).ui.active_panel
       :safety
   """
   @spec jump_to_panel(t(), atom()) :: t()
   def jump_to_panel(%__MODULE__{} = state, panel) when panel in @panels do
-    %{state | active_panel: panel}
+    %{state | ui: %{state.ui | active_panel: panel}}
   end
 
   def jump_to_panel(%__MODULE__{} = state, _panel), do: state
@@ -229,17 +225,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{show_help: false}
-      iex> BB.TUI.State.toggle_help(state).show_help
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{show_help?: false}}
+      iex> BB.TUI.State.toggle_help(state).ui.show_help?
       true
 
-      iex> state = %BB.TUI.State{show_help: true}
-      iex> BB.TUI.State.toggle_help(state).show_help
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{show_help?: true}}
+      iex> BB.TUI.State.toggle_help(state).ui.show_help?
       false
   """
   @spec toggle_help(t()) :: t()
-  def toggle_help(%__MODULE__{} = state) do
-    %{state | show_help: !state.show_help, help_scroll_offset: 0}
+  def toggle_help(%__MODULE__{ui: ui} = state) do
+    %{state | ui: %{ui | show_help?: !ui.show_help?, help_scroll_offset: 0}}
   end
 
   @doc """
@@ -247,13 +243,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{show_help: true, help_scroll_offset: 0}
-      iex> BB.TUI.State.scroll_help_down(state).help_scroll_offset
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{show_help?: true, help_scroll_offset: 0}}
+      iex> BB.TUI.State.scroll_help_down(state).ui.help_scroll_offset
       1
   """
   @spec scroll_help_down(t()) :: t()
-  def scroll_help_down(%__MODULE__{help_scroll_offset: offset} = state) do
-    %{state | help_scroll_offset: offset + 1}
+  def scroll_help_down(%__MODULE__{ui: %{help_scroll_offset: offset} = ui} = state) do
+    %{state | ui: %{ui | help_scroll_offset: offset + 1}}
   end
 
   @doc """
@@ -261,17 +257,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{show_help: true, help_scroll_offset: 0}
-      iex> BB.TUI.State.scroll_help_up(state).help_scroll_offset
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{show_help?: true, help_scroll_offset: 0}}
+      iex> BB.TUI.State.scroll_help_up(state).ui.help_scroll_offset
       0
 
-      iex> state = %BB.TUI.State{show_help: true, help_scroll_offset: 5}
-      iex> BB.TUI.State.scroll_help_up(state).help_scroll_offset
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{show_help?: true, help_scroll_offset: 5}}
+      iex> BB.TUI.State.scroll_help_up(state).ui.help_scroll_offset
       4
   """
   @spec scroll_help_up(t()) :: t()
-  def scroll_help_up(%__MODULE__{help_scroll_offset: offset} = state) do
-    %{state | help_scroll_offset: max(offset - 1, 0)}
+  def scroll_help_up(%__MODULE__{ui: %{help_scroll_offset: offset} = ui} = state) do
+    %{state | ui: %{ui | help_scroll_offset: max(offset - 1, 0)}}
   end
 
   @doc """
@@ -499,13 +495,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{throbber_step: 3}
-      iex> BB.TUI.State.tick_throbber(state).throbber_step
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{throbber_step: 3}}
+      iex> BB.TUI.State.tick_throbber(state).ui.throbber_step
       4
   """
   @spec tick_throbber(t()) :: t()
-  def tick_throbber(%__MODULE__{throbber_step: step} = state) do
-    %{state | throbber_step: step + 1}
+  def tick_throbber(%__MODULE__{ui: %{throbber_step: step} = ui} = state) do
+    %{state | ui: %{ui | throbber_step: step + 1}}
   end
 
   @doc """

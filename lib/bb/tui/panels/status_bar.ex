@@ -28,7 +28,7 @@ defmodule BB.TUI.Panels.StatusBar do
   ## Examples
 
       iex> state = %BB.TUI.State{
-      ...>   robot: MyApp.Robot, active_panel: :safety,
+      ...>   robot: MyApp.Robot, ui: %BB.TUI.State.UI{active_panel: :safety},
       ...>   safety: %BB.TUI.State.Safety{state: :armed, runtime: :idle}
       ...> }
       iex> %ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}} =
@@ -37,7 +37,7 @@ defmodule BB.TUI.Panels.StatusBar do
       true
 
       iex> state = %BB.TUI.State{
-      ...>   robot: MyApp.Robot, active_panel: :safety,
+      ...>   robot: MyApp.Robot, ui: %BB.TUI.State.UI{active_panel: :safety},
       ...>   safety: %BB.TUI.State.Safety{state: :armed, runtime: :idle}
       ...> }
       iex> %ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}} =
@@ -80,7 +80,7 @@ defmodule BB.TUI.Panels.StatusBar do
     }
   end
 
-  defp key_hints(%State{active_panel: panel, safety: %{state: safety}} = state) do
+  defp key_hints(%State{ui: %{active_panel: panel}, safety: %{state: safety}} = state) do
     base =
       [
         Theme.key_pill("Tab"),

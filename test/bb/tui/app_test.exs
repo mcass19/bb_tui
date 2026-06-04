@@ -23,7 +23,7 @@ defmodule BB.TUI.AppTest do
       assert state.joints.entries.shoulder.position == 0.0
       assert state.joints.entries.elbow.position == 45.0
       assert state.events.list == []
-      assert state.active_panel == :safety
+      assert state.ui.active_panel == :safety
       assert state.events.paused? == false
       assert state.command_selected == 0
       assert state.executing_command == nil
@@ -227,7 +227,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "tab", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.active_panel == :commands
+      assert new_state.ui.active_panel == :commands
     end
 
     test "shift+tab (code: back_tab) cycles to the previous panel" do
@@ -235,7 +235,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "back_tab", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.active_panel == :safety
+      assert new_state.ui.active_panel == :safety
     end
 
     test "number keys 1..5 jump directly to the matching panel" do
@@ -250,7 +250,7 @@ defmodule BB.TUI.AppTest do
           ] do
         event = %ExRatatui.Event.Key{code: code, kind: "press"}
         assert {:noreply, new_state} = App.update({:event, event}, state)
-        assert new_state.active_panel == panel
+        assert new_state.ui.active_panel == panel
       end
     end
 
@@ -274,7 +274,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # Did NOT jump to :joints; the digit was appended to the focused arg.
-      assert new_state.active_panel == :commands
+      assert new_state.ui.active_panel == :commands
       assert new_state.command_form_values == %{log: %{level: "13"}}
     end
 
@@ -283,7 +283,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "?", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.show_help
+      assert new_state.ui.show_help?
     end
 
     test "j/down scrolls help overlay down" do
@@ -291,8 +291,8 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "j", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.help_scroll_offset == 1
-      assert new_state.show_help
+      assert new_state.ui.help_scroll_offset == 1
+      assert new_state.ui.show_help?
     end
 
     test "k/up scrolls help overlay up" do
@@ -300,8 +300,8 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.help_scroll_offset == 2
-      assert new_state.show_help
+      assert new_state.ui.help_scroll_offset == 2
+      assert new_state.ui.show_help?
     end
 
     test "any key dismisses help overlay" do
@@ -309,7 +309,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "x", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      refute new_state.show_help
+      refute new_state.ui.show_help?
     end
 
     test "any key dismisses event detail popup" do
@@ -1778,7 +1778,7 @@ defmodule BB.TUI.AppTest do
     test ":throbber_tick info increments the throbber step" do
       state = Fixtures.sample_state(%{throbber_step: 7})
       assert {:noreply, next} = App.update({:info, :throbber_tick}, state)
-      assert next.throbber_step == 8
+      assert next.ui.throbber_step == 8
     end
 
     test "arms the sensor_flush one-shot while a render is pending" do

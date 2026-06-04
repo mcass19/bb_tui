@@ -28,14 +28,14 @@ defmodule BB.TUI.Panels.Safety do
       iex> state = %BB.TUI.State{safety: %BB.TUI.State.Safety{state: :armed, runtime: :idle}}
       iex> %ExRatatui.Widgets.Paragraph{} = BB.TUI.Panels.Safety.render(state, true)
 
-      iex> state = %BB.TUI.State{throbber_step: 0, safety: %BB.TUI.State.Safety{state: :disarming, runtime: :disarming}}
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{throbber_step: 0}, safety: %BB.TUI.State.Safety{state: :disarming, runtime: :disarming}}
       iex> %ExRatatui.Widgets.Throbber{} = BB.TUI.Panels.Safety.render(state, false)
   """
   @spec render(State.t(), boolean()) :: struct()
   def render(%State{safety: %{state: :disarming}} = state, focused?) do
     %Throbber{
       label: "DISARMING",
-      step: state.throbber_step,
+      step: state.ui.throbber_step,
       throbber_set: :dots,
       style: Theme.disarming_style(),
       throbber_style: Theme.disarming_style(),

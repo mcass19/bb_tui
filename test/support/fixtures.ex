@@ -5,6 +5,7 @@ defmodule BB.TUI.Test.Fixtures do
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
+  alias BB.TUI.State.UI
 
   # Legacy flat override keys → {substruct, field}. As `BB.TUI.State` is split
   # into substructs, tests keep passing flat overrides (e.g.
@@ -23,7 +24,11 @@ defmodule BB.TUI.Test.Fixtures do
     events: {:events, :list},
     scroll_offset: {:events, :scroll_offset},
     events_paused: {:events, :paused?},
-    show_event_detail: {:events, :show_detail?}
+    show_event_detail: {:events, :show_detail?},
+    active_panel: {:ui, :active_panel},
+    show_help: {:ui, :show_help?},
+    help_scroll_offset: {:ui, :help_scroll_offset},
+    throbber_step: {:ui, :throbber_step}
   }
 
   @doc """
@@ -39,9 +44,6 @@ defmodule BB.TUI.Test.Fixtures do
       node: nil,
       parameters: [],
       commands: [],
-      active_panel: :safety,
-      show_help: false,
-      throbber_step: 0,
       command_selected: 0,
       command_result: nil,
       executing_command: nil,
@@ -68,7 +70,8 @@ defmodule BB.TUI.Test.Fixtures do
       throttle: %Throttle{debounce_ms: 0},
       safety: %Safety{state: :disarmed, runtime: :disarmed},
       joints: %Joints{entries: sample_joints()},
-      events: %Events{}
+      events: %Events{},
+      ui: %UI{}
     }
   end
 
