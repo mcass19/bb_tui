@@ -15,6 +15,14 @@ defmodule BB.TUI.State do
 
   @max_events 100
 
+  # Default debounce window: drop a repeat of the same {path, payload-type}
+  # seen within this many milliseconds. Matches bb_liveview's 1s window.
+  @default_event_debounce_ms 1000
+
+  # Default sensor render-coalescing interval (~30fps). Sensor-driven state
+  # changes are batched into at most one frame per this many milliseconds.
+  @default_sensor_flush_ms 33
+
   defstruct [
     :robot,
     :robot_struct,
@@ -44,7 +52,11 @@ defmodule BB.TUI.State do
     command_focused_arg: 0,
     command_form_values: %{},
     joint_selected: 0,
-    param_selected: 0
+    param_selected: 0,
+    event_debounce_ms: @default_event_debounce_ms,
+    event_last_seen: %{},
+    sensor_flush_ms: @default_sensor_flush_ms,
+    render_pending?: false
   ]
 
   @type t :: %__MODULE__{
@@ -76,7 +88,11 @@ defmodule BB.TUI.State do
           command_focused_arg: non_neg_integer(),
           command_form_values: %{atom() => %{atom() => String.t()}},
           joint_selected: non_neg_integer(),
-          param_selected: non_neg_integer()
+          param_selected: non_neg_integer(),
+          event_debounce_ms: non_neg_integer(),
+          event_last_seen: %{optional({list(), term()}) => integer()},
+          sensor_flush_ms: pos_integer(),
+          render_pending?: boolean()
         }
 
   @panels [:safety, :commands, :joints, :events, :parameters]
@@ -393,15 +409,58 @@ defmodule BB.TUI.State do
   Appends an event to the event list, capping at #{@max_events}.
 
   Events are prepended (newest first) and the list is trimmed to
-  #{@max_events} entries. When events are paused, the event is not appended.
+  #{@max_events} entries. When events are paused, the event is dropped.
+
+  Under high-rate streams, a repeat of the same `{path, payload-type}` seen
+  within `event_debounce_ms` (default #{@default_event_debounce_ms}ms) is
+  dropped so a fast sensor cannot flood the log; distinct paths or payload
+  types always pass through. A debounce window of `0` disables this.
   """
   @spec append_event(t(), list(), term()) :: t()
   def append_event(%__MODULE__{events_paused: true} = state, _path, _message), do: state
 
   def append_event(%__MODULE__{events: events} = state, path, message) do
-    event = {event_timestamp(message), path, message}
-    %{state | events: Enum.take([event | events], @max_events)}
+    key = event_debounce_key(path, message)
+    now = System.monotonic_time(:millisecond)
+
+    if event_debounced?(state.event_last_seen, key, now, state.event_debounce_ms) do
+      state
+    else
+      event = {event_timestamp(message), path, message}
+
+      %{
+        state
+        | events: Enum.take([event | events], @max_events),
+          event_last_seen: Map.put(state.event_last_seen, key, now)
+      }
+    end
   end
+
+  @doc false
+  # Pure debounce predicate, split out so the time-dependent window logic can
+  # be unit-tested with explicit timestamps. `append_event/3` calls it with
+  # `System.monotonic_time(:millisecond)`.
+  @spec event_debounced?(map(), {list(), term()}, integer(), non_neg_integer()) :: boolean()
+  def event_debounced?(last_seen, key, now, window_ms) do
+    case Map.get(last_seen, key) do
+      nil -> false
+      last -> now - last < window_ms
+    end
+  end
+
+  @doc false
+  # Debounce identity for an event: the publish path plus the payload's struct
+  # module (or `:map` for a plain map, or the bare term otherwise). Keying on
+  # type — not value — means a high-rate sensor emitting the same struct on the
+  # same path collapses to one log row per window, while distinct paths/types
+  # always pass through.
+  @spec event_debounce_key(list(), term()) :: {list(), term()}
+  def event_debounce_key(path, message), do: {path, payload_type(message)}
+
+  defp payload_type(%{payload: payload}), do: payload_type(payload)
+  defp payload_type(%_struct{} = value), do: value.__struct__
+  defp payload_type(value) when is_map(value), do: :map
+  defp payload_type(value), do: value
 
   # Prefer the wall_time carried on %BB.Message{} so timestamps in the
   # events panel reflect when the publisher fired, not when this process
@@ -494,7 +553,7 @@ defmodule BB.TUI.State do
   """
   @spec clear_events(t()) :: t()
   def clear_events(%__MODULE__{} = state) do
-    %{state | events: [], scroll_offset: 0}
+    %{state | events: [], scroll_offset: 0, event_last_seen: %{}}
   end
 
   @doc """

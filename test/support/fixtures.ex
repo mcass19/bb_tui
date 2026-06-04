@@ -25,7 +25,11 @@ defmodule BB.TUI.Test.Fixtures do
       command_result: nil,
       executing_command: nil,
       joint_selected: 0,
-      param_selected: 0
+      param_selected: 0,
+      # Debounce off by default so timing-agnostic tests stay deterministic;
+      # debounce tests opt in with %{event_debounce_ms: 1000}. Production
+      # state (built in App.init/1) uses the struct default.
+      event_debounce_ms: 0
     }
 
     struct!(BB.TUI.State, Map.merge(defaults, overrides))

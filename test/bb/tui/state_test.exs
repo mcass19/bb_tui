@@ -131,6 +131,55 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "event_debounced?/4" do
+    test "returns false when the key has never been seen" do
+      refute State.event_debounced?(%{}, {[:sensor], :map}, 1_000, 1_000)
+    end
+
+    test "returns true when the same key was seen within the window" do
+      last_seen = %{{[:sensor], :map} => 500}
+      assert State.event_debounced?(last_seen, {[:sensor], :map}, 1_000, 1_000)
+    end
+
+    test "returns false once the window has elapsed" do
+      last_seen = %{{[:sensor], :map} => 0}
+      refute State.event_debounced?(last_seen, {[:sensor], :map}, 1_000, 1_000)
+    end
+
+    test "a zero window never debounces" do
+      last_seen = %{{[:sensor], :map} => 1_000}
+      refute State.event_debounced?(last_seen, {[:sensor], :map}, 1_000, 0)
+    end
+  end
+
+  describe "event_debounce_key/2" do
+    test "keys a %BB.Message{} by path and payload struct" do
+      msg = %BB.Message{
+        wall_time: 0,
+        node: :nonode@nohost,
+        payload: %BB.Message.Sensor.JointState{
+          names: [],
+          positions: [],
+          velocities: [],
+          efforts: []
+        }
+      }
+
+      assert State.event_debounce_key([:sensor, :imu], msg) ==
+               {[:sensor, :imu], BB.Message.Sensor.JointState}
+    end
+
+    test "keys a plain %{payload: map} by path and :map" do
+      assert State.event_debounce_key([:state_machine], %{payload: %{to: :armed}}) ==
+               {[:state_machine], :map}
+    end
+
+    test "keys a bare payload value by its term" do
+      assert State.event_debounce_key([:unknown], %{payload: :something}) ==
+               {[:unknown], :something}
+    end
+  end
+
   describe "append_event/3" do
     test "prepends event to list" do
       state = Fixtures.sample_state()
@@ -168,6 +217,41 @@ defmodule BB.TUI.StateTest do
       {ts, _path, _msg} = hd(state.events)
 
       assert DateTime.truncate(ts, :second) == ~U[2026-05-18 12:34:56Z]
+    end
+
+    test "drops a repeat of the same path + payload-type within the window" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      msg = %{payload: %{x: 1}}
+
+      state = State.append_event(state, [:sensor, :imu], msg)
+      state = State.append_event(state, [:sensor, :imu], msg)
+
+      assert length(state.events) == 1
+    end
+
+    test "lets a different payload-type from the same path through" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+
+      state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
+      state = State.append_event(state, [:sensor, :imu], %{payload: :different})
+
+      assert length(state.events) == 2
+    end
+
+    test "lets the same payload-type from a different path through" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+
+      state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
+      state = State.append_event(state, [:sensor, :arm], %{payload: %{x: 1}})
+
+      assert length(state.events) == 2
+    end
+
+    test "records last-seen only for accepted events" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
+
+      assert Map.has_key?(state.event_last_seen, {[:sensor, :imu], :map})
     end
   end
 
@@ -225,6 +309,17 @@ defmodule BB.TUI.StateTest do
 
       assert state.events == []
       assert state.scroll_offset == 0
+    end
+
+    test "resets debounce tracking so the next event is accepted immediately" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
+      state = State.clear_events(state)
+
+      assert state.event_last_seen == %{}
+
+      state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
+      assert length(state.events) == 1
     end
   end
 
