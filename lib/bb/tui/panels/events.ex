@@ -24,13 +24,13 @@ defmodule BB.TUI.Panels.Events do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{events: [], scroll_offset: 0, events_paused: false}
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: [], scroll_offset: 0, paused?: false}}
       iex> widget = BB.TUI.Panels.Events.render(state, false)
       iex> widget.items
       []
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{events: events, scroll_offset: offset, events_paused: paused}, focused?) do
+  def render(%State{events: %{list: events, scroll_offset: offset, paused?: paused}}, focused?) do
     items = Enum.map(events, &event_line/1)
 
     %WidgetList{
@@ -58,7 +58,7 @@ defmodule BB.TUI.Panels.Events do
   ## Examples
 
       iex> rect = %ExRatatui.Layout.Rect{x: 0, y: 0, width: 40, height: 10}
-      iex> state = %BB.TUI.State{events: [], scroll_offset: 0, events_paused: false}
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: [], scroll_offset: 0, paused?: false}}
       iex> panes = BB.TUI.Panels.Events.render_panes(state, false, rect)
       iex> length(panes)
       1
@@ -66,23 +66,27 @@ defmodule BB.TUI.Panels.Events do
       iex> rect = %ExRatatui.Layout.Rect{x: 0, y: 0, width: 40, height: 10}
       iex> ts = ~U[2026-01-15 18:23:12.000Z]
       iex> events = [{ts, [:state_machine], %{payload: %{from: :disarmed, to: :armed}}}]
-      iex> state = %BB.TUI.State{events: events, scroll_offset: 0, events_paused: false}
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: events, scroll_offset: 0, paused?: false}}
       iex> [{_list, _list_rect}, {scrollbar, _bar_rect}] =
       ...>   BB.TUI.Panels.Events.render_panes(state, true, rect)
       iex> scrollbar.content_length
       1
   """
   @spec render_panes(State.t(), boolean(), Rect.t()) :: [{struct(), Rect.t()}]
-  def render_panes(%State{events: []} = state, focused?, %Rect{} = rect) do
+  def render_panes(%State{events: %{list: []}} = state, focused?, %Rect{} = rect) do
     [{render(state, focused?), rect}]
   end
 
-  def render_panes(%State{events: events, scroll_offset: offset} = state, focused?, %Rect{
-        x: x,
-        y: y,
-        width: width,
-        height: height
-      }) do
+  def render_panes(
+        %State{events: %{list: events, scroll_offset: offset}} = state,
+        focused?,
+        %Rect{
+          x: x,
+          y: y,
+          width: width,
+          height: height
+        }
+      ) do
     list_rect = %Rect{x: x, y: y, width: width, height: height}
 
     scrollbar_rect = %Rect{

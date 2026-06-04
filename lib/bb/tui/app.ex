@@ -164,10 +164,8 @@ defmodule BB.TUI.App do
           runtime: Robot.runtime_state(robot, node)
         },
         joints: %State.Joints{entries: joints},
-        events: [],
         commands: commands,
         active_panel: :safety,
-        scroll_offset: 0,
         show_help: false
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
@@ -279,7 +277,7 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
-  def update({:event, %Event.Key{kind: "press"}}, %{show_event_detail: true} = state) do
+  def update({:event, %Event.Key{kind: "press"}}, %{events: %{show_detail?: true}} = state) do
     {:noreply, State.dismiss_event_detail(state)}
   end
 
@@ -688,7 +686,7 @@ defmodule BB.TUI.App do
     panels ++ [{Panels.ForceDisarm.render(), full}]
   end
 
-  defp maybe_add_popup(panels, %{show_event_detail: true} = state, full) do
+  defp maybe_add_popup(panels, %{events: %{show_detail?: true}} = state, full) do
     case State.selected_event(state) do
       nil -> panels
       event -> panels ++ [{Panels.EventDetail.render(event), full}]

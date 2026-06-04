@@ -185,8 +185,8 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state()
       state = State.append_event(state, [:state_machine], %{to: :armed})
 
-      assert length(state.events) == 1
-      {_ts, path, msg} = hd(state.events)
+      assert length(state.events.list) == 1
+      {_ts, path, msg} = hd(state.events.list)
       assert path == [:state_machine]
       assert msg == %{to: :armed}
     end
@@ -199,14 +199,14 @@ defmodule BB.TUI.StateTest do
           State.append_event(acc, [:test], %{i: i})
         end)
 
-      assert length(state.events) == 100
+      assert length(state.events.list) == 100
     end
 
     test "does not append when paused" do
       state = Fixtures.sample_state(%{events_paused: true})
       state = State.append_event(state, [:test], %{})
 
-      assert state.events == []
+      assert state.events.list == []
     end
 
     test "uses BB.Message.wall_time as the event timestamp" do
@@ -214,7 +214,7 @@ defmodule BB.TUI.StateTest do
       message = %BB.Message{wall_time: wall_time, node: :nonode@nohost, payload: %{}}
 
       state = State.append_event(Fixtures.sample_state(), [:test], message)
-      {ts, _path, _msg} = hd(state.events)
+      {ts, _path, _msg} = hd(state.events.list)
 
       assert DateTime.truncate(ts, :second) == ~U[2026-05-18 12:34:56Z]
     end
@@ -226,7 +226,7 @@ defmodule BB.TUI.StateTest do
       state = State.append_event(state, [:sensor, :imu], msg)
       state = State.append_event(state, [:sensor, :imu], msg)
 
-      assert length(state.events) == 1
+      assert length(state.events.list) == 1
     end
 
     test "lets a different payload-type from the same path through" do
@@ -235,7 +235,7 @@ defmodule BB.TUI.StateTest do
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
       state = State.append_event(state, [:sensor, :imu], %{payload: :different})
 
-      assert length(state.events) == 2
+      assert length(state.events.list) == 2
     end
 
     test "lets the same payload-type from a different path through" do
@@ -244,7 +244,7 @@ defmodule BB.TUI.StateTest do
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
       state = State.append_event(state, [:sensor, :arm], %{payload: %{x: 1}})
 
-      assert length(state.events) == 2
+      assert length(state.events.list) == 2
     end
 
     test "records last-seen only for accepted events" do
@@ -261,16 +261,16 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{events: events, scroll_offset: 0})
 
       state = State.scroll_down(state)
-      assert state.scroll_offset == 1
+      assert state.events.scroll_offset == 1
 
       state = State.scroll_up(state)
-      assert state.scroll_offset == 0
+      assert state.events.scroll_offset == 0
     end
 
     test "scroll_up does not go below 0" do
       state = Fixtures.sample_state(%{scroll_offset: 0})
       state = State.scroll_up(state)
-      assert state.scroll_offset == 0
+      assert state.events.scroll_offset == 0
     end
 
     test "scroll_down does not exceed event count" do
@@ -278,7 +278,7 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{events: events, scroll_offset: 0})
 
       state = State.scroll_down(state)
-      assert state.scroll_offset == 0
+      assert state.events.scroll_offset == 0
     end
   end
 
@@ -294,10 +294,10 @@ defmodule BB.TUI.StateTest do
     test "toggles pause state" do
       state = Fixtures.sample_state(%{events_paused: false})
       state = State.toggle_events_pause(state)
-      assert state.events_paused
+      assert state.events.paused?
 
       state = State.toggle_events_pause(state)
-      refute state.events_paused
+      refute state.events.paused?
     end
   end
 
@@ -307,8 +307,8 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{events: events, scroll_offset: 3})
       state = State.clear_events(state)
 
-      assert state.events == []
-      assert state.scroll_offset == 0
+      assert state.events.list == []
+      assert state.events.scroll_offset == 0
     end
 
     test "resets debounce tracking so the next event is accepted immediately" do
@@ -319,7 +319,7 @@ defmodule BB.TUI.StateTest do
       assert state.throttle.last_seen == %{}
 
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
-      assert length(state.events) == 1
+      assert length(state.events.list) == 1
     end
   end
 

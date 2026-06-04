@@ -1,6 +1,7 @@
 defmodule BB.TUI.Test.Fixtures do
   @moduledoc false
 
+  alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
@@ -18,7 +19,11 @@ defmodule BB.TUI.Test.Fixtures do
     runtime_state: {:safety, :runtime},
     confirm_force_disarm: {:safety, :confirm_force_disarm?},
     joints: {:joints, :entries},
-    joint_selected: {:joints, :selected}
+    joint_selected: {:joints, :selected},
+    events: {:events, :list},
+    scroll_offset: {:events, :scroll_offset},
+    events_paused: {:events, :paused?},
+    show_event_detail: {:events, :show_detail?}
   }
 
   @doc """
@@ -32,14 +37,11 @@ defmodule BB.TUI.Test.Fixtures do
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
       node: nil,
-      events: [],
       parameters: [],
       commands: [],
       active_panel: :safety,
-      scroll_offset: 0,
       show_help: false,
       throbber_step: 0,
-      events_paused: false,
       command_selected: 0,
       command_result: nil,
       executing_command: nil,
@@ -65,7 +67,8 @@ defmodule BB.TUI.Test.Fixtures do
     %{
       throttle: %Throttle{debounce_ms: 0},
       safety: %Safety{state: :disarmed, runtime: :disarmed},
-      joints: %Joints{entries: sample_joints()}
+      joints: %Joints{entries: sample_joints()},
+      events: %Events{}
     }
   end
 

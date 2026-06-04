@@ -22,9 +22,9 @@ defmodule BB.TUI.AppTest do
       assert map_size(state.joints.entries) == 2
       assert state.joints.entries.shoulder.position == 0.0
       assert state.joints.entries.elbow.position == 45.0
-      assert state.events == []
+      assert state.events.list == []
       assert state.active_panel == :safety
-      assert state.events_paused == false
+      assert state.events.paused? == false
       assert state.command_selected == 0
       assert state.executing_command == nil
     end
@@ -321,7 +321,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "x", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      refute new_state.show_event_detail
+      refute new_state.events.show_detail?
     end
 
     test "a key calls BB.Safety.arm" do
@@ -393,7 +393,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "j", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.scroll_offset == 1
+      assert new_state.events.scroll_offset == 1
     end
 
     test "down arrow scrolls events when events panel is active" do
@@ -402,7 +402,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "down", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.scroll_offset == 1
+      assert new_state.events.scroll_offset == 1
     end
 
     test "up arrow scrolls events when events panel is active" do
@@ -411,7 +411,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "up", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.scroll_offset == 1
+      assert new_state.events.scroll_offset == 1
     end
 
     test "k/up scrolls events when events panel is active" do
@@ -420,7 +420,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.scroll_offset == 1
+      assert new_state.events.scroll_offset == 1
     end
 
     test "p key toggles events pause" do
@@ -428,7 +428,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "p", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.events_paused
+      assert new_state.events.paused?
     end
 
     test "c key clears events" do
@@ -437,7 +437,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "c", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.events == []
+      assert new_state.events.list == []
     end
 
     test "enter key opens event detail when events panel is active" do
@@ -449,7 +449,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.show_event_detail
+      assert new_state.events.show_detail?
     end
 
     test "enter key does nothing when events panel is empty" do
@@ -1658,7 +1658,7 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} = App.update({:info, {:bb, [:state_machine], msg}}, state)
       assert new_state.safety.state == :armed
       assert new_state.safety.runtime == :idle
-      assert length(new_state.events) == 1
+      assert length(new_state.events.list) == 1
     end
 
     test "sensor message updates positions and appends event" do
@@ -1673,7 +1673,7 @@ defmodule BB.TUI.AppTest do
 
       assert new_state.joints.entries.shoulder.position == 10.0
       assert new_state.joints.entries.elbow.position == 20.0
-      assert length(new_state.events) == 1
+      assert length(new_state.events.list) == 1
       assert new_state.throttle.render_pending?
     end
 
@@ -1687,7 +1687,7 @@ defmodule BB.TUI.AppTest do
                App.update({:info, {:bb, [:sensor, :other], msg}}, state)
 
       assert new_state.joints.entries == state.joints.entries
-      assert length(new_state.events) == 1
+      assert length(new_state.events.list) == 1
       assert new_state.throttle.render_pending?
     end
 
@@ -1706,7 +1706,7 @@ defmodule BB.TUI.AppTest do
           next
         end)
 
-      assert length(state.events) == 1
+      assert length(state.events.list) == 1
       assert state.throttle.render_pending?
     end
 
@@ -1720,7 +1720,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:info, {:bb, [:param, :speed], msg}}, state)
       assert new_state.parameters == params
-      assert length(new_state.events) == 1
+      assert length(new_state.events.list) == 1
     end
 
     test "catch-all bb message only appends event" do
@@ -1728,7 +1728,7 @@ defmodule BB.TUI.AppTest do
       msg = %{payload: :something}
 
       assert {:noreply, new_state} = App.update({:info, {:bb, [:unknown], msg}}, state)
-      assert length(new_state.events) == 1
+      assert length(new_state.events.list) == 1
     end
 
     test "command_result message sets result" do

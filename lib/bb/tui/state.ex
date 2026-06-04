@@ -18,6 +18,7 @@ defmodule BB.TUI.State do
       :safety
   """
 
+  alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
@@ -34,14 +35,10 @@ defmodule BB.TUI.State do
     parameter_tabs: [:local],
     parameter_tab_selected: 0,
     remote_parameters: %{},
-    events: [],
     active_panel: :safety,
-    scroll_offset: 0,
     show_help: false,
     help_scroll_offset: 0,
     throbber_step: 0,
-    events_paused: false,
-    show_event_detail: false,
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
@@ -49,6 +46,7 @@ defmodule BB.TUI.State do
     command_focused_arg: 0,
     command_form_values: %{},
     param_selected: 0,
+    events: %Events{},
     joints: %Joints{},
     safety: %Safety{},
     throttle: %Throttle{}
@@ -57,7 +55,6 @@ defmodule BB.TUI.State do
   @type t :: %__MODULE__{
           robot: module(),
           robot_struct: term(),
-          events: [{DateTime.t(), list(), term()}],
           parameters: [{list(), term()}],
           parameter_metadata: %{list() => map()},
           parameter_tabs: [:local | {:bridge, atom()}],
@@ -66,12 +63,9 @@ defmodule BB.TUI.State do
           commands: [term()],
           node: node() | nil,
           active_panel: :safety | :commands | :joints | :events | :parameters,
-          scroll_offset: non_neg_integer(),
           show_help: boolean(),
           help_scroll_offset: non_neg_integer(),
           throbber_step: non_neg_integer(),
-          events_paused: boolean(),
-          show_event_detail: boolean(),
           command_selected: non_neg_integer(),
           command_result: {:ok, term()} | {:error, term()} | nil,
           executing_command: term() | nil,
@@ -79,6 +73,7 @@ defmodule BB.TUI.State do
           command_focused_arg: non_neg_integer(),
           command_form_values: %{atom() => %{atom() => String.t()}},
           param_selected: non_neg_integer(),
+          events: Events.t(),
           joints: Joints.t(),
           safety: Safety.t(),
           throttle: Throttle.t()
@@ -404,9 +399,13 @@ defmodule BB.TUI.State do
   A debounce window of `0` disables this.
   """
   @spec append_event(t(), list(), term()) :: t()
-  def append_event(%__MODULE__{events_paused: true} = state, _path, _message), do: state
+  def append_event(%__MODULE__{events: %{paused?: true}} = state, _path, _message), do: state
 
-  def append_event(%__MODULE__{events: events, throttle: throttle} = state, path, message) do
+  def append_event(
+        %__MODULE__{events: %{list: list} = events, throttle: throttle} = state,
+        path,
+        message
+      ) do
     key = event_debounce_key(path, message)
     now = System.monotonic_time(:millisecond)
 
@@ -417,7 +416,7 @@ defmodule BB.TUI.State do
 
       %{
         state
-        | events: Enum.take([event | events], @max_events),
+        | events: %{events | list: Enum.take([event | list], @max_events)},
           throttle: %{throttle | last_seen: Map.put(throttle.last_seen, key, now)}
       }
     end
@@ -466,15 +465,15 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> events = [{~U[2026-01-01 00:00:00Z], [:test], %{}}]
-      iex> state = %BB.TUI.State{events: events, scroll_offset: 0}
-      iex> BB.TUI.State.scroll_down(state).scroll_offset
+      iex> list = [{~U[2026-01-01 00:00:00Z], [:test], %{}}]
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: list, scroll_offset: 0}}
+      iex> BB.TUI.State.scroll_down(state).events.scroll_offset
       0
   """
   @spec scroll_down(t()) :: t()
-  def scroll_down(%__MODULE__{scroll_offset: offset, events: events} = state) do
-    max_offset = max(length(events) - 1, 0)
-    %{state | scroll_offset: min(offset + 1, max_offset)}
+  def scroll_down(%__MODULE__{events: %{scroll_offset: offset, list: list} = events} = state) do
+    max_offset = max(length(list) - 1, 0)
+    %{state | events: %{events | scroll_offset: min(offset + 1, max_offset)}}
   end
 
   @doc """
@@ -482,17 +481,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{scroll_offset: 0}
-      iex> BB.TUI.State.scroll_up(state).scroll_offset
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{scroll_offset: 0}}
+      iex> BB.TUI.State.scroll_up(state).events.scroll_offset
       0
 
-      iex> state = %BB.TUI.State{scroll_offset: 5}
-      iex> BB.TUI.State.scroll_up(state).scroll_offset
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{scroll_offset: 5}}
+      iex> BB.TUI.State.scroll_up(state).events.scroll_offset
       4
   """
   @spec scroll_up(t()) :: t()
-  def scroll_up(%__MODULE__{scroll_offset: offset} = state) do
-    %{state | scroll_offset: max(offset - 1, 0)}
+  def scroll_up(%__MODULE__{events: %{scroll_offset: offset} = events} = state) do
+    %{state | events: %{events | scroll_offset: max(offset - 1, 0)}}
   end
 
   @doc """
@@ -538,17 +537,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{events_paused: false}
-      iex> BB.TUI.State.toggle_events_pause(state).events_paused
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{paused?: false}}
+      iex> BB.TUI.State.toggle_events_pause(state).events.paused?
       true
 
-      iex> state = %BB.TUI.State{events_paused: true}
-      iex> BB.TUI.State.toggle_events_pause(state).events_paused
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{paused?: true}}
+      iex> BB.TUI.State.toggle_events_pause(state).events.paused?
       false
   """
   @spec toggle_events_pause(t()) :: t()
-  def toggle_events_pause(%__MODULE__{} = state) do
-    %{state | events_paused: !state.events_paused}
+  def toggle_events_pause(%__MODULE__{events: events} = state) do
+    %{state | events: %{events | paused?: !events.paused?}}
   end
 
   @doc """
@@ -556,15 +555,19 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> events = [{~U[2026-01-01 00:00:00Z], [:test], %{}}]
-      iex> state = %BB.TUI.State{events: events, scroll_offset: 5}
+      iex> list = [{~U[2026-01-01 00:00:00Z], [:test], %{}}]
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: list, scroll_offset: 5}}
       iex> new_state = BB.TUI.State.clear_events(state)
-      iex> {new_state.events, new_state.scroll_offset}
+      iex> {new_state.events.list, new_state.events.scroll_offset}
       {[], 0}
   """
   @spec clear_events(t()) :: t()
-  def clear_events(%__MODULE__{} = state) do
-    %{state | events: [], scroll_offset: 0, throttle: %{state.throttle | last_seen: %{}}}
+  def clear_events(%__MODULE__{events: events} = state) do
+    %{
+      state
+      | events: %{events | list: [], scroll_offset: 0},
+        throttle: %{state.throttle | last_seen: %{}}
+    }
   end
 
   @doc """
@@ -572,13 +575,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{show_event_detail: false}
-      iex> BB.TUI.State.toggle_event_detail(state).show_event_detail
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{show_detail?: false}}
+      iex> BB.TUI.State.toggle_event_detail(state).events.show_detail?
       true
   """
   @spec toggle_event_detail(t()) :: t()
-  def toggle_event_detail(%__MODULE__{} = state) do
-    %{state | show_event_detail: !state.show_event_detail}
+  def toggle_event_detail(%__MODULE__{events: events} = state) do
+    %{state | events: %{events | show_detail?: !events.show_detail?}}
   end
 
   @doc """
@@ -586,13 +589,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{show_event_detail: true}
-      iex> BB.TUI.State.dismiss_event_detail(state).show_event_detail
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{show_detail?: true}}
+      iex> BB.TUI.State.dismiss_event_detail(state).events.show_detail?
       false
   """
   @spec dismiss_event_detail(t()) :: t()
-  def dismiss_event_detail(%__MODULE__{} = state) do
-    %{state | show_event_detail: false}
+  def dismiss_event_detail(%__MODULE__{events: events} = state) do
+    %{state | events: %{events | show_detail?: false}}
   end
 
   @doc """
@@ -600,17 +603,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> events = [{~U[2026-01-01 00:00:00Z], [:test], %{payload: :ok}}]
-      iex> state = %BB.TUI.State{events: events, scroll_offset: 0}
+      iex> list = [{~U[2026-01-01 00:00:00Z], [:test], %{payload: :ok}}]
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: list, scroll_offset: 0}}
       iex> {_, [:test], _} = BB.TUI.State.selected_event(state)
 
-      iex> state = %BB.TUI.State{events: [], scroll_offset: 0}
+      iex> state = %BB.TUI.State{events: %BB.TUI.State.Events{list: [], scroll_offset: 0}}
       iex> BB.TUI.State.selected_event(state)
       nil
   """
   @spec selected_event(t()) :: {DateTime.t(), list(), term()} | nil
-  def selected_event(%__MODULE__{events: events, scroll_offset: offset}) do
-    Enum.at(events, offset)
+  def selected_event(%__MODULE__{events: %{list: list, scroll_offset: offset}}) do
+    Enum.at(list, offset)
   end
 
   @doc """
