@@ -70,6 +70,20 @@ defmodule Dev.TestRobot do
       handler(Dev.CalibrateHandler)
       allowed_states([:idle])
     end
+
+    # High-rate sensor demo (~2s, ~100Hz JointState sweep) — makes the
+    # dashboard's debounce + render coalescing visible: the joints panel
+    # animates smoothly while the event log stays a single row per second.
+    command :stream do
+      handler(Dev.StreamHandler)
+      allowed_states([:idle])
+
+      argument :joint,
+               {:in, [:waist, :shoulder, :elbow, :wrist_angle, :wrist_rotate, :gripper]} do
+        default(:waist)
+        doc("Joint to sweep.")
+      end
+    end
   end
 
   parameters do
