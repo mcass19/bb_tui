@@ -6,6 +6,11 @@ defmodule BB.TUI.State do
   communication. The `BB.TUI.App` module handles IO and delegates here
   for state changes.
 
+  The struct also carries high-rate-stream controls: `event_debounce_ms`
+  and `event_last_seen` back `append_event/3`'s log debouncing, while
+  `render_pending?` and `sensor_flush_ms` drive `BB.TUI.App`'s coalesced
+  sensor re-render. See `BB.TUI.App` for the full flow.
+
   ## Examples
 
       iex> state = %BB.TUI.State{active_panel: :safety, show_help: false}
@@ -521,6 +526,28 @@ defmodule BB.TUI.State do
   def tick_throbber(%__MODULE__{throbber_step: step} = state) do
     %{state | throbber_step: step + 1}
   end
+
+  @doc """
+  Flags that sensor-driven state changed and a coalesced re-render is due.
+
+  The reducer returns `render?: false` for sensor messages and sets this
+  flag; `BB.TUI.App`'s subscriptions callback then arms the one-shot
+  `:sensor_flush` tick that performs the single batched render.
+
+      iex> BB.TUI.State.mark_render_pending(%BB.TUI.State{}).render_pending?
+      true
+  """
+  @spec mark_render_pending(t()) :: t()
+  def mark_render_pending(%__MODULE__{} = state), do: %{state | render_pending?: true}
+
+  @doc """
+  Clears the pending-render flag once the coalesced frame has been rendered.
+
+      iex> BB.TUI.State.clear_render_pending(%BB.TUI.State{render_pending?: true}).render_pending?
+      false
+  """
+  @spec clear_render_pending(t()) :: t()
+  def clear_render_pending(%__MODULE__{} = state), do: %{state | render_pending?: false}
 
   @doc """
   Toggles the event stream pause state.

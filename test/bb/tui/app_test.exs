@@ -1668,12 +1668,13 @@ defmodule BB.TUI.AppTest do
       payload = %{names: [:shoulder, :elbow], positions: [10.0, 20.0]}
       msg = %{payload: payload}
 
-      assert {:noreply, new_state} =
+      assert {:noreply, new_state, render?: false} =
                App.update({:info, {:bb, [:sensor, :joints], msg}}, state)
 
       assert new_state.joints.shoulder.position == 10.0
       assert new_state.joints.elbow.position == 20.0
       assert length(new_state.events) == 1
+      assert new_state.render_pending?
     end
 
     test "sensor message with non-standard payload still appends event" do
@@ -1682,11 +1683,31 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state()
       msg = %{payload: %{something_else: true}}
 
-      assert {:noreply, new_state} =
+      assert {:noreply, new_state, render?: false} =
                App.update({:info, {:bb, [:sensor, :other], msg}}, state)
 
       assert new_state.joints == state.joints
       assert length(new_state.events) == 1
+      assert new_state.render_pending?
+    end
+
+    test "a burst of identical sensor messages collapses to one event row" do
+      Fixtures.stub_bb_modules()
+
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      payload = %{names: [:shoulder], positions: [1.0]}
+      msg = %{payload: payload}
+
+      state =
+        Enum.reduce(1..5, state, fn _i, acc ->
+          {:noreply, next, render?: false} =
+            App.update({:info, {:bb, [:sensor, :joints], msg}}, acc)
+
+          next
+        end)
+
+      assert length(state.events) == 1
+      assert state.render_pending?
     end
 
     test "param message updates parameters and appends event" do
@@ -1720,6 +1741,13 @@ defmodule BB.TUI.AppTest do
       assert new_state.executing_command == nil
     end
 
+    test ":sensor_flush clears the pending flag and renders" do
+      state = Fixtures.sample_state(%{render_pending?: true})
+
+      assert {:noreply, new_state} = App.update({:info, :sensor_flush}, state)
+      refute new_state.render_pending?
+    end
+
     test "non-bb messages are ignored" do
       state = Fixtures.sample_state()
 
@@ -1751,6 +1779,36 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state(%{throbber_step: 7})
       assert {:noreply, next} = App.update({:info, :throbber_tick}, state)
       assert next.throbber_step == 8
+    end
+
+    test "arms the sensor_flush one-shot while a render is pending" do
+      state = Fixtures.sample_state(%{render_pending?: true, sensor_flush_ms: 33})
+
+      subs = App.subscriptions(state)
+
+      assert Enum.any?(subs, fn s ->
+               s.id == :sensor_flush and s.kind == :once and s.interval_ms == 33 and
+                 s.message == :sensor_flush
+             end)
+    end
+
+    test "does not arm sensor_flush when no render is pending" do
+      state = Fixtures.sample_state(%{render_pending?: false})
+
+      refute Enum.any?(App.subscriptions(state), &(&1.id == :sensor_flush))
+    end
+
+    test "arms both throbber and sensor_flush when animating and pending" do
+      state =
+        Fixtures.sample_state(%{
+          safety_state: :disarming,
+          render_pending?: true,
+          sensor_flush_ms: 33
+        })
+
+      ids = Enum.map(App.subscriptions(state), & &1.id)
+      assert :throbber in ids
+      assert :sensor_flush in ids
     end
   end
 end

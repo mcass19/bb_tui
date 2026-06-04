@@ -570,6 +570,9 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
+  # Sensor messages are the high-rate path. Update state but suppress the
+  # immediate render (render?: false) and flag a pending render; the
+  # :sensor_flush tick armed by subscriptions/1 performs one coalesced frame.
   def update({:info, {:bb, [:sensor | _] = path, %{payload: payload} = msg}}, state) do
     positions =
       case payload do
@@ -581,8 +584,9 @@ defmodule BB.TUI.App do
       state
       |> State.update_positions(positions)
       |> State.append_event(path, msg)
+      |> State.mark_render_pending()
 
-    {:noreply, state}
+    {:noreply, state, render?: false}
   end
 
   def update({:info, {:bb, [:param | _] = path, msg}}, state) do
@@ -608,6 +612,13 @@ defmodule BB.TUI.App do
     {:noreply, State.tick_throbber(state)}
   end
 
+  # Coalesced sensor render: clear the pending flag and let the default
+  # render?: true draw the single freshest frame. The next subscriptions/1
+  # reconcile then drops :sensor_flush until the next sensor message.
+  def update({:info, :sensor_flush}, state) do
+    {:noreply, State.clear_render_pending(state)}
+  end
+
   # ── Update — catch-all ───────────────────────────────────────
 
   def update(_msg, state), do: {:noreply, state}
@@ -616,12 +627,26 @@ defmodule BB.TUI.App do
 
   @impl true
   def subscriptions(state) do
+    throbber_subscriptions(state) ++ sensor_flush_subscriptions(state)
+  end
+
+  defp throbber_subscriptions(state) do
     if needs_throbber?(state) do
       [Subscription.interval(:throbber, 100, :throbber_tick)]
     else
       []
     end
   end
+
+  # A one-shot armed only while a sensor render is pending. Repeated sensor
+  # messages don't reset the armed timer (the reducer reconciles an equal
+  # :once subscription as a no-op); once it fires and clears the flag, the
+  # next reconcile removes it — so an idle TUI carries no flush timer.
+  defp sensor_flush_subscriptions(%State{render_pending?: true, sensor_flush_ms: ms}) do
+    [Subscription.once(:sensor_flush, ms, :sensor_flush)]
+  end
+
+  defp sensor_flush_subscriptions(_state), do: []
 
   # ── Helpers ──────────────────────────────────────────────────
 

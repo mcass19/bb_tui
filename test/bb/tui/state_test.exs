@@ -323,6 +323,19 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "mark_render_pending/1 and clear_render_pending/1" do
+    test "mark sets the flag and clear unsets it" do
+      state = Fixtures.sample_state()
+      refute state.render_pending?
+
+      state = State.mark_render_pending(state)
+      assert state.render_pending?
+
+      state = State.clear_render_pending(state)
+      refute state.render_pending?
+    end
+  end
+
   describe "select_next_command/1 and select_prev_command/1" do
     test "navigates command selection" do
       commands = [%{name: :a}, %{name: :b}, %{name: :c}]
