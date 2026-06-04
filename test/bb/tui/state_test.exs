@@ -89,7 +89,7 @@ defmodule BB.TUI.StateTest do
       params = [{[:speed], 100}, {[:mode], :auto}]
       state = State.update_parameters(state, params)
 
-      assert state.parameters == params
+      assert state.parameters.list == params
     end
 
     test "extracts metadata side-channel from BB.Parameter.list/2 maps" do
@@ -102,9 +102,9 @@ defmodule BB.TUI.StateTest do
 
       state = State.update_parameters(state, params)
 
-      assert state.parameters == [{[:speed], 100}, {[:mode], :fast}]
+      assert state.parameters.list == [{[:speed], 100}, {[:mode], :fast}]
 
-      assert state.parameter_metadata == %{
+      assert state.parameters.metadata == %{
                [:speed] => %{type: {:integer, [min: 0, max: 500]}, doc: "rpm", default: 0},
                [:mode] => %{type: :atom, doc: nil, default: nil}
              }
@@ -114,8 +114,8 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state()
       state = State.update_parameters(state, [{[:speed], 42}])
 
-      assert state.parameters == [{[:speed], 42}]
-      assert state.parameter_metadata == %{}
+      assert state.parameters.list == [{[:speed], 42}]
+      assert state.parameters.metadata == %{}
     end
 
     test "subsequent updates discard stale metadata" do
@@ -124,10 +124,10 @@ defmodule BB.TUI.StateTest do
       state =
         State.update_parameters(state, [{[:speed], %{value: 1, type: :integer}}])
 
-      assert Map.has_key?(state.parameter_metadata, [:speed])
+      assert Map.has_key?(state.parameters.metadata, [:speed])
 
       state = State.update_parameters(state, [{[:speed], 2}])
-      assert state.parameter_metadata == %{}
+      assert state.parameters.metadata == %{}
     end
   end
 
@@ -654,30 +654,30 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{parameters: params, param_selected: 0})
 
       state = State.select_next_param(state)
-      assert state.param_selected == 1
+      assert state.parameters.selected == 1
 
       state = State.select_next_param(state)
-      assert state.param_selected == 2
+      assert state.parameters.selected == 2
 
       # At max
       state = State.select_next_param(state)
-      assert state.param_selected == 2
+      assert state.parameters.selected == 2
 
       state = State.select_prev_param(state)
-      assert state.param_selected == 1
+      assert state.parameters.selected == 1
 
       state = State.select_prev_param(state)
-      assert state.param_selected == 0
+      assert state.parameters.selected == 0
 
       # At min
       state = State.select_prev_param(state)
-      assert state.param_selected == 0
+      assert state.parameters.selected == 0
     end
 
     test "handles empty parameters" do
       state = Fixtures.sample_state(%{parameters: [], param_selected: 0})
       state = State.select_next_param(state)
-      assert state.param_selected == 0
+      assert state.parameters.selected == 0
     end
   end
 
@@ -687,7 +687,7 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{parameters: params, param_selected: 0})
       assert State.selected_param(state) == {[:a], 1}
 
-      state = %{state | param_selected: 2}
+      state = %{state | parameters: %{state.parameters | selected: 2}}
       assert State.selected_param(state) == {[:z], 99}
     end
 

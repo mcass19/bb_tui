@@ -66,7 +66,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
 
-      assert state.parameters == [
+      assert state.parameters.list == [
                {[:controller, :kp], 1.0},
                {[:grip, :force], 50}
              ]
@@ -1078,7 +1078,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "j", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.param_selected == 1
+      assert new_state.parameters.selected == 1
     end
 
     test "down arrow selects next parameter" do
@@ -1090,7 +1090,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "down", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.param_selected == 1
+      assert new_state.parameters.selected == 1
     end
 
     test "k/up selects previous parameter" do
@@ -1102,7 +1102,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.param_selected == 0
+      assert new_state.parameters.selected == 0
     end
 
     test "up arrow selects previous parameter" do
@@ -1114,7 +1114,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "up", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.param_selected == 0
+      assert new_state.parameters.selected == 0
     end
 
     # Parameters panel keys — value editing
@@ -1412,8 +1412,8 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.parameter_tab_selected == 0
-      assert new_state.remote_parameters == %{}
+      assert new_state.parameters.tab_selected == 0
+      assert new_state.parameters.remote == %{}
     end
 
     test "t key cycles to a bridge tab and fetches its parameters" do
@@ -1434,9 +1434,9 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.parameter_tab_selected == 1
-      assert new_state.param_selected == 0
-      assert [%{id: "ROLL_P"}] = new_state.remote_parameters.mavlink
+      assert new_state.parameters.tab_selected == 1
+      assert new_state.parameters.selected == 0
+      assert [%{id: "ROLL_P"}] = new_state.parameters.remote.mavlink
     end
 
     test "t key stores {:error, _} as-is when list_remote fails" do
@@ -1456,7 +1456,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.remote_parameters.mavlink == {:error, :nodedown}
+      assert new_state.parameters.remote.mavlink == {:error, :nodedown}
     end
 
     test "l on a bridge tab calls set_remote_parameter with the selected param id" do
@@ -1488,7 +1488,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # Cache reflects the refresh fired after :ok.
-      assert [%{value: 0.11}] = new_state.remote_parameters.mavlink
+      assert [%{value: 0.11}] = new_state.parameters.remote.mavlink
     end
 
     test "remote adjustment clamps integer to declared bounds" do
@@ -1536,7 +1536,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert [%{value: false}] = new_state.remote_parameters.mavlink
+      assert [%{value: false}] = new_state.parameters.remote.mavlink
     end
 
     test "remote set returning {:error, _} leaves the cache untouched" do
@@ -1558,7 +1558,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.remote_parameters.mavlink == remote
+      assert new_state.parameters.remote.mavlink == remote
     end
 
     test "remote adjustment is a no-op for a non-numeric remote param" do
@@ -1606,7 +1606,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.parameter_tab_selected == 0
+      assert new_state.parameters.tab_selected == 0
     end
 
     test "integer step is at least 1 even for tiny ranges" do
@@ -1719,7 +1719,7 @@ defmodule BB.TUI.AppTest do
       msg = %{payload: %{path: [:speed], value: 100}}
 
       assert {:noreply, new_state} = App.update({:info, {:bb, [:param, :speed], msg}}, state)
-      assert new_state.parameters == params
+      assert new_state.parameters.list == params
       assert length(new_state.events.list) == 1
     end
 

@@ -3,6 +3,7 @@ defmodule BB.TUI.Test.Fixtures do
 
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
+  alias BB.TUI.State.Parameters
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
   alias BB.TUI.State.UI
@@ -28,7 +29,13 @@ defmodule BB.TUI.Test.Fixtures do
     active_panel: {:ui, :active_panel},
     show_help: {:ui, :show_help?},
     help_scroll_offset: {:ui, :help_scroll_offset},
-    throbber_step: {:ui, :throbber_step}
+    throbber_step: {:ui, :throbber_step},
+    parameters: {:parameters, :list},
+    parameter_metadata: {:parameters, :metadata},
+    parameter_tabs: {:parameters, :tabs},
+    parameter_tab_selected: {:parameters, :tab_selected},
+    remote_parameters: {:parameters, :remote},
+    param_selected: {:parameters, :selected}
   }
 
   @doc """
@@ -42,12 +49,10 @@ defmodule BB.TUI.Test.Fixtures do
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
       node: nil,
-      parameters: [],
       commands: [],
       command_selected: 0,
       command_result: nil,
-      executing_command: nil,
-      param_selected: 0
+      executing_command: nil
     }
 
     {nested, flat} = Map.split(overrides, Map.keys(@nested_overrides))
@@ -71,7 +76,8 @@ defmodule BB.TUI.Test.Fixtures do
       safety: %Safety{state: :disarmed, runtime: :disarmed},
       joints: %Joints{entries: sample_joints()},
       events: %Events{},
-      ui: %UI{}
+      ui: %UI{},
+      parameters: %Parameters{}
     }
   end
 

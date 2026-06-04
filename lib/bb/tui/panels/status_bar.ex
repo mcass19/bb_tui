@@ -151,7 +151,7 @@ defmodule BB.TUI.Panels.StatusBar do
 
   defp panel_keys(_, _), do: []
 
-  defp parameters_keys(%State{parameter_tabs: tabs}) do
+  defp parameters_keys(%State{parameters: %{tabs: tabs}}) do
     base = [
       Theme.key_pill("j/k"),
       Theme.dim_span(" select "),

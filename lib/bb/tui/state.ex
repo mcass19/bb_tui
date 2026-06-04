@@ -20,6 +20,7 @@ defmodule BB.TUI.State do
 
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
+  alias BB.TUI.State.Parameters
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
   alias BB.TUI.State.UI
@@ -31,18 +32,13 @@ defmodule BB.TUI.State do
     :robot_struct,
     :commands,
     node: nil,
-    parameters: [],
-    parameter_metadata: %{},
-    parameter_tabs: [:local],
-    parameter_tab_selected: 0,
-    remote_parameters: %{},
     command_selected: 0,
     command_result: nil,
     executing_command: nil,
     command_edit_mode: false,
     command_focused_arg: 0,
     command_form_values: %{},
-    param_selected: 0,
+    parameters: %Parameters{},
     ui: %UI{},
     events: %Events{},
     joints: %Joints{},
@@ -53,11 +49,6 @@ defmodule BB.TUI.State do
   @type t :: %__MODULE__{
           robot: module(),
           robot_struct: term(),
-          parameters: [{list(), term()}],
-          parameter_metadata: %{list() => map()},
-          parameter_tabs: [:local | {:bridge, atom()}],
-          parameter_tab_selected: non_neg_integer(),
-          remote_parameters: %{atom() => [map()] | {:error, term()}},
           commands: [term()],
           node: node() | nil,
           command_selected: non_neg_integer(),
@@ -66,7 +57,7 @@ defmodule BB.TUI.State do
           command_edit_mode: boolean(),
           command_focused_arg: non_neg_integer(),
           command_form_values: %{atom() => %{atom() => String.t()}},
-          param_selected: non_neg_integer(),
+          parameters: Parameters.t(),
           ui: UI.t(),
           events: Events.t(),
           joints: Joints.t(),
@@ -343,28 +334,26 @@ defmodule BB.TUI.State do
   `BB.Parameter.list/2` returns `{path, metadata}` tuples where metadata
   is a map carrying `:value` plus schema-derived fields like `:type`,
   `:doc`, and `:default`. The plain value is mirrored into
-  `state.parameters` so navigation code keeps working with simple
+  `state.parameters.list` so navigation code keeps working with simple
   `{path, value}` tuples, while the rest of the metadata is stashed in
-  `state.parameter_metadata` keyed by path. Plain-value inputs (no
+  `state.parameters.metadata` keyed by path. Plain-value inputs (no
   metadata map) leave the metadata side-channel untouched for that path.
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameters: []}
-      iex> next = BB.TUI.State.update_parameters(state, [{[:speed], %{value: 100, type: :integer, doc: "rpm"}}])
-      iex> next.parameters
+      iex> next = BB.TUI.State.update_parameters(%BB.TUI.State{}, [{[:speed], %{value: 100, type: :integer, doc: "rpm"}}])
+      iex> next.parameters.list
       [{[:speed], 100}]
-      iex> next.parameter_metadata
+      iex> next.parameters.metadata
       %{[:speed] => %{type: :integer, doc: "rpm", default: nil}}
 
-      iex> state = %BB.TUI.State{parameters: []}
-      iex> BB.TUI.State.update_parameters(state, [{[:speed], 42}]).parameters
+      iex> BB.TUI.State.update_parameters(%BB.TUI.State{}, [{[:speed], 42}]).parameters.list
       [{[:speed], 42}]
   """
   @spec update_parameters(t(), [{list(), term()}]) :: t()
-  def update_parameters(%__MODULE__{} = state, parameters) do
+  def update_parameters(%__MODULE__{parameters: parameters} = state, new_parameters) do
     {params, metadata} =
-      Enum.map_reduce(parameters, %{}, fn
+      Enum.map_reduce(new_parameters, %{}, fn
         {path, %{value: value} = meta}, acc ->
           {{path, value}, Map.put(acc, path, extract_metadata(meta))}
 
@@ -372,7 +361,7 @@ defmodule BB.TUI.State do
           {{path, value}, acc}
       end)
 
-    %{state | parameters: params, parameter_metadata: metadata}
+    %{state | parameters: %{parameters | list: params, metadata: metadata}}
   end
 
   defp extract_metadata(meta) do
@@ -1145,18 +1134,18 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameters: [{[:a], 1}, {[:b], 2}], param_selected: 0}
-      iex> BB.TUI.State.select_next_param(state).param_selected
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:a], 1}, {[:b], 2}], selected: 0}}
+      iex> BB.TUI.State.select_next_param(state).parameters.selected
       1
 
-      iex> state = %BB.TUI.State{parameters: [{[:a], 1}, {[:b], 2}], param_selected: 1}
-      iex> BB.TUI.State.select_next_param(state).param_selected
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:a], 1}, {[:b], 2}], selected: 1}}
+      iex> BB.TUI.State.select_next_param(state).parameters.selected
       1
   """
   @spec select_next_param(t()) :: t()
-  def select_next_param(%__MODULE__{param_selected: idx, parameters: params} = state) do
-    max_idx = max(length(params) - 1, 0)
-    %{state | param_selected: min(idx + 1, max_idx)}
+  def select_next_param(%__MODULE__{parameters: %{selected: idx, list: list} = params} = state) do
+    max_idx = max(length(list) - 1, 0)
+    %{state | parameters: %{params | selected: min(idx + 1, max_idx)}}
   end
 
   @doc """
@@ -1164,17 +1153,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameters: [{[:a], 1}], param_selected: 1}
-      iex> BB.TUI.State.select_prev_param(state).param_selected
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:a], 1}], selected: 1}}
+      iex> BB.TUI.State.select_prev_param(state).parameters.selected
       0
 
-      iex> state = %BB.TUI.State{parameters: [{[:a], 1}], param_selected: 0}
-      iex> BB.TUI.State.select_prev_param(state).param_selected
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:a], 1}], selected: 0}}
+      iex> BB.TUI.State.select_prev_param(state).parameters.selected
       0
   """
   @spec select_prev_param(t()) :: t()
-  def select_prev_param(%__MODULE__{param_selected: idx} = state) do
-    %{state | param_selected: max(idx - 1, 0)}
+  def select_prev_param(%__MODULE__{parameters: %{selected: idx} = params} = state) do
+    %{state | parameters: %{params | selected: max(idx - 1, 0)}}
   end
 
   @doc """
@@ -1184,17 +1173,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameters: [{[:b], 2}, {[:a], 1}], param_selected: 0}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:b], 2}, {[:a], 1}], selected: 0}}
       iex> BB.TUI.State.selected_param(state)
       {[:a], 1}
 
-      iex> state = %BB.TUI.State{parameters: [], param_selected: 0}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [], selected: 0}}
       iex> BB.TUI.State.selected_param(state)
       nil
   """
   @spec selected_param(t()) :: {list(), term()} | nil
-  def selected_param(%__MODULE__{parameters: params, param_selected: idx}) do
-    params
+  def selected_param(%__MODULE__{parameters: %{list: list, selected: idx}}) do
+    list
     |> Enum.sort_by(fn {path, _} -> path end)
     |> Enum.at(idx)
   end
@@ -1207,17 +1196,16 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{}
-      iex> next = BB.TUI.State.set_parameter_tabs(state, [%{name: :mavlink}])
-      iex> next.parameter_tabs
+      iex> next = BB.TUI.State.set_parameter_tabs(%BB.TUI.State{}, [%{name: :mavlink}])
+      iex> next.parameters.tabs
       [:local, {:bridge, :mavlink}]
-      iex> next.parameter_tab_selected
+      iex> next.parameters.tab_selected
       0
   """
   @spec set_parameter_tabs(t(), [map()]) :: t()
-  def set_parameter_tabs(%__MODULE__{} = state, bridges) do
+  def set_parameter_tabs(%__MODULE__{parameters: params} = state, bridges) do
     tabs = [:local | Enum.map(bridges, fn %{name: name} -> {:bridge, name} end)]
-    %{state | parameter_tabs: tabs, parameter_tab_selected: 0, param_selected: 0}
+    %{state | parameters: %{params | tabs: tabs, tab_selected: 0, selected: 0}}
   end
 
   @doc """
@@ -1225,19 +1213,16 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameter_tabs: [:local, {:bridge, :mavlink}], parameter_tab_selected: 1}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{tabs: [:local, {:bridge, :mavlink}], tab_selected: 1}}
       iex> BB.TUI.State.selected_parameter_tab(state)
       {:bridge, :mavlink}
 
-      iex> state = %BB.TUI.State{parameter_tabs: [:local], parameter_tab_selected: 0}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{tabs: [:local], tab_selected: 0}}
       iex> BB.TUI.State.selected_parameter_tab(state)
       :local
   """
   @spec selected_parameter_tab(t()) :: :local | {:bridge, atom()}
-  def selected_parameter_tab(%__MODULE__{
-        parameter_tabs: tabs,
-        parameter_tab_selected: idx
-      }) do
+  def selected_parameter_tab(%__MODULE__{parameters: %{tabs: tabs, tab_selected: idx}}) do
     Enum.at(tabs, idx, :local)
   end
 
@@ -1248,30 +1233,30 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameter_tabs: [:local, {:bridge, :mavlink}], parameter_tab_selected: 0, param_selected: 3}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{tabs: [:local, {:bridge, :mavlink}], tab_selected: 0, selected: 3}}
       iex> next = BB.TUI.State.cycle_parameter_tab(state)
-      iex> next.parameter_tab_selected
+      iex> next.parameters.tab_selected
       1
-      iex> next.param_selected
+      iex> next.parameters.selected
       0
 
-      iex> state = %BB.TUI.State{parameter_tabs: [:local, {:bridge, :mavlink}], parameter_tab_selected: 1}
-      iex> BB.TUI.State.cycle_parameter_tab(state).parameter_tab_selected
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{tabs: [:local, {:bridge, :mavlink}], tab_selected: 1}}
+      iex> BB.TUI.State.cycle_parameter_tab(state).parameters.tab_selected
       0
 
-      iex> state = %BB.TUI.State{parameter_tabs: [:local], parameter_tab_selected: 0}
-      iex> BB.TUI.State.cycle_parameter_tab(state).parameter_tab_selected
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{tabs: [:local], tab_selected: 0}}
+      iex> BB.TUI.State.cycle_parameter_tab(state).parameters.tab_selected
       0
   """
   @spec cycle_parameter_tab(t()) :: t()
-  def cycle_parameter_tab(%__MODULE__{parameter_tabs: tabs} = state)
+  def cycle_parameter_tab(%__MODULE__{parameters: %{tabs: tabs} = params} = state)
       when length(tabs) <= 1 do
-    %{state | parameter_tab_selected: 0, param_selected: 0}
+    %{state | parameters: %{params | tab_selected: 0, selected: 0}}
   end
 
-  def cycle_parameter_tab(%__MODULE__{} = state) do
-    next = rem(state.parameter_tab_selected + 1, length(state.parameter_tabs))
-    %{state | parameter_tab_selected: next, param_selected: 0}
+  def cycle_parameter_tab(%__MODULE__{parameters: params} = state) do
+    next = rem(params.tab_selected + 1, length(params.tabs))
+    %{state | parameters: %{params | tab_selected: next, selected: 0}}
   end
 
   @doc """
@@ -1279,18 +1264,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{remote_parameters: %{}}
-      iex> next = BB.TUI.State.put_remote_parameters(state, :mavlink, [%{id: "PITCH_P", value: 0.1}])
-      iex> next.remote_parameters
+      iex> next = BB.TUI.State.put_remote_parameters(%BB.TUI.State{}, :mavlink, [%{id: "PITCH_P", value: 0.1}])
+      iex> next.parameters.remote
       %{mavlink: [%{id: "PITCH_P", value: 0.1}]}
   """
   @spec put_remote_parameters(t(), atom(), [map()] | {:error, term()}) :: t()
   def put_remote_parameters(
-        %__MODULE__{remote_parameters: existing} = state,
+        %__MODULE__{parameters: %{remote: existing} = params} = state,
         bridge_name,
         payload
       ) do
-    %{state | remote_parameters: Map.put(existing, bridge_name, payload)}
+    %{state | parameters: %{params | remote: Map.put(existing, bridge_name, payload)}}
   end
 
   @doc """
@@ -1328,35 +1312,39 @@ defmodule BB.TUI.State do
 
       iex> remote = [%{id: "ROLL_P", value: 0.0}, %{id: "PITCH_P", value: 0.1}]
       iex> state = %BB.TUI.State{
-      ...>   parameter_tabs: [:local, {:bridge, :mavlink}],
-      ...>   parameter_tab_selected: 1,
-      ...>   remote_parameters: %{mavlink: remote},
-      ...>   param_selected: 0
+      ...>   parameters: %BB.TUI.State.Parameters{
+      ...>     tabs: [:local, {:bridge, :mavlink}],
+      ...>     tab_selected: 1,
+      ...>     remote: %{mavlink: remote},
+      ...>     selected: 0
+      ...>   }
       ...> }
       iex> BB.TUI.State.selected_remote_param(state)
       %{id: "PITCH_P", value: 0.1}
 
-      iex> state = %BB.TUI.State{parameter_tabs: [:local], parameter_tab_selected: 0}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{tabs: [:local], tab_selected: 0}}
       iex> BB.TUI.State.selected_remote_param(state)
       nil
 
       iex> state = %BB.TUI.State{
-      ...>   parameter_tabs: [:local, {:bridge, :mavlink}],
-      ...>   parameter_tab_selected: 1,
-      ...>   remote_parameters: %{mavlink: {:error, :nodedown}}
+      ...>   parameters: %BB.TUI.State.Parameters{
+      ...>     tabs: [:local, {:bridge, :mavlink}],
+      ...>     tab_selected: 1,
+      ...>     remote: %{mavlink: {:error, :nodedown}}
+      ...>   }
       ...> }
       iex> BB.TUI.State.selected_remote_param(state)
       nil
   """
   @spec selected_remote_param(t()) :: map() | nil
-  def selected_remote_param(%__MODULE__{} = state) do
+  def selected_remote_param(%__MODULE__{parameters: params} = state) do
     case selected_parameter_tab(state) do
       {:bridge, name} ->
-        case Map.get(state.remote_parameters, name) do
+        case Map.get(params.remote, name) do
           list when is_list(list) ->
             list
             |> Enum.sort_by(&remote_param_id/1)
-            |> Enum.at(state.param_selected)
+            |> Enum.at(params.selected)
 
           _ ->
             nil
@@ -1396,35 +1384,35 @@ defmodule BB.TUI.State do
   Returns `{min, max}` bounds for the parameter at `path` when the
   Spark-style metadata declares them, otherwise `nil`.
 
-  Looks at `state.parameter_metadata[path].type` for the standard
+  Looks at `state.parameters.metadata[path].type` for the standard
   `{head, opts}` shape used by `Spark.Options` and extracts the
   `:min` / `:max` keyword values. Either bound may be absent (returned
   as `nil`); both absent collapses to `nil` (no bounds).
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameter_metadata: %{[:speed] => %{type: {:integer, [min: 0, max: 100]}}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: {:integer, [min: 0, max: 100]}}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:speed])
       {0, 100}
 
-      iex> state = %BB.TUI.State{parameter_metadata: %{[:gain] => %{type: {:float, [min: 0.0]}}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:gain] => %{type: {:float, [min: 0.0]}}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:gain])
       {0.0, nil}
 
-      iex> state = %BB.TUI.State{parameter_metadata: %{[:speed] => %{type: :integer}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: :integer}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:speed])
       nil
 
-      iex> state = %BB.TUI.State{parameter_metadata: %{[:speed] => %{type: {:integer, [doc: "rpm"]}}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: {:integer, [doc: "rpm"]}}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:speed])
       nil
 
-      iex> state = %BB.TUI.State{parameter_metadata: %{}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{}}}
       iex> BB.TUI.State.parameter_bounds(state, [:unknown])
       nil
   """
   @spec parameter_bounds(t(), list()) :: {number() | nil, number() | nil} | nil
-  def parameter_bounds(%__MODULE__{parameter_metadata: meta}, path) do
+  def parameter_bounds(%__MODULE__{parameters: %{metadata: meta}}, path) do
     case meta[path] do
       %{type: {head, opts}} when is_atom(head) and is_list(opts) ->
         case {Keyword.get(opts, :min), Keyword.get(opts, :max)} do

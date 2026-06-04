@@ -3,9 +3,9 @@ defmodule BB.TUI.Panels.Parameters do
   Parameters panel — displays robot parameters grouped by path.
 
   Renders a tab strip in the title when remote bridges have been
-  discovered. The `Local` tab shows parameters from `state.parameters`
-  (with schema metadata from `state.parameter_metadata`). Bridge tabs
-  show entries from `state.remote_parameters[bridge_name]`, which the
+  discovered. The `Local` tab shows parameters from `state.parameters.list`
+  (with schema metadata from `state.parameters.metadata`). Bridge tabs
+  show entries from `state.parameters.remote[bridge_name]`, which the
   app populates by calling `BB.Parameter.list_remote/2` whenever the
   user switches to that tab.
 
@@ -28,12 +28,12 @@ defmodule BB.TUI.Panels.Parameters do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameters: [{[:speed], 100}, {[:controller, :kp], 0.5}]}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:speed], 100}, {[:controller, :kp], 0.5}]}}
       iex> %ExRatatui.Widgets.Table{header: header} = BB.TUI.Panels.Parameters.render(state, false)
       iex> header
       ["Parameter", "Value", "Type"]
 
-      iex> state = %BB.TUI.State{parameters: []}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: []}}
       iex> %ExRatatui.Widgets.Table{rows: rows} = BB.TUI.Panels.Parameters.render(state, false)
       iex> rows
       [["No parameters defined", "", ""]]
@@ -51,11 +51,11 @@ defmodule BB.TUI.Panels.Parameters do
         {:percentage, 30},
         {:percentage, 25}
       ],
-      selected: if(focused? and selectable_rows?(rows), do: state.param_selected),
+      selected: if(focused? and selectable_rows?(rows), do: state.parameters.selected),
       highlight_style: Theme.highlight_style(),
       highlight_symbol: "\u{25B6} ",
       block: %Block{
-        title: title_line(state.parameter_tabs, state.parameter_tab_selected, count),
+        title: title_line(state.parameters.tabs, state.parameters.tab_selected, count),
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(focused?)
@@ -64,7 +64,7 @@ defmodule BB.TUI.Panels.Parameters do
   end
 
   defp rows_and_count(state, :local) do
-    case state.parameters do
+    case state.parameters.list do
       [] ->
         {[["No parameters defined", "", ""]], 0}
 
@@ -76,7 +76,7 @@ defmodule BB.TUI.Panels.Parameters do
             [
               format_path(path),
               format_value(value) <> edit_hint(value),
-              format_type(state.parameter_metadata[path])
+              format_type(state.parameters.metadata[path])
             ]
           end)
 
@@ -85,7 +85,7 @@ defmodule BB.TUI.Panels.Parameters do
   end
 
   defp rows_and_count(state, {:bridge, name}) do
-    case state.remote_parameters[name] do
+    case state.parameters.remote[name] do
       nil ->
         {[["Loading…", "", ""]], 0}
 
