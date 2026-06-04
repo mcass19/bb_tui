@@ -70,16 +70,16 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state()
       state = State.update_positions(state, %{shoulder: 42.0})
 
-      assert state.joints.shoulder.position == 42.0
-      assert state.joints.elbow.position == 45.0
+      assert state.joints.entries.shoulder.position == 42.0
+      assert state.joints.entries.elbow.position == 45.0
     end
 
     test "ignores unknown joints" do
       state = Fixtures.sample_state()
       state = State.update_positions(state, %{wrist: 10.0})
 
-      assert state.joints.shoulder.position == 0.0
-      assert state.joints.elbow.position == 45.0
+      assert state.joints.entries.shoulder.position == 0.0
+      assert state.joints.entries.elbow.position == 45.0
     end
   end
 
@@ -595,24 +595,24 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{joint_selected: 0})
 
       state = State.select_next_joint(state)
-      assert state.joint_selected == 1
+      assert state.joints.selected == 1
 
       # Already at max (2 joints)
       state = State.select_next_joint(state)
-      assert state.joint_selected == 1
+      assert state.joints.selected == 1
 
       state = State.select_prev_joint(state)
-      assert state.joint_selected == 0
+      assert state.joints.selected == 0
 
       # Already at 0
       state = State.select_prev_joint(state)
-      assert state.joint_selected == 0
+      assert state.joints.selected == 0
     end
 
     test "select_next_joint handles empty joints" do
       state = Fixtures.sample_state(%{joints: %{}, joint_selected: 0})
       state = State.select_next_joint(state)
-      assert state.joint_selected == 0
+      assert state.joints.selected == 0
     end
   end
 
@@ -620,14 +620,14 @@ defmodule BB.TUI.StateTest do
     test "updates position for existing joint" do
       state = Fixtures.sample_state()
       state = State.set_joint_position(state, :shoulder, 1.5)
-      assert state.joints.shoulder.position == 1.5
+      assert state.joints.entries.shoulder.position == 1.5
     end
 
     test "ignores unknown joint name" do
       state = Fixtures.sample_state()
-      original = state.joints
+      original = state.joints.entries
       state = State.set_joint_position(state, :wrist, 1.0)
-      assert state.joints == original
+      assert state.joints.entries == original
     end
   end
 

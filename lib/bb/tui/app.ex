@@ -163,7 +163,7 @@ defmodule BB.TUI.App do
           state: Robot.safety_state(robot, node),
           runtime: Robot.runtime_state(robot, node)
         },
-        joints: joints,
+        joints: %State.Joints{entries: joints},
         events: [],
         commands: commands,
         active_panel: :safety,
@@ -712,7 +712,7 @@ defmodule BB.TUI.App do
   defp adjust_selected_joint(state, direction, multiplier) do
     name = State.selected_joint_name(state)
 
-    case name && Map.get(state.joints, name) do
+    case name && Map.get(state.joints.entries, name) do
       nil ->
         {:noreply, state}
 

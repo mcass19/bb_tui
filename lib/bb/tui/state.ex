@@ -18,6 +18,7 @@ defmodule BB.TUI.State do
       :safety
   """
 
+  alias BB.TUI.State.Joints
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
 
@@ -26,7 +27,6 @@ defmodule BB.TUI.State do
   defstruct [
     :robot,
     :robot_struct,
-    :joints,
     :commands,
     node: nil,
     parameters: [],
@@ -48,8 +48,8 @@ defmodule BB.TUI.State do
     command_edit_mode: false,
     command_focused_arg: 0,
     command_form_values: %{},
-    joint_selected: 0,
     param_selected: 0,
+    joints: %Joints{},
     safety: %Safety{},
     throttle: %Throttle{}
   ]
@@ -57,7 +57,6 @@ defmodule BB.TUI.State do
   @type t :: %__MODULE__{
           robot: module(),
           robot_struct: term(),
-          joints: %{atom() => %{position: float(), joint: term()}},
           events: [{DateTime.t(), list(), term()}],
           parameters: [{list(), term()}],
           parameter_metadata: %{list() => map()},
@@ -79,8 +78,8 @@ defmodule BB.TUI.State do
           command_edit_mode: boolean(),
           command_focused_arg: non_neg_integer(),
           command_form_values: %{atom() => %{atom() => String.t()}},
-          joint_selected: non_neg_integer(),
           param_selected: non_neg_integer(),
+          joints: Joints.t(),
           safety: Safety.t(),
           throttle: Throttle.t()
         }
@@ -329,22 +328,22 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{shoulder: %{joint: %{}, position: 0.0}}
-      iex> state = %BB.TUI.State{joints: joints}
-      iex> BB.TUI.State.update_positions(state, %{shoulder: 42.0}).joints.shoulder.position
+      iex> entries = %{shoulder: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
+      iex> BB.TUI.State.update_positions(state, %{shoulder: 42.0}).joints.entries.shoulder.position
       42.0
   """
   @spec update_positions(t(), %{atom() => float()}) :: t()
-  def update_positions(%__MODULE__{joints: joints} = state, new_positions) do
-    updated_joints =
-      Map.new(joints, fn {name, joint_data} ->
+  def update_positions(%__MODULE__{joints: %{entries: entries}} = state, new_positions) do
+    updated =
+      Map.new(entries, fn {name, joint_data} ->
         case Map.fetch(new_positions, name) do
           {:ok, position} -> {name, %{joint_data | position: position}}
           :error -> {name, joint_data}
         end
       end)
 
-    %{state | joints: updated_joints}
+    %{state | joints: %{state.joints | entries: updated}}
   end
 
   @doc """
@@ -965,14 +964,14 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{elbow: %{joint: %{}, position: 0.0}, shoulder: %{joint: %{}, position: 0.0}}
-      iex> state = %BB.TUI.State{joints: joints}
+      iex> entries = %{elbow: %{joint: %{}, position: 0.0}, shoulder: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
       iex> BB.TUI.State.sorted_joint_names(state)
       [:elbow, :shoulder]
   """
   @spec sorted_joint_names(t()) :: [atom()]
-  def sorted_joint_names(%__MODULE__{joints: joints}) do
-    joints |> Map.keys() |> Enum.sort()
+  def sorted_joint_names(%__MODULE__{joints: %{entries: entries}}) do
+    entries |> Map.keys() |> Enum.sort()
   end
 
   @doc """
@@ -980,18 +979,18 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{elbow: %{joint: %{}, position: 0.0}, shoulder: %{joint: %{}, position: 0.0}}
-      iex> state = %BB.TUI.State{joints: joints, joint_selected: 1}
+      iex> entries = %{elbow: %{joint: %{}, position: 0.0}, shoulder: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries, selected: 1}}
       iex> BB.TUI.State.selected_joint_name(state)
       :shoulder
 
-      iex> state = %BB.TUI.State{joints: %{}, joint_selected: 0}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: %{}, selected: 0}}
       iex> BB.TUI.State.selected_joint_name(state)
       nil
   """
   @spec selected_joint_name(t()) :: atom() | nil
   def selected_joint_name(%__MODULE__{} = state) do
-    Enum.at(sorted_joint_names(state), state.joint_selected)
+    Enum.at(sorted_joint_names(state), state.joints.selected)
   end
 
   @doc """
@@ -999,20 +998,20 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{a: %{joint: %{}, position: 0.0}, b: %{joint: %{}, position: 0.0}}
-      iex> state = %BB.TUI.State{joints: joints, joint_selected: 0}
-      iex> BB.TUI.State.select_next_joint(state).joint_selected
+      iex> entries = %{a: %{joint: %{}, position: 0.0}, b: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries, selected: 0}}
+      iex> BB.TUI.State.select_next_joint(state).joints.selected
       1
 
-      iex> joints = %{a: %{joint: %{}, position: 0.0}, b: %{joint: %{}, position: 0.0}}
-      iex> state = %BB.TUI.State{joints: joints, joint_selected: 1}
-      iex> BB.TUI.State.select_next_joint(state).joint_selected
+      iex> entries = %{a: %{joint: %{}, position: 0.0}, b: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries, selected: 1}}
+      iex> BB.TUI.State.select_next_joint(state).joints.selected
       1
   """
   @spec select_next_joint(t()) :: t()
-  def select_next_joint(%__MODULE__{joints: joints, joint_selected: idx} = state) do
-    max_idx = max(map_size(joints) - 1, 0)
-    %{state | joint_selected: min(idx + 1, max_idx)}
+  def select_next_joint(%__MODULE__{joints: %{entries: entries, selected: idx}} = state) do
+    max_idx = max(map_size(entries) - 1, 0)
+    %{state | joints: %{state.joints | selected: min(idx + 1, max_idx)}}
   end
 
   @doc """
@@ -1020,17 +1019,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{joints: %{a: %{joint: %{}, position: 0.0}}, joint_selected: 1}
-      iex> BB.TUI.State.select_prev_joint(state).joint_selected
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: %{a: %{joint: %{}, position: 0.0}}, selected: 1}}
+      iex> BB.TUI.State.select_prev_joint(state).joints.selected
       0
 
-      iex> state = %BB.TUI.State{joints: %{a: %{joint: %{}, position: 0.0}}, joint_selected: 0}
-      iex> BB.TUI.State.select_prev_joint(state).joint_selected
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: %{a: %{joint: %{}, position: 0.0}}, selected: 0}}
+      iex> BB.TUI.State.select_prev_joint(state).joints.selected
       0
   """
   @spec select_prev_joint(t()) :: t()
-  def select_prev_joint(%__MODULE__{joint_selected: idx} = state) do
-    %{state | joint_selected: max(idx - 1, 0)}
+  def select_prev_joint(%__MODULE__{joints: %{selected: idx}} = state) do
+    %{state | joints: %{state.joints | selected: max(idx - 1, 0)}}
   end
 
   @doc """
@@ -1038,16 +1037,22 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{shoulder: %{joint: %{}, position: 0.0, target: nil}}
-      iex> state = %BB.TUI.State{joints: joints}
-      iex> BB.TUI.State.set_joint_position(state, :shoulder, 1.5).joints.shoulder.position
+      iex> entries = %{shoulder: %{joint: %{}, position: 0.0, target: nil}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
+      iex> BB.TUI.State.set_joint_position(state, :shoulder, 1.5).joints.entries.shoulder.position
       1.5
   """
   @spec set_joint_position(t(), atom(), float()) :: t()
-  def set_joint_position(%__MODULE__{joints: joints} = state, name, position) do
-    case Map.fetch(joints, name) do
+  def set_joint_position(%__MODULE__{joints: %{entries: entries}} = state, name, position) do
+    case Map.fetch(entries, name) do
       {:ok, joint_data} ->
-        %{state | joints: Map.put(joints, name, %{joint_data | position: position})}
+        %{
+          state
+          | joints: %{
+              state.joints
+              | entries: Map.put(entries, name, %{joint_data | position: position})
+            }
+        }
 
       :error ->
         state
@@ -1062,19 +1067,26 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> joints = %{shoulder: %{joint: %{}, position: 0.0, target: nil}}
-      iex> state = %BB.TUI.State{joints: joints}
-      iex> BB.TUI.State.set_joint_target(state, :shoulder, 1.5).joints.shoulder.target
+      iex> entries = %{shoulder: %{joint: %{}, position: 0.0, target: nil}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
+      iex> BB.TUI.State.set_joint_target(state, :shoulder, 1.5).joints.entries.shoulder.target
       1.5
 
-      iex> BB.TUI.State.set_joint_target(%BB.TUI.State{joints: %{}}, :missing, 1.5).joints
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: %{}}}
+      iex> BB.TUI.State.set_joint_target(state, :missing, 1.5).joints.entries
       %{}
   """
   @spec set_joint_target(t(), atom(), float() | nil) :: t()
-  def set_joint_target(%__MODULE__{joints: joints} = state, name, target) do
-    case Map.fetch(joints, name) do
+  def set_joint_target(%__MODULE__{joints: %{entries: entries}} = state, name, target) do
+    case Map.fetch(entries, name) do
       {:ok, joint_data} ->
-        %{state | joints: Map.put(joints, name, Map.put(joint_data, :target, target))}
+        %{
+          state
+          | joints: %{
+              state.joints
+              | entries: Map.put(entries, name, Map.put(joint_data, :target, target))
+            }
+        }
 
       :error ->
         state

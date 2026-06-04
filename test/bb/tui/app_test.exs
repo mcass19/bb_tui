@@ -19,9 +19,9 @@ defmodule BB.TUI.AppTest do
       assert state.robot == BB.TUI.TestRobot
       assert state.safety.state == :disarmed
       assert state.safety.runtime == :disarmed
-      assert map_size(state.joints) == 2
-      assert state.joints.shoulder.position == 0.0
-      assert state.joints.elbow.position == 45.0
+      assert map_size(state.joints.entries) == 2
+      assert state.joints.entries.shoulder.position == 0.0
+      assert state.joints.entries.elbow.position == 45.0
       assert state.events == []
       assert state.active_panel == :safety
       assert state.events_paused == false
@@ -742,7 +742,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "j", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joint_selected == 1
+      assert new_state.joints.selected == 1
     end
 
     test "down arrow selects next joint" do
@@ -750,7 +750,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "down", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joint_selected == 1
+      assert new_state.joints.selected == 1
     end
 
     test "k/up selects previous joint" do
@@ -758,7 +758,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joint_selected == 0
+      assert new_state.joints.selected == 0
     end
 
     test "up arrow selects previous joint" do
@@ -766,7 +766,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "up", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joint_selected == 0
+      assert new_state.joints.selected == 0
     end
 
     # Joints panel keys — position control (simulated joints, no actuator)
@@ -789,7 +789,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joints.shoulder.position > 0.0
+      assert new_state.joints.entries.shoulder.position > 0.0
     end
 
     test "adjusting a joint records the commanded target alongside the new position" do
@@ -812,9 +812,9 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      target = new_state.joints.shoulder.target
+      target = new_state.joints.entries.shoulder.target
       assert is_float(target)
-      assert target == new_state.joints.shoulder.position
+      assert target == new_state.joints.entries.shoulder.position
     end
 
     test "h/left decreases simulated joint position when armed" do
@@ -836,7 +836,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "h", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joints.shoulder.position < 0.0
+      assert new_state.joints.entries.shoulder.position < 0.0
     end
 
     test "right arrow adjusts simulated joint position" do
@@ -858,7 +858,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "right", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joints.shoulder.position > 0.0
+      assert new_state.joints.entries.shoulder.position > 0.0
     end
 
     test "L key increases position by 10x step" do
@@ -883,8 +883,8 @@ defmodule BB.TUI.AppTest do
       {:noreply, small_state} = App.update({:event, small_event}, state)
       {:noreply, big_state} = App.update({:event, big_event}, state)
 
-      small_delta = small_state.joints.shoulder.position
-      big_delta = big_state.joints.shoulder.position
+      small_delta = small_state.joints.entries.shoulder.position
+      big_delta = big_state.joints.entries.shoulder.position
 
       assert_in_delta big_delta, small_delta * 10, 1.0e-10
     end
@@ -911,8 +911,8 @@ defmodule BB.TUI.AppTest do
       {:noreply, small_state} = App.update({:event, small_event}, state)
       {:noreply, big_state} = App.update({:event, big_event}, state)
 
-      small_delta = abs(small_state.joints.shoulder.position)
-      big_delta = abs(big_state.joints.shoulder.position)
+      small_delta = abs(small_state.joints.entries.shoulder.position)
+      big_delta = abs(big_state.joints.entries.shoulder.position)
 
       assert_in_delta big_delta, small_delta * 10, 1.0e-10
     end
@@ -937,7 +937,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joints.shoulder.position == 1.0
+      assert new_state.joints.entries.shoulder.position == 1.0
     end
 
     test "joint control does nothing when not armed" do
@@ -959,7 +959,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joints.shoulder.position == 0.0
+      assert new_state.joints.entries.shoulder.position == 0.0
     end
 
     test "joint control does nothing with nil position" do
@@ -981,7 +981,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.joints.shoulder.position == nil
+      assert new_state.joints.entries.shoulder.position == nil
     end
 
     test "joint control does nothing with empty joints" do
@@ -1032,7 +1032,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # Position NOT updated locally for real actuators — waits for sensor feedback
-      assert new_state.joints.shoulder.position == 0.0
+      assert new_state.joints.entries.shoulder.position == 0.0
     end
 
     test "l key publishes simulated state when robot has actuators map but no match for joint" do
@@ -1065,7 +1065,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # No matching actuator → simulated path → local position updated
-      assert new_state.joints.shoulder.position > 0.0
+      assert new_state.joints.entries.shoulder.position > 0.0
     end
 
     # Parameters panel keys — navigation
@@ -1671,8 +1671,8 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state, render?: false} =
                App.update({:info, {:bb, [:sensor, :joints], msg}}, state)
 
-      assert new_state.joints.shoulder.position == 10.0
-      assert new_state.joints.elbow.position == 20.0
+      assert new_state.joints.entries.shoulder.position == 10.0
+      assert new_state.joints.entries.elbow.position == 20.0
       assert length(new_state.events) == 1
       assert new_state.throttle.render_pending?
     end
@@ -1686,7 +1686,7 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state, render?: false} =
                App.update({:info, {:bb, [:sensor, :other], msg}}, state)
 
-      assert new_state.joints == state.joints
+      assert new_state.joints.entries == state.joints.entries
       assert length(new_state.events) == 1
       assert new_state.throttle.render_pending?
     end

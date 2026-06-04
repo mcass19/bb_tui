@@ -25,16 +25,16 @@ defmodule BB.TUI.Panels.Joints do
 
   ## Examples
 
-      iex> joints = %{shoulder: %{joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}}, position: 0.0}}
-      iex> state = %BB.TUI.State{joints: joints}
+      iex> entries = %{shoulder: %{joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.57, upper: 1.57}}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
       iex> %ExRatatui.Widgets.Table{header: header} = BB.TUI.Panels.Joints.render(state, false)
       iex> header
       ["Joint", "Type", "Position", "Target"]
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{joints: joints, joint_selected: selected}, focused?) do
+  def render(%State{joints: %{entries: entries, selected: selected}}, focused?) do
     rows =
-      joints
+      entries
       |> Enum.sort_by(fn {name, _} -> name end)
       |> Enum.map(fn {name, joint_data} ->
         %{position: pos, joint: joint} = joint_data

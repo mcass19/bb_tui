@@ -1,6 +1,7 @@
 defmodule BB.TUI.Test.Fixtures do
   @moduledoc false
 
+  alias BB.TUI.State.Joints
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
 
@@ -15,7 +16,9 @@ defmodule BB.TUI.Test.Fixtures do
     render_pending?: {:throttle, :render_pending?},
     safety_state: {:safety, :state},
     runtime_state: {:safety, :runtime},
-    confirm_force_disarm: {:safety, :confirm_force_disarm?}
+    confirm_force_disarm: {:safety, :confirm_force_disarm?},
+    joints: {:joints, :entries},
+    joint_selected: {:joints, :selected}
   }
 
   @doc """
@@ -29,7 +32,6 @@ defmodule BB.TUI.Test.Fixtures do
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
       node: nil,
-      joints: sample_joints(),
       events: [],
       parameters: [],
       commands: [],
@@ -41,7 +43,6 @@ defmodule BB.TUI.Test.Fixtures do
       command_selected: 0,
       command_result: nil,
       executing_command: nil,
-      joint_selected: 0,
       param_selected: 0
     }
 
@@ -63,7 +64,8 @@ defmodule BB.TUI.Test.Fixtures do
   defp substruct_defaults do
     %{
       throttle: %Throttle{debounce_ms: 0},
-      safety: %Safety{state: :disarmed, runtime: :disarmed}
+      safety: %Safety{state: :disarmed, runtime: :disarmed},
+      joints: %Joints{entries: sample_joints()}
     }
   end
 
