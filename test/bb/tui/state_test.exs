@@ -251,7 +251,7 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
 
-      assert Map.has_key?(state.event_last_seen, {[:sensor, :imu], :map})
+      assert Map.has_key?(state.throttle.last_seen, {[:sensor, :imu], :map})
     end
   end
 
@@ -316,7 +316,7 @@ defmodule BB.TUI.StateTest do
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
       state = State.clear_events(state)
 
-      assert state.event_last_seen == %{}
+      assert state.throttle.last_seen == %{}
 
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
       assert length(state.events) == 1
@@ -326,13 +326,13 @@ defmodule BB.TUI.StateTest do
   describe "mark_render_pending/1 and clear_render_pending/1" do
     test "mark sets the flag and clear unsets it" do
       state = Fixtures.sample_state()
-      refute state.render_pending?
+      refute state.throttle.render_pending?
 
       state = State.mark_render_pending(state)
-      assert state.render_pending?
+      assert state.throttle.render_pending?
 
       state = State.clear_render_pending(state)
-      refute state.render_pending?
+      refute state.throttle.render_pending?
     end
   end
 

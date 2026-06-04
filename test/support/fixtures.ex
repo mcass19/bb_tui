@@ -1,8 +1,24 @@
 defmodule BB.TUI.Test.Fixtures do
   @moduledoc false
 
+  alias BB.TUI.State.Throttle
+
+  # Legacy flat override keys → {substruct, field}. As `BB.TUI.State` is split
+  # into substructs, tests keep passing flat overrides (e.g.
+  # `%{event_debounce_ms: 0}`) and `sample_state/1` routes them into the right
+  # nested struct. Grows one group per refactor chunk.
+  @nested_overrides %{
+    event_debounce_ms: {:throttle, :debounce_ms},
+    event_last_seen: {:throttle, :last_seen},
+    sensor_flush_ms: {:throttle, :flush_ms},
+    render_pending?: {:throttle, :render_pending?}
+  }
+
   @doc """
   Returns a default State struct with mocked robot data for testing.
+
+  Accepts flat overrides; keys belonging to a substruct (see
+  `@nested_overrides`) are routed into it automatically.
   """
   def sample_state(overrides \\ %{}) do
     defaults = %{
@@ -25,15 +41,25 @@ defmodule BB.TUI.Test.Fixtures do
       command_result: nil,
       executing_command: nil,
       joint_selected: 0,
-      param_selected: 0,
-      # Debounce off by default so timing-agnostic tests stay deterministic;
-      # debounce tests opt in with %{event_debounce_ms: 1000}. Production
-      # state (built in App.init/1) uses the struct default.
-      event_debounce_ms: 0
+      param_selected: 0
     }
 
-    struct!(BB.TUI.State, Map.merge(defaults, overrides))
+    {nested, flat} = Map.split(overrides, Map.keys(@nested_overrides))
+
+    substructs =
+      Enum.reduce(nested, substruct_defaults(), fn {key, value}, acc ->
+        {group, field} = Map.fetch!(@nested_overrides, key)
+        Map.update!(acc, group, &Map.put(&1, field, value))
+      end)
+
+    struct!(BB.TUI.State, defaults |> Map.merge(flat) |> Map.merge(substructs))
   end
+
+  # Test-friendly substruct defaults. Debounce is off by default so
+  # timing-agnostic tests stay deterministic; debounce tests opt in with
+  # `%{event_debounce_ms: 1000}`. Production state (App.init/1) uses the
+  # struct defaults.
+  defp substruct_defaults, do: %{throttle: %Throttle{debounce_ms: 0}}
 
   @doc """
   Returns a sample robot struct with shoulder and elbow joints.

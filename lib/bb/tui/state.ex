@@ -6,10 +6,10 @@ defmodule BB.TUI.State do
   communication. The `BB.TUI.App` module handles IO and delegates here
   for state changes.
 
-  The struct also carries high-rate-stream controls: `event_debounce_ms`
-  and `event_last_seen` back `append_event/3`'s log debouncing, while
-  `render_pending?` and `sensor_flush_ms` drive `BB.TUI.App`'s coalesced
-  sensor re-render. See `BB.TUI.App` for the full flow.
+  High-rate-stream controls live in the `BB.TUI.State.Throttle` substruct
+  (`throttle.debounce_ms`/`throttle.last_seen` back `append_event/3`'s log
+  debouncing; `throttle.render_pending?`/`throttle.flush_ms` drive
+  `BB.TUI.App`'s coalesced sensor re-render). See `BB.TUI.App` for the flow.
 
   ## Examples
 
@@ -18,15 +18,9 @@ defmodule BB.TUI.State do
       :safety
   """
 
+  alias BB.TUI.State.Throttle
+
   @max_events 100
-
-  # Default debounce window: drop a repeat of the same {path, payload-type}
-  # seen within this many milliseconds. Matches bb_liveview's 1s window.
-  @default_event_debounce_ms 1000
-
-  # Default sensor render-coalescing interval (~30fps). Sensor-driven state
-  # changes are batched into at most one frame per this many milliseconds.
-  @default_sensor_flush_ms 33
 
   defstruct [
     :robot,
@@ -58,10 +52,7 @@ defmodule BB.TUI.State do
     command_form_values: %{},
     joint_selected: 0,
     param_selected: 0,
-    event_debounce_ms: @default_event_debounce_ms,
-    event_last_seen: %{},
-    sensor_flush_ms: @default_sensor_flush_ms,
-    render_pending?: false
+    throttle: %Throttle{}
   ]
 
   @type t :: %__MODULE__{
@@ -94,10 +85,7 @@ defmodule BB.TUI.State do
           command_form_values: %{atom() => %{atom() => String.t()}},
           joint_selected: non_neg_integer(),
           param_selected: non_neg_integer(),
-          event_debounce_ms: non_neg_integer(),
-          event_last_seen: %{optional({list(), term()}) => integer()},
-          sensor_flush_ms: pos_integer(),
-          render_pending?: boolean()
+          throttle: Throttle.t()
         }
 
   @panels [:safety, :commands, :joints, :events, :parameters]
@@ -417,18 +405,18 @@ defmodule BB.TUI.State do
   #{@max_events} entries. When events are paused, the event is dropped.
 
   Under high-rate streams, a repeat of the same `{path, payload-type}` seen
-  within `event_debounce_ms` (default #{@default_event_debounce_ms}ms) is
-  dropped so a fast sensor cannot flood the log; distinct paths or payload
-  types always pass through. A debounce window of `0` disables this.
+  within `throttle.debounce_ms` (default 1s) is dropped so a fast sensor
+  cannot flood the log; distinct paths or payload types always pass through.
+  A debounce window of `0` disables this.
   """
   @spec append_event(t(), list(), term()) :: t()
   def append_event(%__MODULE__{events_paused: true} = state, _path, _message), do: state
 
-  def append_event(%__MODULE__{events: events} = state, path, message) do
+  def append_event(%__MODULE__{events: events, throttle: throttle} = state, path, message) do
     key = event_debounce_key(path, message)
     now = System.monotonic_time(:millisecond)
 
-    if event_debounced?(state.event_last_seen, key, now, state.event_debounce_ms) do
+    if event_debounced?(throttle.last_seen, key, now, throttle.debounce_ms) do
       state
     else
       event = {event_timestamp(message), path, message}
@@ -436,7 +424,7 @@ defmodule BB.TUI.State do
       %{
         state
         | events: Enum.take([event | events], @max_events),
-          event_last_seen: Map.put(state.event_last_seen, key, now)
+          throttle: %{throttle | last_seen: Map.put(throttle.last_seen, key, now)}
       }
     end
   end
@@ -534,20 +522,22 @@ defmodule BB.TUI.State do
   flag; `BB.TUI.App`'s subscriptions callback then arms the one-shot
   `:sensor_flush` tick that performs the single batched render.
 
-      iex> BB.TUI.State.mark_render_pending(%BB.TUI.State{}).render_pending?
+      iex> BB.TUI.State.mark_render_pending(%BB.TUI.State{}).throttle.render_pending?
       true
   """
   @spec mark_render_pending(t()) :: t()
-  def mark_render_pending(%__MODULE__{} = state), do: %{state | render_pending?: true}
+  def mark_render_pending(%__MODULE__{} = state), do: put_in(state.throttle.render_pending?, true)
 
   @doc """
   Clears the pending-render flag once the coalesced frame has been rendered.
 
-      iex> BB.TUI.State.clear_render_pending(%BB.TUI.State{render_pending?: true}).render_pending?
+      iex> state = %BB.TUI.State{throttle: %BB.TUI.State.Throttle{render_pending?: true}}
+      iex> BB.TUI.State.clear_render_pending(state).throttle.render_pending?
       false
   """
   @spec clear_render_pending(t()) :: t()
-  def clear_render_pending(%__MODULE__{} = state), do: %{state | render_pending?: false}
+  def clear_render_pending(%__MODULE__{} = state),
+    do: put_in(state.throttle.render_pending?, false)
 
   @doc """
   Toggles the event stream pause state.
@@ -580,7 +570,7 @@ defmodule BB.TUI.State do
   """
   @spec clear_events(t()) :: t()
   def clear_events(%__MODULE__{} = state) do
-    %{state | events: [], scroll_offset: 0, event_last_seen: %{}}
+    %{state | events: [], scroll_offset: 0, throttle: %{state.throttle | last_seen: %{}}}
   end
 
   @doc """

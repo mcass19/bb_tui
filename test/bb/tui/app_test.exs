@@ -1674,7 +1674,7 @@ defmodule BB.TUI.AppTest do
       assert new_state.joints.shoulder.position == 10.0
       assert new_state.joints.elbow.position == 20.0
       assert length(new_state.events) == 1
-      assert new_state.render_pending?
+      assert new_state.throttle.render_pending?
     end
 
     test "sensor message with non-standard payload still appends event" do
@@ -1688,7 +1688,7 @@ defmodule BB.TUI.AppTest do
 
       assert new_state.joints == state.joints
       assert length(new_state.events) == 1
-      assert new_state.render_pending?
+      assert new_state.throttle.render_pending?
     end
 
     test "a burst of identical sensor messages collapses to one event row" do
@@ -1707,7 +1707,7 @@ defmodule BB.TUI.AppTest do
         end)
 
       assert length(state.events) == 1
-      assert state.render_pending?
+      assert state.throttle.render_pending?
     end
 
     test "param message updates parameters and appends event" do
@@ -1745,7 +1745,7 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state(%{render_pending?: true})
 
       assert {:noreply, new_state} = App.update({:info, :sensor_flush}, state)
-      refute new_state.render_pending?
+      refute new_state.throttle.render_pending?
     end
 
     test "non-bb messages are ignored" do

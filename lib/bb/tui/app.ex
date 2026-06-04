@@ -55,18 +55,18 @@ defmodule BB.TUI.App do
   meaningful information:
 
     * `BB.TUI.State.append_event/3` debounces the event log — a repeat
-      of the same `{path, payload-type}` within `event_debounce_ms`
+      of the same `{path, payload-type}` within `throttle.debounce_ms`
       (default 1s) is dropped, so one fast sensor cannot evict every
       other event from the 100-entry log.
     * Sensor messages update state but suppress their immediate render
       (`render?: false`); a one-shot `:sensor_flush` tick
-      (`sensor_flush_ms`, default ~33ms / 30fps) armed by
+      (`throttle.flush_ms`, default ~33ms / 30fps) armed by
       `subscriptions/1` performs a single coalesced redraw. Every other
       message — key presses, command results, safety/param/state
       events — still renders immediately.
 
-  Both intervals are `BB.TUI.State` fields, so tests can shrink or
-  disable them (a debounce window of `0` disables debouncing).
+  Both intervals live in the `BB.TUI.State.Throttle` substruct, so tests
+  can shrink or disable them (a debounce window of `0` disables it).
 
   ## Async commands
 
@@ -664,7 +664,7 @@ defmodule BB.TUI.App do
   # messages don't reset the armed timer (the reducer reconciles an equal
   # :once subscription as a no-op); once it fires and clears the flag, the
   # next reconcile removes it — so an idle TUI carries no flush timer.
-  defp sensor_flush_subscriptions(%State{render_pending?: true, sensor_flush_ms: ms}) do
+  defp sensor_flush_subscriptions(%State{throttle: %{render_pending?: true, flush_ms: ms}}) do
     [Subscription.once(:sensor_flush, ms, :sensor_flush)]
   end
 
