@@ -159,15 +159,16 @@ defmodule BB.TUI.App do
         robot: robot,
         robot_struct: robot_struct,
         node: node,
-        safety_state: Robot.safety_state(robot, node),
-        runtime_state: Robot.runtime_state(robot, node),
+        safety: %State.Safety{
+          state: Robot.safety_state(robot, node),
+          runtime: Robot.runtime_state(robot, node)
+        },
         joints: joints,
         events: [],
         commands: commands,
         active_panel: :safety,
         scroll_offset: 0,
-        show_help: false,
-        confirm_force_disarm: false
+        show_help: false
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
@@ -258,7 +259,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "y", kind: "press"}},
-        %{confirm_force_disarm: true} = state
+        %{safety: %{confirm_force_disarm?: true}} = state
       ) do
     Robot.force_disarm(state.robot, state.node)
     {:noreply, State.dismiss_force_disarm(state)}
@@ -266,12 +267,15 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "n", kind: "press"}},
-        %{confirm_force_disarm: true} = state
+        %{safety: %{confirm_force_disarm?: true}} = state
       ) do
     {:noreply, State.dismiss_force_disarm(state)}
   end
 
-  def update({:event, %Event.Key{kind: "press"}}, %{confirm_force_disarm: true} = state) do
+  def update(
+        {:event, %Event.Key{kind: "press"}},
+        %{safety: %{confirm_force_disarm?: true}} = state
+      ) do
     {:noreply, state}
   end
 
@@ -331,7 +335,7 @@ defmodule BB.TUI.App do
   end
 
   def update({:event, %Event.Key{code: "f", kind: "press"}}, state) do
-    if state.safety_state == :error do
+    if state.safety.state == :error do
       {:noreply, State.show_force_disarm(state)}
     else
       {:noreply, state}
@@ -672,7 +676,7 @@ defmodule BB.TUI.App do
 
   # ── Helpers ──────────────────────────────────────────────────
 
-  defp needs_throbber?(%State{safety_state: :disarming}), do: true
+  defp needs_throbber?(%State{safety: %{state: :disarming}}), do: true
   defp needs_throbber?(%State{executing_command: marker}) when marker != nil, do: true
   defp needs_throbber?(_), do: false
 
@@ -680,7 +684,7 @@ defmodule BB.TUI.App do
     panels ++ [{Panels.Help.render(offset), full}]
   end
 
-  defp maybe_add_popup(panels, %{confirm_force_disarm: true}, full) do
+  defp maybe_add_popup(panels, %{safety: %{confirm_force_disarm?: true}}, full) do
     panels ++ [{Panels.ForceDisarm.render(), full}]
   end
 
@@ -701,7 +705,7 @@ defmodule BB.TUI.App do
   defp maybe_add_popup(panels, _state, _full), do: panels
 
   defp adjust_selected_joint(state, _direction, _multiplier)
-       when state.safety_state not in [:armed, :disarming] do
+       when state.safety.state not in [:armed, :disarming] do
     {:noreply, state}
   end
 
@@ -892,7 +896,7 @@ defmodule BB.TUI.App do
         {:noreply, state}
 
       cmd ->
-        if Panels.Commands.command_ready?(cmd, state.runtime_state) and
+        if Panels.Commands.command_ready?(cmd, state.safety.runtime) and
              state.executing_command == nil do
           args = State.parsed_args_for_selected(state)
 

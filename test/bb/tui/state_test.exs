@@ -45,13 +45,13 @@ defmodule BB.TUI.StateTest do
   describe "show_force_disarm/1 and dismiss_force_disarm/1" do
     test "shows and dismisses force disarm popup" do
       state = Fixtures.sample_state()
-      refute state.confirm_force_disarm
+      refute state.safety.confirm_force_disarm?
 
       state = State.show_force_disarm(state)
-      assert state.confirm_force_disarm
+      assert state.safety.confirm_force_disarm?
 
       state = State.dismiss_force_disarm(state)
-      refute state.confirm_force_disarm
+      refute state.safety.confirm_force_disarm?
     end
   end
 
@@ -60,8 +60,8 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state()
       state = State.update_safety(state, :armed, :idle)
 
-      assert state.safety_state == :armed
-      assert state.runtime_state == :idle
+      assert state.safety.state == :armed
+      assert state.safety.runtime == :idle
     end
   end
 

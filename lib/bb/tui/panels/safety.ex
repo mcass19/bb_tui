@@ -25,14 +25,14 @@ defmodule BB.TUI.Panels.Safety do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{safety_state: :armed, runtime_state: :idle}
+      iex> state = %BB.TUI.State{safety: %BB.TUI.State.Safety{state: :armed, runtime: :idle}}
       iex> %ExRatatui.Widgets.Paragraph{} = BB.TUI.Panels.Safety.render(state, true)
 
-      iex> state = %BB.TUI.State{safety_state: :disarming, runtime_state: :disarming, throbber_step: 0}
+      iex> state = %BB.TUI.State{throbber_step: 0, safety: %BB.TUI.State.Safety{state: :disarming, runtime: :disarming}}
       iex> %ExRatatui.Widgets.Throbber{} = BB.TUI.Panels.Safety.render(state, false)
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{safety_state: :disarming} = state, focused?) do
+  def render(%State{safety: %{state: :disarming}} = state, focused?) do
     %Throbber{
       label: "DISARMING",
       step: state.throbber_step,
@@ -44,8 +44,8 @@ defmodule BB.TUI.Panels.Safety do
   end
 
   def render(%State{} = state, focused?) do
-    {symbol, label, style} = state_display(state.safety_state)
-    runtime_label = format_runtime(state.runtime_state)
+    {symbol, label, style} = state_display(state.safety.state)
+    runtime_label = format_runtime(state.safety.runtime)
 
     text = """
     #{symbol} #{label}
@@ -57,7 +57,7 @@ defmodule BB.TUI.Panels.Safety do
     """
 
     text =
-      if state.safety_state == :error do
+      if state.safety.state == :error do
         text <> "\n[f] Force Disarm"
       else
         text

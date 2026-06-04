@@ -31,8 +31,8 @@ defmodule BB.TUI.Panels.Commands do
 
       iex> state = %BB.TUI.State{
       ...>   commands: [%{name: :home, allowed_states: [:idle]}],
-      ...>   runtime_state: :idle, command_selected: 0,
-      ...>   command_result: nil, executing_command: nil
+      ...>   command_selected: 0, command_result: nil, executing_command: nil,
+      ...>   safety: %BB.TUI.State.Safety{runtime: :idle}
       ...> }
       iex> %ExRatatui.Widgets.List{items: [%ExRatatui.Text.Line{spans: spans}]} =
       ...>   BB.TUI.Panels.Commands.render(state, false)
@@ -152,7 +152,7 @@ defmodule BB.TUI.Panels.Commands do
 
   # ── Private: rich-text rows ─────────────────────────────────
 
-  defp format_commands(%State{commands: commands, runtime_state: runtime_state}) do
+  defp format_commands(%State{commands: commands, safety: %{runtime: runtime_state}}) do
     Enum.map(commands, fn cmd ->
       name = to_string(Map.get(cmd, :name, inspect(cmd)))
 

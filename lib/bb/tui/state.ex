@@ -18,6 +18,7 @@ defmodule BB.TUI.State do
       :safety
   """
 
+  alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
 
   @max_events 100
@@ -25,8 +26,6 @@ defmodule BB.TUI.State do
   defstruct [
     :robot,
     :robot_struct,
-    :safety_state,
-    :runtime_state,
     :joints,
     :commands,
     node: nil,
@@ -40,7 +39,6 @@ defmodule BB.TUI.State do
     scroll_offset: 0,
     show_help: false,
     help_scroll_offset: 0,
-    confirm_force_disarm: false,
     throbber_step: 0,
     events_paused: false,
     show_event_detail: false,
@@ -52,14 +50,13 @@ defmodule BB.TUI.State do
     command_form_values: %{},
     joint_selected: 0,
     param_selected: 0,
+    safety: %Safety{},
     throttle: %Throttle{}
   ]
 
   @type t :: %__MODULE__{
           robot: module(),
           robot_struct: term(),
-          safety_state: :armed | :disarmed | :disarming | :error,
-          runtime_state: atom(),
           joints: %{atom() => %{position: float(), joint: term()}},
           events: [{DateTime.t(), list(), term()}],
           parameters: [{list(), term()}],
@@ -73,7 +70,6 @@ defmodule BB.TUI.State do
           scroll_offset: non_neg_integer(),
           show_help: boolean(),
           help_scroll_offset: non_neg_integer(),
-          confirm_force_disarm: boolean(),
           throbber_step: non_neg_integer(),
           events_paused: boolean(),
           show_event_detail: boolean(),
@@ -85,6 +81,7 @@ defmodule BB.TUI.State do
           command_form_values: %{atom() => %{atom() => String.t()}},
           joint_selected: non_neg_integer(),
           param_selected: non_neg_integer(),
+          safety: Safety.t(),
           throttle: Throttle.t()
         }
 
@@ -288,13 +285,12 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{confirm_force_disarm: false}
-      iex> BB.TUI.State.show_force_disarm(state).confirm_force_disarm
+      iex> BB.TUI.State.show_force_disarm(%BB.TUI.State{}).safety.confirm_force_disarm?
       true
   """
   @spec show_force_disarm(t()) :: t()
   def show_force_disarm(%__MODULE__{} = state) do
-    %{state | confirm_force_disarm: true}
+    put_in(state.safety.confirm_force_disarm?, true)
   end
 
   @doc """
@@ -302,13 +298,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{confirm_force_disarm: true}
-      iex> BB.TUI.State.dismiss_force_disarm(state).confirm_force_disarm
+      iex> state = %BB.TUI.State{safety: %BB.TUI.State.Safety{confirm_force_disarm?: true}}
+      iex> BB.TUI.State.dismiss_force_disarm(state).safety.confirm_force_disarm?
       false
   """
   @spec dismiss_force_disarm(t()) :: t()
   def dismiss_force_disarm(%__MODULE__{} = state) do
-    %{state | confirm_force_disarm: false}
+    put_in(state.safety.confirm_force_disarm?, false)
   end
 
   @doc """
@@ -316,14 +312,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{safety_state: :disarmed, runtime_state: :disarmed}
-      iex> state = BB.TUI.State.update_safety(state, :armed, :idle)
-      iex> {state.safety_state, state.runtime_state}
+      iex> state = BB.TUI.State.update_safety(%BB.TUI.State{}, :armed, :idle)
+      iex> {state.safety.state, state.safety.runtime}
       {:armed, :idle}
   """
   @spec update_safety(t(), atom(), atom()) :: t()
   def update_safety(%__MODULE__{} = state, safety_state, runtime_state) do
-    %{state | safety_state: safety_state, runtime_state: runtime_state}
+    %{state | safety: %{state.safety | state: safety_state, runtime: runtime_state}}
   end
 
   @doc """

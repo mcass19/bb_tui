@@ -1,6 +1,7 @@
 defmodule BB.TUI.Test.Fixtures do
   @moduledoc false
 
+  alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
 
   # Legacy flat override keys → {substruct, field}. As `BB.TUI.State` is split
@@ -11,7 +12,10 @@ defmodule BB.TUI.Test.Fixtures do
     event_debounce_ms: {:throttle, :debounce_ms},
     event_last_seen: {:throttle, :last_seen},
     sensor_flush_ms: {:throttle, :flush_ms},
-    render_pending?: {:throttle, :render_pending?}
+    render_pending?: {:throttle, :render_pending?},
+    safety_state: {:safety, :state},
+    runtime_state: {:safety, :runtime},
+    confirm_force_disarm: {:safety, :confirm_force_disarm?}
   }
 
   @doc """
@@ -25,8 +29,6 @@ defmodule BB.TUI.Test.Fixtures do
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
       node: nil,
-      safety_state: :disarmed,
-      runtime_state: :disarmed,
       joints: sample_joints(),
       events: [],
       parameters: [],
@@ -34,7 +36,6 @@ defmodule BB.TUI.Test.Fixtures do
       active_panel: :safety,
       scroll_offset: 0,
       show_help: false,
-      confirm_force_disarm: false,
       throbber_step: 0,
       events_paused: false,
       command_selected: 0,
@@ -59,7 +60,12 @@ defmodule BB.TUI.Test.Fixtures do
   # timing-agnostic tests stay deterministic; debounce tests opt in with
   # `%{event_debounce_ms: 1000}`. Production state (App.init/1) uses the
   # struct defaults.
-  defp substruct_defaults, do: %{throttle: %Throttle{debounce_ms: 0}}
+  defp substruct_defaults do
+    %{
+      throttle: %Throttle{debounce_ms: 0},
+      safety: %Safety{state: :disarmed, runtime: :disarmed}
+    }
+  end
 
   @doc """
   Returns a sample robot struct with shoulder and elbow joints.

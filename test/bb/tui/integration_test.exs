@@ -218,7 +218,10 @@ defmodule BB.TUI.IntegrationTest do
       # Force the dashboard into the animating state, then inject any
       # event so the runtime re-evaluates subscriptions/1 and arms the
       # 100ms interval that drives :throbber_tick.
-      update_user_state(pid, fn state -> %{state | safety_state: :disarming} end)
+      update_user_state(pid, fn state ->
+        %{state | safety: %{state.safety | state: :disarming}}
+      end)
+
       :ok = Runtime.inject_event(pid, %Key{code: "noop", kind: "press"})
 
       eventually(fn ->
@@ -260,7 +263,7 @@ defmodule BB.TUI.IntegrationTest do
         | active_panel: :commands,
           commands: [%{name: :home, allowed_states: [:idle]}],
           command_selected: 0,
-          runtime_state: :idle
+          safety: %{state.safety | runtime: :idle}
       }
     end)
 

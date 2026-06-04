@@ -17,8 +17,8 @@ defmodule BB.TUI.AppTest do
       assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
 
       assert state.robot == BB.TUI.TestRobot
-      assert state.safety_state == :disarmed
-      assert state.runtime_state == :disarmed
+      assert state.safety.state == :disarmed
+      assert state.safety.runtime == :disarmed
       assert map_size(state.joints) == 2
       assert state.joints.shoulder.position == 0.0
       assert state.joints.elbow.position == 45.0
@@ -349,7 +349,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "f", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.confirm_force_disarm
+      assert new_state.safety.confirm_force_disarm?
     end
 
     test "f key does nothing when not in error state" do
@@ -357,7 +357,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "f", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      refute new_state.confirm_force_disarm
+      refute new_state.safety.confirm_force_disarm?
     end
 
     test "y key confirms force disarm" do
@@ -368,7 +368,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "y", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      refute new_state.confirm_force_disarm
+      refute new_state.safety.confirm_force_disarm?
     end
 
     test "n key dismisses force disarm popup" do
@@ -376,7 +376,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "n", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      refute new_state.confirm_force_disarm
+      refute new_state.safety.confirm_force_disarm?
     end
 
     test "other keys are ignored during force disarm popup" do
@@ -1656,8 +1656,8 @@ defmodule BB.TUI.AppTest do
       msg = %{payload: %{to: :armed}}
 
       assert {:noreply, new_state} = App.update({:info, {:bb, [:state_machine], msg}}, state)
-      assert new_state.safety_state == :armed
-      assert new_state.runtime_state == :idle
+      assert new_state.safety.state == :armed
+      assert new_state.safety.runtime == :idle
       assert length(new_state.events) == 1
     end
 
