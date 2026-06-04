@@ -515,6 +515,10 @@ iex> ExRatatui.Distributed.attach(:"robot@<your-hostname>", BB.TUI.App)
 
 Terminal 2 takes over with the dashboard while `mount/render/handle_event/handle_info` run on the robot node. Press `q` to disconnect — monitors fire on both sides and the local terminal is restored.
 
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and PR guidelines. If you're missing a feature or hit a bug, consider contributing upstream too, on [ExRatatui](https://github.com/mcass19/ex_ratatui) and [Beam Bots](https://github.com/beam-bots).
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
