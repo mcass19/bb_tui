@@ -342,28 +342,28 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{commands: commands, command_selected: 0})
 
       state = State.select_next_command(state)
-      assert state.command_selected == 1
+      assert state.commands.selected == 1
 
       state = State.select_next_command(state)
-      assert state.command_selected == 2
+      assert state.commands.selected == 2
 
       state = State.select_next_command(state)
-      assert state.command_selected == 2
+      assert state.commands.selected == 2
 
       state = State.select_prev_command(state)
-      assert state.command_selected == 1
+      assert state.commands.selected == 1
 
       state = State.select_prev_command(state)
-      assert state.command_selected == 0
+      assert state.commands.selected == 0
 
       state = State.select_prev_command(state)
-      assert state.command_selected == 0
+      assert state.commands.selected == 0
     end
 
     test "select_next_command handles empty commands" do
       state = Fixtures.sample_state(%{commands: [], command_selected: 0})
       state = State.select_next_command(state)
-      assert state.command_selected == 0
+      assert state.commands.selected == 0
     end
   end
 
@@ -372,8 +372,8 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{executing_command: self()})
       state = State.set_command_result(state, {:ok, :done})
 
-      assert state.command_result == {:ok, :done}
-      assert state.executing_command == nil
+      assert state.commands.result == {:ok, :done}
+      assert state.commands.executing == nil
     end
   end
 
@@ -383,8 +383,8 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state(%{command_result: {:ok, :old}})
       state = State.start_command(state, pid)
 
-      assert state.executing_command == pid
-      assert state.command_result == nil
+      assert state.commands.executing == pid
+      assert state.commands.result == nil
     end
   end
 
@@ -417,44 +417,44 @@ defmodule BB.TUI.StateTest do
 
     test "enter_command_edit_mode/1 enters when selected command has args" do
       state = Fixtures.sample_state(%{commands: [cmd_with_args()], command_selected: 0})
-      assert State.enter_command_edit_mode(state).command_edit_mode == true
+      assert State.enter_command_edit_mode(state).commands.edit_mode? == true
     end
 
     test "enter_command_edit_mode/1 is a no-op for arg-less commands" do
       state = Fixtures.sample_state(%{commands: [cmd_no_args()], command_selected: 0})
-      assert State.enter_command_edit_mode(state).command_edit_mode == false
+      assert State.enter_command_edit_mode(state).commands.edit_mode? == false
     end
 
     test "enter_command_edit_mode/1 is a no-op when no command is selected" do
       state = Fixtures.sample_state(%{commands: [], command_selected: 0})
-      assert State.enter_command_edit_mode(state).command_edit_mode == false
+      assert State.enter_command_edit_mode(state).commands.edit_mode? == false
     end
 
     test "exit_command_edit_mode/1 turns the flag off and keeps form_values" do
       state = edit_state(%{command_form_values: %{move: %{angle: "2.0"}}})
       exited = State.exit_command_edit_mode(state)
-      assert exited.command_edit_mode == false
-      assert exited.command_form_values == %{move: %{angle: "2.0"}}
+      assert exited.commands.edit_mode? == false
+      assert exited.commands.form_values == %{move: %{angle: "2.0"}}
     end
 
     test "focus_next_arg/1 wraps at the end" do
       state = edit_state(%{command_focused_arg: 1})
-      assert State.focus_next_arg(state).command_focused_arg == 0
+      assert State.focus_next_arg(state).commands.focused_arg == 0
     end
 
     test "focus_prev_arg/1 wraps at the start" do
       state = edit_state(%{command_focused_arg: 0})
-      assert State.focus_prev_arg(state).command_focused_arg == 1
+      assert State.focus_prev_arg(state).commands.focused_arg == 1
     end
 
     test "focus_next_arg/1 is a no-op without a selected arg-bearing command" do
       state = Fixtures.sample_state(%{commands: [], command_focused_arg: 0})
-      assert State.focus_next_arg(state).command_focused_arg == 0
+      assert State.focus_next_arg(state).commands.focused_arg == 0
     end
 
     test "focus_prev_arg/1 is a no-op without a selected arg-bearing command" do
       state = Fixtures.sample_state(%{commands: [], command_focused_arg: 0})
-      assert State.focus_prev_arg(state).command_focused_arg == 0
+      assert State.focus_prev_arg(state).commands.focused_arg == 0
     end
 
     test "arg_value/3 falls back to the argument's default when unset" do
@@ -772,11 +772,13 @@ defmodule BB.TUI.StateTest do
       }
 
       state = %BB.TUI.State{
-        commands: [cmd],
-        command_selected: 0,
-        command_edit_mode: true,
-        command_focused_arg: 0,
-        command_form_values: %{}
+        commands: %BB.TUI.State.Commands{
+          available: [cmd],
+          selected: 0,
+          edit_mode?: true,
+          focused_arg: 0,
+          form_values: %{}
+        }
       }
 
       {:ok, state: state}
@@ -784,46 +786,54 @@ defmodule BB.TUI.StateTest do
 
     test "cycles forward through enum values, wrapping at the end", %{state: state} do
       next = State.cycle_focused_enum(state, :next)
-      assert next.command_form_values[:move][:side] == ":right"
+      assert next.commands.form_values[:move][:side] == ":right"
 
       next = State.cycle_focused_enum(next, :next)
-      assert next.command_form_values[:move][:side] == ":up"
+      assert next.commands.form_values[:move][:side] == ":up"
 
       next = State.cycle_focused_enum(next, :next)
-      assert next.command_form_values[:move][:side] == ":left"
+      assert next.commands.form_values[:move][:side] == ":left"
     end
 
     test "cycles backward through enum values, wrapping at the start", %{state: state} do
       prev = State.cycle_focused_enum(state, :prev)
-      assert prev.command_form_values[:move][:side] == ":up"
+      assert prev.commands.form_values[:move][:side] == ":up"
 
       prev = State.cycle_focused_enum(prev, :prev)
-      assert prev.command_form_values[:move][:side] == ":right"
+      assert prev.commands.form_values[:move][:side] == ":right"
     end
 
     test "starts from the first value when the current buffer is garbage", %{state: state} do
-      seeded = %{state | command_form_values: %{move: %{side: "not_an_atom"}}}
+      seeded = %{
+        state
+        | commands: %{state.commands | form_values: %{move: %{side: "not_an_atom"}}}
+      }
 
       next = State.cycle_focused_enum(seeded, :next)
       # Garbage parses to a string, so cycle_enum_value falls back to index 0,
       # then advances by +1.
-      assert next.command_form_values[:move][:side] == ":right"
+      assert next.commands.form_values[:move][:side] == ":right"
     end
 
     test "is a no-op when not in edit mode", %{state: state} do
-      out = State.cycle_focused_enum(%{state | command_edit_mode: false}, :next)
-      assert out == %{state | command_edit_mode: false}
+      disabled = %{state | commands: %{state.commands | edit_mode?: false}}
+      out = State.cycle_focused_enum(disabled, :next)
+      assert out == disabled
     end
 
     test "is a no-op for non-enum args", %{state: state} do
-      out = State.cycle_focused_enum(%{state | command_focused_arg: 1}, :next)
-      assert out == %{state | command_focused_arg: 1}
+      refocused = %{state | commands: %{state.commands | focused_arg: 1}}
+      out = State.cycle_focused_enum(refocused, :next)
+      assert out == refocused
     end
   end
 
   describe "focused_arg_enum_values/1" do
     test "returns nil when the selected command has no args" do
-      state = %BB.TUI.State{commands: [], command_selected: 0, command_focused_arg: 0}
+      state = %BB.TUI.State{
+        commands: %BB.TUI.State.Commands{available: [], selected: 0, focused_arg: 0}
+      }
+
       assert State.focused_arg_enum_values(state) == nil
     end
   end

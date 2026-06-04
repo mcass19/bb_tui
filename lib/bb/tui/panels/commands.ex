@@ -11,7 +11,7 @@ defmodule BB.TUI.Panels.Commands do
 
   Argument editing for commands with declared arguments is handled by
   `BB.TUI.Panels.CommandEdit`, which renders as a popup above this
-  panel while `state.command_edit_mode` is true.
+  panel while `state.commands.edit_mode?` is true.
 
   Pure function — takes state, returns a widget struct.
   """
@@ -30,8 +30,10 @@ defmodule BB.TUI.Panels.Commands do
   ## Examples
 
       iex> state = %BB.TUI.State{
-      ...>   commands: [%{name: :home, allowed_states: [:idle]}],
-      ...>   command_selected: 0, command_result: nil, executing_command: nil,
+      ...>   commands: %BB.TUI.State.Commands{
+      ...>     available: [%{name: :home, allowed_states: [:idle]}],
+      ...>     selected: 0, result: nil, executing: nil
+      ...>   },
       ...>   safety: %BB.TUI.State.Safety{runtime: :idle}
       ...> }
       iex> %ExRatatui.Widgets.List{items: [%ExRatatui.Text.Line{spans: spans}]} =
@@ -44,14 +46,14 @@ defmodule BB.TUI.Panels.Commands do
     items = format_commands(state)
 
     result_line =
-      case state.command_result do
+      case state.commands.result do
         {:ok, result} -> [result_line(:ok, "✔ #{inspect(result, limit: 50)}")]
         {:error, reason} -> [result_line(:error, "✖ #{inspect(reason, limit: 50)}")]
         nil -> []
       end
 
     executing_line =
-      if state.executing_command do
+      if state.commands.executing do
         [executing_line()]
       else
         []
@@ -61,7 +63,7 @@ defmodule BB.TUI.Panels.Commands do
 
     %WidgetList{
       items: all_items,
-      selected: if(state.commands != [], do: state.command_selected),
+      selected: if(state.commands.available != [], do: state.commands.selected),
       highlight_style: Theme.highlight_style(),
       highlight_symbol: "\u{25B6} ",
       block: %Block{
@@ -78,41 +80,41 @@ defmodule BB.TUI.Panels.Commands do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{commands: [%{name: :a}, %{name: :b}]}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [%{name: :a}, %{name: :b}]}}
       iex> BB.TUI.Panels.Commands.title(state)
       " Commands (2) "
 
-      iex> state = %BB.TUI.State{commands: []}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: []}}
       iex> BB.TUI.Panels.Commands.title(state)
       " Commands "
   """
   @spec title(State.t()) :: String.t()
-  def title(%State{commands: []}), do: " Commands "
-  def title(%State{commands: cmds}), do: " Commands (#{length(cmds)}) "
+  def title(%State{commands: %{available: []}}), do: " Commands "
+  def title(%State{commands: %{available: cmds}}), do: " Commands (#{length(cmds)}) "
 
   @doc ~S"""
   Returns the rich-text panel title — the count renders bold-cyan.
 
   ## Examples
 
-      iex> state = %BB.TUI.State{commands: [%{name: :a}]}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [%{name: :a}]}}
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Commands.title_line(state)
       iex> Enum.map_join(spans, "", & &1.content)
       "  2  Commands (1) "
 
-      iex> state = %BB.TUI.State{commands: []}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: []}}
       iex> %ExRatatui.Text.Line{spans: spans} =
       ...>   BB.TUI.Panels.Commands.title_line(state)
       iex> Enum.map_join(spans, "", & &1.content)
       "  2  Commands "
   """
   @spec title_line(State.t()) :: Line.t()
-  def title_line(%State{commands: []}) do
+  def title_line(%State{commands: %{available: []}}) do
     %Line{spans: badge() ++ [%Span{content: "Commands ", style: Theme.panel_title_style()}]}
   end
 
-  def title_line(%State{commands: cmds}) do
+  def title_line(%State{commands: %{available: cmds}}) do
     %Line{
       spans:
         badge() ++
@@ -152,7 +154,10 @@ defmodule BB.TUI.Panels.Commands do
 
   # ── Private: rich-text rows ─────────────────────────────────
 
-  defp format_commands(%State{commands: commands, safety: %{runtime: runtime_state}}) do
+  defp format_commands(%State{
+         commands: %{available: commands},
+         safety: %{runtime: runtime_state}
+       }) do
     Enum.map(commands, fn cmd ->
       name = to_string(Map.get(cmd, :name, inspect(cmd)))
 

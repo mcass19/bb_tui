@@ -25,8 +25,8 @@ defmodule BB.TUI.AppTest do
       assert state.events.list == []
       assert state.ui.active_panel == :safety
       assert state.events.paused? == false
-      assert state.command_selected == 0
-      assert state.executing_command == nil
+      assert state.commands.selected == 0
+      assert state.commands.executing == nil
     end
 
     test "raises on invalid robot module" do
@@ -43,7 +43,7 @@ defmodule BB.TUI.AppTest do
       end)
 
       assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
-      assert [%{name: :home, allowed_states: [:idle], arguments: []}] = state.commands
+      assert [%{name: :home, allowed_states: [:idle], arguments: []}] = state.commands.available
     end
 
     test "handles BB.Dsl.Info.commands raising" do
@@ -51,7 +51,7 @@ defmodule BB.TUI.AppTest do
       Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> raise "boom" end)
 
       assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
-      assert state.commands == []
+      assert state.commands.available == []
     end
 
     test "extracts parameter values from BB.Parameter.list metadata" do
@@ -275,7 +275,7 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # Did NOT jump to :joints; the digit was appended to the focused arg.
       assert new_state.ui.active_panel == :commands
-      assert new_state.command_form_values == %{log: %{level: "13"}}
+      assert new_state.commands.form_values == %{log: %{level: "13"}}
     end
 
     test "? key toggles help" do
@@ -470,7 +470,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "j", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_selected == 1
+      assert new_state.commands.selected == 1
     end
 
     test "k/up selects prev command" do
@@ -482,7 +482,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "k", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_selected == 0
+      assert new_state.commands.selected == 0
     end
 
     test "enter on a Ready command returns a Command.async that reports {:command_result, _}" do
@@ -499,8 +499,8 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state, opts} = App.update({:event, event}, state)
-      assert new_state.executing_command == :running
-      assert new_state.command_result == nil
+      assert new_state.commands.executing == :running
+      assert new_state.commands.result == nil
 
       # BB.Command.await/2 enforces the timeout internally, so we hand
       # the runtime a single async (no separate send_after backstop).
@@ -521,7 +521,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.executing_command == nil
+      assert new_state.commands.executing == nil
     end
 
     test "enter does nothing with no commands" do
@@ -588,8 +588,8 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_edit_mode == true
-      assert new_state.executing_command == nil
+      assert new_state.commands.edit_mode? == true
+      assert new_state.commands.executing == nil
     end
 
     test "esc exits edit mode" do
@@ -597,7 +597,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "esc", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_edit_mode == false
+      assert new_state.commands.edit_mode? == false
     end
 
     test "tab/down focuses the next arg in edit mode" do
@@ -606,7 +606,7 @@ defmodule BB.TUI.AppTest do
       for code <- ["tab", "down"] do
         event = %ExRatatui.Event.Key{code: code, kind: "press"}
         assert {:noreply, new_state} = App.update({:event, event}, state)
-        assert new_state.command_focused_arg == 1
+        assert new_state.commands.focused_arg == 1
       end
     end
 
@@ -616,7 +616,7 @@ defmodule BB.TUI.AppTest do
       for code <- ["back_tab", "up"] do
         event = %ExRatatui.Event.Key{code: code, kind: "press"}
         assert {:noreply, new_state} = App.update({:event, event}, state)
-        assert new_state.command_focused_arg == 0
+        assert new_state.commands.focused_arg == 0
       end
     end
 
@@ -625,7 +625,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "2", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_form_values == %{move: %{angle: "1.52"}}
+      assert new_state.commands.form_values == %{move: %{angle: "1.52"}}
     end
 
     test "backspace deletes the last char of the focused arg" do
@@ -638,7 +638,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "backspace", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_form_values == %{move: %{angle: "1."}}
+      assert new_state.commands.form_values == %{move: %{angle: "1."}}
     end
 
     test "right arrow cycles the focused enum forward" do
@@ -667,7 +667,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "right", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_form_values == %{move: %{side: ":right"}}
+      assert new_state.commands.form_values == %{move: %{side: ":right"}}
     end
 
     test "h cycles the focused enum backward when the focused arg is enum-typed" do
@@ -696,7 +696,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "h", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_form_values == %{move: %{side: ":right"}}
+      assert new_state.commands.form_values == %{move: %{side: ":right"}}
     end
 
     test "h on a non-enum arg falls through to the append handler" do
@@ -705,7 +705,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "h", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.command_form_values == %{move: %{angle: "1.5h"}}
+      assert new_state.commands.form_values == %{move: %{angle: "1.5h"}}
     end
 
     test "left arrow on a non-enum arg is a no-op" do
@@ -726,8 +726,8 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state, opts} = App.update({:event, event}, state)
-      assert new_state.command_edit_mode == false
-      assert new_state.executing_command == :running
+      assert new_state.commands.edit_mode? == false
+      assert new_state.commands.executing == :running
       assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
     end
 
@@ -1737,8 +1737,8 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, new_state} =
                App.update({:info, {:command_result, {:ok, :completed}}}, state)
 
-      assert new_state.command_result == {:ok, :completed}
-      assert new_state.executing_command == nil
+      assert new_state.commands.result == {:ok, :completed}
+      assert new_state.commands.executing == nil
     end
 
     test ":sensor_flush clears the pending flag and renders" do

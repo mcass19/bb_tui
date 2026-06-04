@@ -22,20 +22,22 @@ defmodule BB.TUI.Panels.CommandEdit do
   @doc """
   Renders the edit popup for the selected command, or `nil` when the
   selected command has no arguments. The caller should only invoke
-  this when `state.command_edit_mode` is true.
+  this when `state.commands.edit_mode?` is true.
 
   ## Examples
 
       iex> cmd = %{name: :move, arguments: [%{name: :angle, type: "float", default: 0.0}]}
       iex> state = %BB.TUI.State{
-      ...>   commands: [cmd],
-      ...>   command_selected: 0,
-      ...>   command_edit_mode: true,
-      ...>   command_focused_arg: 0
+      ...>   commands: %BB.TUI.State.Commands{
+      ...>     available: [cmd],
+      ...>     selected: 0,
+      ...>     edit_mode?: true,
+      ...>     focused_arg: 0
+      ...>   }
       ...> }
       iex> %ExRatatui.Widgets.Popup{} = BB.TUI.Panels.CommandEdit.render(state)
 
-      iex> state = %BB.TUI.State{commands: [], command_selected: 0}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [], selected: 0}}
       iex> BB.TUI.Panels.CommandEdit.render(state)
       nil
   """
@@ -55,7 +57,7 @@ defmodule BB.TUI.Panels.CommandEdit do
       args
       |> Enum.with_index()
       |> Enum.flat_map(fn {arg, i} ->
-        arg_lines(state, cmd_name, arg, i == state.command_focused_arg)
+        arg_lines(state, cmd_name, arg, i == state.commands.focused_arg)
       end)
 
     text = line_groups ++ [%Line{spans: []}, hint_line(args)]

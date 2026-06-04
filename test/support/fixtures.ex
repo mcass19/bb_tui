@@ -1,6 +1,7 @@
 defmodule BB.TUI.Test.Fixtures do
   @moduledoc false
 
+  alias BB.TUI.State.Commands
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Parameters
@@ -35,7 +36,14 @@ defmodule BB.TUI.Test.Fixtures do
     parameter_tabs: {:parameters, :tabs},
     parameter_tab_selected: {:parameters, :tab_selected},
     remote_parameters: {:parameters, :remote},
-    param_selected: {:parameters, :selected}
+    param_selected: {:parameters, :selected},
+    commands: {:commands, :available},
+    command_selected: {:commands, :selected},
+    command_result: {:commands, :result},
+    executing_command: {:commands, :executing},
+    command_edit_mode: {:commands, :edit_mode?},
+    command_focused_arg: {:commands, :focused_arg},
+    command_form_values: {:commands, :form_values}
   }
 
   @doc """
@@ -48,11 +56,7 @@ defmodule BB.TUI.Test.Fixtures do
     defaults = %{
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
-      node: nil,
-      commands: [],
-      command_selected: 0,
-      command_result: nil,
-      executing_command: nil
+      node: nil
     }
 
     {nested, flat} = Map.split(overrides, Map.keys(@nested_overrides))
@@ -77,7 +81,8 @@ defmodule BB.TUI.Test.Fixtures do
       joints: %Joints{entries: sample_joints()},
       events: %Events{},
       ui: %UI{},
-      parameters: %Parameters{}
+      parameters: %Parameters{},
+      commands: %Commands{}
     }
   end
 

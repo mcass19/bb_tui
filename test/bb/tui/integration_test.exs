@@ -109,10 +109,10 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:ok, :done}
+        assert current_state(pid).commands.result == {:ok, :done}
       end)
 
-      assert current_state(pid).executing_command == nil
+      assert current_state(pid).commands.executing == nil
     end
 
     test "completion with options: 3-tuple surfaces as {:ok, result}" do
@@ -127,7 +127,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:ok, :armed}
+        assert current_state(pid).commands.result == {:ok, :armed}
       end)
     end
 
@@ -141,7 +141,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:error, :not_allowed}
+        assert current_state(pid).commands.result == {:error, :not_allowed}
       end)
     end
 
@@ -159,7 +159,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:error, :boom}
+        assert current_state(pid).commands.result == {:error, :boom}
       end)
     end
 
@@ -175,7 +175,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:error, :rejected}
+        assert current_state(pid).commands.result == {:error, :rejected}
       end)
     end
 
@@ -193,7 +193,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).command_result == {:error, :timeout}
+        assert current_state(pid).commands.result == {:error, :timeout}
       end)
     end
   end
@@ -261,8 +261,11 @@ defmodule BB.TUI.IntegrationTest do
       %{
         state
         | ui: %{state.ui | active_panel: :commands},
-          commands: [%{name: :home, allowed_states: [:idle]}],
-          command_selected: 0,
+          commands: %{
+            state.commands
+            | available: [%{name: :home, allowed_states: [:idle]}],
+              selected: 0
+          },
           safety: %{state.safety | runtime: :idle}
       }
     end)

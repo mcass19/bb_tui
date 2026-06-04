@@ -18,6 +18,7 @@ defmodule BB.TUI.State do
       :safety
   """
 
+  alias BB.TUI.State.Commands
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Parameters
@@ -30,14 +31,8 @@ defmodule BB.TUI.State do
   defstruct [
     :robot,
     :robot_struct,
-    :commands,
     node: nil,
-    command_selected: 0,
-    command_result: nil,
-    executing_command: nil,
-    command_edit_mode: false,
-    command_focused_arg: 0,
-    command_form_values: %{},
+    commands: %Commands{},
     parameters: %Parameters{},
     ui: %UI{},
     events: %Events{},
@@ -49,14 +44,8 @@ defmodule BB.TUI.State do
   @type t :: %__MODULE__{
           robot: module(),
           robot_struct: term(),
-          commands: [term()],
           node: node() | nil,
-          command_selected: non_neg_integer(),
-          command_result: {:ok, term()} | {:error, term()} | nil,
-          executing_command: term() | nil,
-          command_edit_mode: boolean(),
-          command_focused_arg: non_neg_integer(),
-          command_form_values: %{atom() => %{atom() => String.t()}},
+          commands: Commands.t(),
           parameters: Parameters.t(),
           ui: UI.t(),
           events: Events.t(),
@@ -606,18 +595,20 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{command_selected: 0, commands: [%{name: :a}, %{name: :b}]}
-      iex> BB.TUI.State.select_next_command(state).command_selected
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{selected: 0, available: [%{name: :a}, %{name: :b}]}}
+      iex> BB.TUI.State.select_next_command(state).commands.selected
       1
 
-      iex> state = %BB.TUI.State{command_selected: 1, commands: [%{name: :a}, %{name: :b}]}
-      iex> BB.TUI.State.select_next_command(state).command_selected
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{selected: 1, available: [%{name: :a}, %{name: :b}]}}
+      iex> BB.TUI.State.select_next_command(state).commands.selected
       1
   """
   @spec select_next_command(t()) :: t()
-  def select_next_command(%__MODULE__{command_selected: idx, commands: cmds} = state) do
+  def select_next_command(
+        %__MODULE__{commands: %{selected: idx, available: cmds} = commands} = state
+      ) do
     max_idx = max(length(cmds) - 1, 0)
-    %{state | command_selected: min(idx + 1, max_idx)}
+    %{state | commands: %{commands | selected: min(idx + 1, max_idx)}}
   end
 
   @doc """
@@ -625,17 +616,17 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{command_selected: 1}
-      iex> BB.TUI.State.select_prev_command(state).command_selected
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{selected: 1}}
+      iex> BB.TUI.State.select_prev_command(state).commands.selected
       0
 
-      iex> state = %BB.TUI.State{command_selected: 0}
-      iex> BB.TUI.State.select_prev_command(state).command_selected
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{selected: 0}}
+      iex> BB.TUI.State.select_prev_command(state).commands.selected
       0
   """
   @spec select_prev_command(t()) :: t()
-  def select_prev_command(%__MODULE__{command_selected: idx} = state) do
-    %{state | command_selected: max(idx - 1, 0)}
+  def select_prev_command(%__MODULE__{commands: %{selected: idx} = commands} = state) do
+    %{state | commands: %{commands | selected: max(idx - 1, 0)}}
   end
 
   @doc """
@@ -643,15 +634,15 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{commands: [%{name: :a}, %{name: :b}], command_selected: 1}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [%{name: :a}, %{name: :b}], selected: 1}}
       iex> BB.TUI.State.selected_command(state)
       %{name: :b}
 
-      iex> BB.TUI.State.selected_command(%BB.TUI.State{commands: []})
+      iex> BB.TUI.State.selected_command(%BB.TUI.State{commands: %BB.TUI.State.Commands{available: []}})
       nil
   """
   @spec selected_command(t()) :: map() | nil
-  def selected_command(%__MODULE__{commands: cmds, command_selected: idx}) do
+  def selected_command(%__MODULE__{commands: %{available: cmds, selected: idx}}) do
     Enum.at(cmds, idx)
   end
 
@@ -664,39 +655,39 @@ defmodule BB.TUI.State do
   ## Examples
 
       iex> cmd = %{name: :move, arguments: [%{name: :angle, type: "float", default: 0.0}]}
-      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0}
-      iex> BB.TUI.State.enter_command_edit_mode(state).command_edit_mode
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [cmd], selected: 0}}
+      iex> BB.TUI.State.enter_command_edit_mode(state).commands.edit_mode?
       true
 
       iex> cmd = %{name: :home, arguments: []}
-      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0}
-      iex> BB.TUI.State.enter_command_edit_mode(state).command_edit_mode
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [cmd], selected: 0}}
+      iex> BB.TUI.State.enter_command_edit_mode(state).commands.edit_mode?
       false
   """
   @spec enter_command_edit_mode(t()) :: t()
-  def enter_command_edit_mode(%__MODULE__{} = state) do
+  def enter_command_edit_mode(%__MODULE__{commands: commands} = state) do
     case selected_command(state) do
-      %{arguments: [_ | _]} -> %{state | command_edit_mode: true, command_focused_arg: 0}
+      %{arguments: [_ | _]} -> %{state | commands: %{commands | edit_mode?: true, focused_arg: 0}}
       _ -> state
     end
   end
 
   @doc """
-  Exits argument-edit mode. Keeps `command_form_values` intact.
+  Exits argument-edit mode. Keeps `commands.form_values` intact.
   """
   @spec exit_command_edit_mode(t()) :: t()
-  def exit_command_edit_mode(%__MODULE__{} = state) do
-    %{state | command_edit_mode: false}
+  def exit_command_edit_mode(%__MODULE__{commands: commands} = state) do
+    %{state | commands: %{commands | edit_mode?: false}}
   end
 
   @doc """
   Focuses the next argument field, wrapping at the end.
   """
   @spec focus_next_arg(t()) :: t()
-  def focus_next_arg(%__MODULE__{command_focused_arg: idx} = state) do
+  def focus_next_arg(%__MODULE__{commands: %{focused_arg: idx} = commands} = state) do
     case selected_command(state) do
       %{arguments: args} when args != [] ->
-        %{state | command_focused_arg: rem(idx + 1, length(args))}
+        %{state | commands: %{commands | focused_arg: rem(idx + 1, length(args))}}
 
       _ ->
         state
@@ -707,11 +698,11 @@ defmodule BB.TUI.State do
   Focuses the previous argument field, wrapping at the start.
   """
   @spec focus_prev_arg(t()) :: t()
-  def focus_prev_arg(%__MODULE__{command_focused_arg: idx} = state) do
+  def focus_prev_arg(%__MODULE__{commands: %{focused_arg: idx} = commands} = state) do
     case selected_command(state) do
       %{arguments: args} when args != [] ->
         count = length(args)
-        %{state | command_focused_arg: rem(idx - 1 + count, count)}
+        %{state | commands: %{commands | focused_arg: rem(idx - 1 + count, count)}}
 
       _ ->
         state
@@ -723,7 +714,10 @@ defmodule BB.TUI.State do
   argument's `:default` (rendered as a string).
   """
   @spec arg_value(t(), atom(), map()) :: String.t()
-  def arg_value(%__MODULE__{command_form_values: form}, cmd_name, %{name: name, default: default}) do
+  def arg_value(%__MODULE__{commands: %{form_values: form}}, cmd_name, %{
+        name: name,
+        default: default
+      }) do
     case form |> Map.get(cmd_name, %{}) |> Map.fetch(name) do
       {:ok, value} -> value
       :error -> default_to_string(default)
@@ -734,7 +728,7 @@ defmodule BB.TUI.State do
   Appends a character to the focused argument's value.
   """
   @spec append_to_focused_arg(t(), String.t()) :: t()
-  def append_to_focused_arg(%__MODULE__{command_edit_mode: false} = state, _char), do: state
+  def append_to_focused_arg(%__MODULE__{commands: %{edit_mode?: false}} = state, _char), do: state
 
   def append_to_focused_arg(%__MODULE__{} = state, char) do
     update_focused_arg(state, fn current -> current <> char end)
@@ -744,7 +738,7 @@ defmodule BB.TUI.State do
   Deletes the last character from the focused argument's value.
   """
   @spec backspace_focused_arg(t()) :: t()
-  def backspace_focused_arg(%__MODULE__{command_edit_mode: false} = state), do: state
+  def backspace_focused_arg(%__MODULE__{commands: %{edit_mode?: false}} = state), do: state
 
   def backspace_focused_arg(%__MODULE__{} = state) do
     update_focused_arg(state, fn
@@ -760,15 +754,15 @@ defmodule BB.TUI.State do
   ## Examples
 
       iex> cmd = %{name: :move, arguments: [%{name: :angle}, %{name: :side}]}
-      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0, command_focused_arg: 1}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [cmd], selected: 0, focused_arg: 1}}
       iex> BB.TUI.State.focused_arg(state)
       %{name: :side}
 
-      iex> BB.TUI.State.focused_arg(%BB.TUI.State{commands: []})
+      iex> BB.TUI.State.focused_arg(%BB.TUI.State{commands: %BB.TUI.State.Commands{available: []}})
       nil
   """
   @spec focused_arg(t()) :: map() | nil
-  def focused_arg(%__MODULE__{command_focused_arg: idx} = state) do
+  def focused_arg(%__MODULE__{commands: %{focused_arg: idx}} = state) do
     case selected_command(state) do
       %{arguments: [_ | _] = args} -> Enum.at(args, idx)
       _ -> nil
@@ -783,12 +777,12 @@ defmodule BB.TUI.State do
   ## Examples
 
       iex> cmd = %{name: :move, arguments: [%{name: :side, enum_values: [:left, :right]}]}
-      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0, command_focused_arg: 0}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [cmd], selected: 0, focused_arg: 0}}
       iex> BB.TUI.State.focused_arg_enum_values(state)
       [:left, :right]
 
       iex> cmd = %{name: :move, arguments: [%{name: :angle, enum_values: nil}]}
-      iex> state = %BB.TUI.State{commands: [cmd], command_selected: 0, command_focused_arg: 0}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{available: [cmd], selected: 0, focused_arg: 0}}
       iex> BB.TUI.State.focused_arg_enum_values(state)
       nil
   """
@@ -810,7 +804,8 @@ defmodule BB.TUI.State do
   command executes.
   """
   @spec cycle_focused_enum(t(), :next | :prev) :: t()
-  def cycle_focused_enum(%__MODULE__{command_edit_mode: false} = state, _direction), do: state
+  def cycle_focused_enum(%__MODULE__{commands: %{edit_mode?: false}} = state, _direction),
+    do: state
 
   def cycle_focused_enum(%__MODULE__{} = state, direction) do
     case focused_arg(state) do
@@ -833,7 +828,7 @@ defmodule BB.TUI.State do
   end
 
   defp update_focused_arg(
-         %__MODULE__{command_focused_arg: idx, command_form_values: form} = state,
+         %__MODULE__{commands: %{focused_arg: idx, form_values: form} = commands} = state,
          fun
        ) do
     case selected_command(state) do
@@ -841,7 +836,7 @@ defmodule BB.TUI.State do
         arg = Enum.at(args, idx)
         current = arg_value(state, cmd_name, arg)
         per_command = form |> Map.get(cmd_name, %{}) |> Map.put(arg.name, fun.(current))
-        %{state | command_form_values: Map.put(form, cmd_name, per_command)}
+        %{state | commands: %{commands | form_values: Map.put(form, cmd_name, per_command)}}
 
       _ ->
         state
@@ -872,9 +867,11 @@ defmodule BB.TUI.State do
       ...>   ]
       ...> }
       iex> state = %BB.TUI.State{
-      ...>   commands: [cmd],
-      ...>   command_selected: 0,
-      ...>   command_form_values: %{move: %{angle: "2.5"}}
+      ...>   commands: %BB.TUI.State.Commands{
+      ...>     available: [cmd],
+      ...>     selected: 0,
+      ...>     form_values: %{move: %{angle: "2.5"}}
+      ...>   }
       ...> }
       iex> BB.TUI.State.parsed_args_for_selected(state)
       %{angle: 2.5, side: :left}
@@ -919,14 +916,14 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{command_result: nil, executing_command: self()}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{result: nil, executing: self()}}
       iex> new_state = BB.TUI.State.set_command_result(state, {:ok, :done})
-      iex> {new_state.command_result, new_state.executing_command}
+      iex> {new_state.commands.result, new_state.commands.executing}
       {{:ok, :done}, nil}
   """
   @spec set_command_result(t(), {:ok, term()} | {:error, term()}) :: t()
-  def set_command_result(%__MODULE__{} = state, result) do
-    %{state | command_result: result, executing_command: nil}
+  def set_command_result(%__MODULE__{commands: commands} = state, result) do
+    %{state | commands: %{commands | result: result, executing: nil}}
   end
 
   @doc """
@@ -934,15 +931,15 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{executing_command: nil, command_result: {:ok, :old}}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{executing: nil, result: {:ok, :old}}}
       iex> pid = self()
       iex> new_state = BB.TUI.State.start_command(state, pid)
-      iex> {new_state.executing_command, new_state.command_result}
+      iex> {new_state.commands.executing, new_state.commands.result}
       {pid, nil}
   """
   @spec start_command(t(), term()) :: t()
-  def start_command(%__MODULE__{} = state, marker) do
-    %{state | executing_command: marker, command_result: nil}
+  def start_command(%__MODULE__{commands: commands} = state, marker) do
+    %{state | commands: %{commands | executing: marker, result: nil}}
   end
 
   # ── Joint control ──────────────────────────────────────────

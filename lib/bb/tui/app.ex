@@ -164,7 +164,7 @@ defmodule BB.TUI.App do
           runtime: Robot.runtime_state(robot, node)
         },
         joints: %State.Joints{entries: joints},
-        commands: commands
+        commands: %State.Commands{available: commands}
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
@@ -287,14 +287,14 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "tab", kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
     {:noreply, State.focus_next_arg(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "back_tab", kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
     {:noreply, State.focus_prev_arg(state)}
   end
@@ -309,7 +309,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{command_edit_mode: false} = state
+        %{commands: %{edit_mode?: false}} = state
       )
       when code in ["1", "2", "3", "4", "5"] do
     panel = State.panel_at(String.to_integer(code))
@@ -389,21 +389,21 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "esc", kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
     {:noreply, State.exit_command_edit_mode(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "enter", kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
     execute_selected_command(state)
   end
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       )
       when code in ["tab", "down"] do
     {:noreply, State.focus_next_arg(state)}
@@ -411,21 +411,21 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: "up", kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
     {:noreply, State.focus_prev_arg(state)}
   end
 
   def update(
         {:event, %Event.Key{code: "backspace", kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
     {:noreply, State.backspace_focused_arg(state)}
   end
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       )
       when code in ["left", "right", "h", "l"] do
     handle_arg_horizontal_key(state, code)
@@ -433,7 +433,7 @@ defmodule BB.TUI.App do
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{ui: %{active_panel: :commands}, command_edit_mode: true} = state
+        %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       )
       when byte_size(code) == 1 do
     {:noreply, State.append_to_focused_arg(state, code)}
@@ -673,7 +673,7 @@ defmodule BB.TUI.App do
   # ── Helpers ──────────────────────────────────────────────────
 
   defp needs_throbber?(%State{safety: %{state: :disarming}}), do: true
-  defp needs_throbber?(%State{executing_command: marker}) when marker != nil, do: true
+  defp needs_throbber?(%State{commands: %{executing: marker}}) when marker != nil, do: true
   defp needs_throbber?(_), do: false
 
   defp maybe_add_popup(panels, %{ui: %{show_help?: true, help_scroll_offset: offset}}, full) do
@@ -691,7 +691,7 @@ defmodule BB.TUI.App do
     end
   end
 
-  defp maybe_add_popup(panels, %{command_edit_mode: true} = state, full) do
+  defp maybe_add_popup(panels, %{commands: %{edit_mode?: true}} = state, full) do
     case Panels.CommandEdit.render(state) do
       nil -> panels
       popup -> panels ++ [{popup, full}]
@@ -886,14 +886,14 @@ defmodule BB.TUI.App do
     end
   end
 
-  defp execute_selected_command(%State{commands: commands, command_selected: idx} = state) do
+  defp execute_selected_command(%State{commands: %{available: commands, selected: idx}} = state) do
     case Enum.at(commands, idx) do
       nil ->
         {:noreply, state}
 
       cmd ->
         if Panels.Commands.command_ready?(cmd, state.safety.runtime) and
-             state.executing_command == nil do
+             state.commands.executing == nil do
           args = State.parsed_args_for_selected(state)
 
           {:noreply, State.start_command(State.exit_command_edit_mode(state), :running),
