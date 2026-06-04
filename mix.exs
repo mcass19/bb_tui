@@ -1,11 +1,15 @@
 defmodule BB.TUI.MixProject do
   use Mix.Project
 
+  @description "Terminal-based dashboard for Beam Bots robots"
+  @source_url "https://github.com/mcass19/bb_tui"
+  @changelog_url @source_url <> "/blob/main/CHANGELOG.md"
   @version "0.1.0"
 
   def project do
     [
       app: :bb_tui,
+      description: @description,
       version: @version,
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -23,7 +27,12 @@ defmodule BB.TUI.MixProject do
         plt_local_path: "plts",
         plt_core_path: "plts/core",
         plt_add_apps: [:mix]
-      ]
+      ],
+      package: package(),
+      name: "BB.TUI",
+      homepage_url: @source_url,
+      source_url: @source_url,
+      docs: docs()
     ]
   end
 
@@ -55,10 +64,83 @@ defmodule BB.TUI.MixProject do
       {:mimic, "~> 2.2", only: :test},
 
       # Dev
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:igniter, "~> 0.8", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp package do
+    [
+      licenses: ["Apache-2.0"],
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => @changelog_url,
+        "Beam Bots" => "https://github.com/beam-bots"
+      },
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md CONTRIBUTING.md),
+      keywords: [
+        "beam_bots",
+        "robotics",
+        "tui",
+        "terminal",
+        "dashboard",
+        "ratatui",
+        "ssh",
+        "distributed",
+        "nerves"
+      ]
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      source_ref: "v#{@version}",
+      extras: [
+        "README.md": [title: "Overview"],
+        "CONTRIBUTING.md": [title: "Contributing"],
+        "CHANGELOG.md": [title: "Changelog"]
+      ],
+      groups_for_modules: [
+        Core: [
+          BB.TUI,
+          BB.TUI.App
+        ],
+        State: [
+          BB.TUI.State,
+          BB.TUI.State.Commands,
+          BB.TUI.State.Parameters,
+          BB.TUI.State.UI,
+          BB.TUI.State.Events,
+          BB.TUI.State.Joints,
+          BB.TUI.State.Safety,
+          BB.TUI.State.Throttle
+        ],
+        Panels: [
+          BB.TUI.Panels.Safety,
+          BB.TUI.Panels.Commands,
+          BB.TUI.Panels.CommandEdit,
+          BB.TUI.Panels.Joints,
+          BB.TUI.Panels.Events,
+          BB.TUI.Panels.EventDetail,
+          BB.TUI.Panels.Parameters,
+          BB.TUI.Panels.StatusBar,
+          BB.TUI.Panels.TitleBar,
+          BB.TUI.Panels.Help,
+          BB.TUI.Panels.ForceDisarm
+        ],
+        Robot: [
+          BB.TUI.Robot,
+          BB.TUI.Rpc,
+          BB.TUI.Theme
+        ],
+        "Mix Tasks": [
+          Mix.Tasks.Bb.Tui,
+          Mix.Tasks.BbTui.Install
+        ]
+      ]
     ]
   end
 end

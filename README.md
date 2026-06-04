@@ -521,4 +521,4 @@ Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, 
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](https://github.com/mcass19/bb_tui/blob/main/LICENSE).
