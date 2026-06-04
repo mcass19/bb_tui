@@ -5,8 +5,6 @@
 [![CI](https://github.com/mcass19/bb_tui/actions/workflows/ci.yml/badge.svg)](https://github.com/mcass19/bb_tui/actions/workflows/ci.yml)
 [![License](https://img.shields.io/hexpm/l/bb_tui.svg)](https://github.com/mcass19/bb_tui/blob/main/LICENSE)
 
-> **Proposal** — This package is a proposal and has **not** been reviewed or accepted by the author of [Beam Bots](https://github.com/beam-bots). It is published here for discussion and feedback.
-
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
 
 ![BB.TUI Demo](https://raw.githubusercontent.com/mcass19/bb_tui/main/assets/demo.png)
@@ -142,17 +140,11 @@ Exercising the SSH and Erlang-distribution transports against the simulated robo
 | [Keybindings](guides/keybindings.md) | Full per-panel key reference, including command argument editing and parameter stepping |
 | [Telemetry](guides/telemetry.md) | `:telemetry` events for mount, input, dispatch, and frames — logging and `Telemetry.Metrics` |
 
-## Ecosystem
-
-BB.TUI is built on [ExRatatui](https://github.com/mcass19/ex_ratatui) and serves [Beam Bots](https://github.com/beam-bots) robots. Other projects in the ExRatatui ecosystem:
-
-- [ash_tui](https://github.com/mcass19/ash_tui) — interactive terminal explorer for [Ash](https://ash-hq.org) domains and resources.
-- [kino_ex_ratatui](https://github.com/mcass19/kino_ex_ratatui) — run TUIs inside [Livebook](https://livebook.dev) notebooks.
-- [phoenix_ex_ratatui](https://github.com/mcass19/phoenix_ex_ratatui) — run TUIs in the browser within [Phoenix LiveView](https://phoenix-live-view.hexdocs.pm/Phoenix.LiveView.html).
-
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and PR guidelines. If a feature is missing or something isn't working, consider contributing upstream too, on [ExRatatui](https://github.com/mcass19/ex_ratatui) and [Beam Bots](https://github.com/beam-bots).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+BB.TUI is built on [ExRatatui](https://github.com/mcass19/ex_ratatui) - a general-purpose terminal UI library for Elixir, and [Beam Bots](https://github.com/beam-bots) - robotics framework. Contributions to underlying libraries are very welcome too.
 
 ## License
 

@@ -124,7 +124,7 @@ defmodule BB.TUI.MixProject do
           BB.TUI.State.Safety,
           BB.TUI.State.Throttle
         ],
-        Panels: [
+        Rendering: [
           BB.TUI.Panels.Safety,
           BB.TUI.Panels.Commands,
           BB.TUI.Panels.CommandEdit,
@@ -135,16 +135,26 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Panels.StatusBar,
           BB.TUI.Panels.TitleBar,
           BB.TUI.Panels.Help,
-          BB.TUI.Panels.ForceDisarm
+          BB.TUI.Panels.ForceDisarm,
+          BB.TUI.Theme
         ],
         Robot: [
           BB.TUI.Robot,
-          BB.TUI.Rpc,
-          BB.TUI.Theme
+          BB.TUI.Rpc
         ],
         "Mix Tasks": [
           Mix.Tasks.Bb.Tui,
           Mix.Tasks.BbTui.Install
+        ],
+        Development: [
+          Dev.Application,
+          Dev.TestRobot,
+          Dev.MockBridge,
+          Dev.MoveHandler,
+          Dev.StreamHandler,
+          Dev.EchoHandler,
+          Dev.CalibrateHandler,
+          Dev.WobbleHandler
         ]
       ]
     ]
