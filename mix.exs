@@ -100,8 +100,14 @@ defmodule BB.TUI.MixProject do
       source_ref: "v#{@version}",
       extras: [
         "README.md": [title: "Overview"],
+        "guides/transports.md": [title: "Transports"],
+        "guides/keybindings.md": [title: "Keybindings"],
+        "guides/telemetry.md": [title: "Telemetry"],
         "CONTRIBUTING.md": [title: "Contributing"],
         "CHANGELOG.md": [title: "Changelog"]
+      ],
+      groups_for_extras: [
+        Guides: Path.wildcard("guides/*.md")
       ],
       groups_for_modules: [
         Core: [

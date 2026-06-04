@@ -1,5 +1,10 @@
 # BB.TUI
 
+[![Hex.pm](https://img.shields.io/hexpm/v/bb_tui.svg)](https://hex.pm/packages/bb_tui)
+[![Docs](https://img.shields.io/badge/hex-docs-blue)](https://hexdocs.pm/bb_tui)
+[![CI](https://github.com/mcass19/bb_tui/actions/workflows/ci.yml/badge.svg)](https://github.com/mcass19/bb_tui/actions/workflows/ci.yml)
+[![License](https://img.shields.io/hexpm/l/bb_tui.svg)](https://github.com/mcass19/bb_tui/blob/main/LICENSE)
+
 > **Proposal** — This package is a proposal and has **not** been reviewed or accepted by the author of [Beam Bots](https://github.com/beam-bots). It is published here for discussion and feedback.
 
 Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. Built on [ExRatatui](https://github.com/mcass19/ex_ratatui).
@@ -12,17 +17,14 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Joint control panel** — position table with type (revolute/prismatic/continuous), units (degrees/mm), visual range bars, target tracking, simulated joint markers, and direct position adjustment via keyboard (1% and 10% steps)
 - **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload
 - **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state. Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
-- **Parameters panel** — live parameter table grouped by path with real-time updates
-- **Runtime state monitoring** — safety state and runtime state displayed in the sidebar
-- **Status bar** — robot name, safety indicator, runtime state, and key hints
-- **Help overlay** — scrollable popup with full keybinding reference
-- **Theme system** — consistent color palette with semantic styles (safety colors, focus borders, panel headers)
-- **Keyboard-driven navigation** — Tab to cycle panels, vim-style j/k/h/l within panels
-- **SSH transport** — serve the dashboard over SSH; multiple operators can connect simultaneously, each with their own isolated session
-- **Distribution attach** — run the TUI on the robot node and attach a thin renderer from any connected BEAM node (built on ExRatatui v0.7's `:distributed` transport)
-- **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime` — useful for debugging SSH sessions that aren't otherwise observable
+- **Parameters panel** — live parameter table grouped by path with real-time updates, plus bridge tabs for editing remote parameters
+- **High-rate-safe** — the event log debounces repeated sensor messages and renders coalesce to ~30fps, so fast telemetry never floods the log or stalls the UI
+- **Status bar, help overlay, and theming** — robot name / safety / runtime indicators, a scrollable keybinding reference, and a consistent semantic color palette
+- **Keyboard-driven navigation** — Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
+- **Three transports** — local terminal, SSH (multiple isolated operator sessions), and Erlang distribution (attach a thin renderer to a TUI running on the robot node)
+- **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime`
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
-- **Headless test suite** — full coverage using Mimic + ExRatatui test backend, including end-to-end tests that drive a real server with `ExRatatui.Runtime.inject_event/2`
+- **Headless test suite** — full coverage using Mimic and ExRatatui's test backend
 
 ## Layout
 
@@ -46,74 +48,22 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 
 ## Installation
 
-Use [Igniter](https://hex.pm/packages/igniter) to add `bb_tui` to a
-project. The installer imports formatter rules and prints a launch
-notice tailored to the chosen install shape.
-
-### Basic install
-
-If the project already has a `BB` robot module (typically scaffolded by
-`mix igniter.install bb`), this is all that's needed:
+Use [Igniter](https://hex.pm/packages/igniter) to add `bb_tui` to a project. The installer imports formatter rules and prints a launch notice tailored to the chosen install shape. If the project already has a `BB` robot module (typically scaffolded by `mix igniter.install bb`):
 
 ```sh
 mix igniter.install bb_tui
 mix igniter.install bb_tui --robot MyApp.Arm
 ```
 
-### Scaffold `bb` alongside `bb_tui`
+The install shape can be tuned with flags:
 
-When no robot module is present, the installer offers to compose
-`bb.install` to scaffold one. Pass `--auto-bb` to skip the prompt in
-non-interactive contexts:
+- `--auto-bb` — scaffold a `BB` robot via `bb.install` when none is present (skips the interactive prompt).
+- `--ssh` — append a supervised `{BB.TUI, …}` child wired for an SSH daemon, so the dashboard is reachable as soon as the app boots. Accepts `--port`, `--user`, `--password`. Idempotent; change the generated credentials before deploying.
+- `--nerves` — register `BB.TUI.subsystem(<Robot>)` under `config :nerves_ssh, :subsystems` so the dashboard rides on an existing `nerves_ssh` daemon.
 
-```sh
-mix igniter.install bb_tui --auto-bb
-mix igniter.install bb_tui --auto-bb --robot MyApp.Arm
-```
+Local dashboards are not supervised — a child that claims the terminal on boot would fight an IEx session for stdin/stdout — so the local entry points are `mix bb.tui` and `BB.TUI.run/1`. See `mix help bb_tui.install` for the full option reference, and the [Transports guide](guides/transports.md) for SSH and distribution setups.
 
-### Boot the dashboard over SSH from the supervision tree
-
-`--ssh` appends a supervised `{BB.TUI, …}` child wired for an SSH
-daemon to `Application.start/2`, so the dashboard is reachable as soon
-as the app boots — handy for headless robots:
-
-```sh
-mix igniter.install bb_tui --ssh
-mix igniter.install bb_tui --ssh --port 2222
-mix igniter.install bb_tui --ssh --user pilot --password secret
-```
-
-The injection is idempotent — re-running won't duplicate the child
-spec. Change the credentials in the generated child spec before
-deploying.
-
-Local dashboards aren't supervised: a child that claims the terminal
-on boot would fight an IEx session for stdin/stdout, so the local
-entry points are `mix bb.tui` and `BB.TUI.run/1` from IEx.
-
-### Nerves: plug into `nerves_ssh` as a subsystem
-
-On Nerves devices already running `nerves_ssh`, `--nerves` adds
-`BB.TUI.subsystem(<Robot>)` to `config :nerves_ssh, :subsystems` in
-`config/runtime.exs` so the dashboard rides on the existing SSH daemon
-instead of opening a second port:
-
-```sh
-mix igniter.install bb_tui --nerves
-```
-
-Connect with the standard `ssh -t` invocation:
-
-```sh
-ssh -t nerves.local -s Elixir.BB.TUI.App
-```
-
-The `-t` flag is required — the dashboard needs PTY allocation for
-interactive input.
-
-### Manual
-
-Skip Igniter and add the dep directly:
+To skip Igniter, add the dep directly:
 
 ```elixir
 def deps do
@@ -123,23 +73,21 @@ def deps do
 end
 ```
 
-See `mix help bb_tui.install` for the full option reference.
+## Quick Start
 
-## Usage
-
-### Mix task (standalone)
+Standalone, via the mix task:
 
 ```sh
 mix bb.tui --robot MyApp.Robot
 ```
 
-### Programmatic (IEx)
+From IEx:
 
 ```elixir
 BB.TUI.start(MyApp.Robot)
 ```
 
-### Supervised
+Under a supervision tree:
 
 ```elixir
 children = [
@@ -148,181 +96,20 @@ children = [
 ]
 ```
 
-### Remote attach (distribution)
+Serving the dashboard over SSH or attaching to a robot on another BEAM node is covered in the [Transports guide](guides/transports.md). The full key reference lives in the [Keybindings guide](guides/keybindings.md) (and in the in-app `?` overlay).
 
-When the robot is running on a different BEAM node, the dashboard can render either on the robot's terminal or on the local terminal while pulling all data from the robot node.
+## How It Works
 
-**1. Spawn the TUI on the robot node (renders on the robot's terminal):**
+BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to the `[:state_machine]`, `[:sensor]`, and `[:param]` paths, takes a one-time ETS snapshot on mount, then keeps state fresh from PubSub messages. Keyboard events call BB APIs directly (safety, actuator, command execution) — there are no optimistic updates, so the dashboard is a faithful reflection of the robot's actual state.
 
-```elixir
-# On the dev node, after Node.connect/1
-:rpc.call(:"robot@192.168.1.42", BB.TUI, :run, [MyApp.Robot])
-```
+All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — which makes the dashboard easy to test headlessly. `BB.TUI.App` wires input and async results to those transitions through ExRatatui's reducer runtime.
 
-This is the simplest variant — the entire TUI runs on the robot node and binds to whatever stdio that node has.
-
-**2. Spawn the TUI locally and pull data from the robot node (renders local):**
-
-```elixir
-# On the dev node, after Node.connect/1
-BB.TUI.run(MyApp.Robot, node: :"robot@192.168.1.42")
-```
-
-This renders on local terminal but every robot call goes to the remote node. The dev node needs `bb_tui` (and the BB modules it depends
-on) loaded so the rendering layer has its types available, but no robot supervision tree is started locally.
-
-The same `--node` flag is available on the mix task:
-
-```sh
-iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
-    --robot MyApp.Robot --node robot@192.168.1.42
-```
-
-### Distribution attach (renderer-only local node)
-
-An alternative to the `--node` / `:node` option: run the TUI _on the robot node_ and attach to it from any connected BEAM node. The remote node runs the app callbacks (mount/render/handle_event); the local node only renders the widgets it receives and forwards terminal events back. No robot code required on the local node.
-
-**1. On the robot node**, add the listener to the supervision tree:
-
-```elixir
-children = [
-  {BB.Supervisor, MyApp.Robot},
-  ExRatatui.Distributed.Listener
-]
-```
-
-**2. From any connected node**:
-
-```elixir
-iex --name dev@127.0.0.1 --cookie secret -S mix
-iex> Node.connect(:"robot@192.168.1.42")
-iex> ExRatatui.Distributed.attach(:"robot@192.168.1.42", BB.TUI.App)
-```
-
-**`:node` option vs `Distributed.attach/3`**
-
-| Concern                       | `:node` option      | `Distributed.attach/3` |
-|-------------------------------|---------------------|------------------------|
-| Where app callbacks run       | Local node          | Remote node            |
-| Where robot code is needed    | Both nodes          | Remote node only       |
-| Transport                     | Ad-hoc `:rpc.call`  | Erlang distribution    |
-| Reconnect on remote crash     | Manual              | Monitor-driven cleanup |
-| Good for                      | Dev/ops workstations that already run `bb_tui` | Thin clients attaching to long-running robots |
-
-Both require Erlang distribution (same cookie, reachable EPMD/ports). See `ExRatatui.Distributed` for the full transport reference.
-
-### SSH transport
-
-When the robot runs on a headless device (Nerves board, container, remote host), serve the dashboard over SSH so any SSH client can connect — no local Elixir node or distribution needed on the client side.
-
-Each SSH client gets its own isolated session with independent panel selection, scroll positions, and event streams. Multiple operators can monitor the same robot simultaneously.
-
-**1. Supervised (production):**
-
-```elixir
-children = [
-  {BB.Supervisor, MyApp.Robot},
-  {BB.TUI, robot: MyApp.Robot, transport: :ssh, port: 2222,
-   auto_host_key: true, auth_methods: ~c"password",
-   user_passwords: [{~c"admin", ~c"s3cret"}]}
-]
-```
-
-Then from any machine with an SSH client:
-
-```sh
-ssh admin@robot.local -p 2222
-```
-
-**2. Programmatic:**
-
-```elixir
-BB.TUI.start_ssh(MyApp.Robot,
-  port: 2222,
-  auto_host_key: true,
-  auth_methods: ~c"password",
-  user_passwords: [{~c"admin", ~c"s3cret"}]
-)
-```
-
-**3. Mix task:**
-
-```sh
-# Start SSH daemon with defaults (port 2222, admin/admin)
-mix bb.tui --robot MyApp.Robot --ssh
-
-# Custom port
-mix bb.tui --robot MyApp.Robot --ssh --port 3333
-```
-
-**4. Nerves subsystem (plugging into existing `nerves_ssh`):**
-
-If the device already runs `nerves_ssh`, plug into its daemon instead of starting a second one:
-
-```elixir
-# config/runtime.exs
-import Config
-
-if Application.spec(:nerves_ssh) do
-  config :nerves_ssh,
-    subsystems: [
-      :ssh_sftpd.subsystem_spec(cwd: ~c"/"),
-      BB.TUI.subsystem(MyApp.Robot)
-    ]
-end
-```
-
-Then connect with:
-
-```sh
-ssh -t nerves.local -s Elixir.BB.TUI.App
-```
-
-The `-t` flag is required — it forces PTY allocation, which the TUI needs for interactive input.
-
-> **Why `runtime.exs`?** Mix evaluates compile-time configs before it builds deps for the target, so `ExRatatui.SSH` isn't on the code path yet. `runtime.exs` runs at device boot after all beam files are loaded. The `Application.spec(:nerves_ssh)` guard keeps host builds silent.
-
-See `ExRatatui.SSH.Daemon` for the full list of SSH options (authentication, host keys, idle timeout, max sessions, etc.).
-
-## Runtime inspection
-
-The running `BB.TUI.App` pid (local, SSH, or distributed) exposes debugging hooks via `ExRatatui.Runtime`. Handy for peeking into SSH sessions, asserting against a running TUI from tests, or tracing transitions when a panel misbehaves:
-
-```elixir
-# Headless-or-not check plus dimensions, render count, subscriptions, etc.
-ExRatatui.Runtime.snapshot(pid)
-
-# Record the last N state transitions in memory — each event / info message,
-# render, command dispatch, and subscription firing gets a trace record.
-ExRatatui.Runtime.enable_trace(pid, limit: 200)
-ExRatatui.Runtime.trace_events(pid)
-ExRatatui.Runtime.disable_trace(pid)
-
-# Deterministically drive input — works under test_mode where live polling
-# is disabled. See test/bb/tui/integration_test.exs for end-to-end examples.
-ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "press"})
-```
-
-## Telemetry
-
-Every BB.TUI session rides on ExRatatui's `:telemetry` instrumentation. The runtime wraps `mount`, every input event, every PubSub/info
-dispatch, and every frame in spans with `:start`/`:stop`/`:exception` events; transport connect/disconnect and session open/close fire as single events. All metadata carries `:mod` (`BB.TUI.App` for any TUI session) and `:transport` (`:local`, `:ssh`, `:distributed`, or `:cell_session`).
-
-A one-call default Logger handler is exposed for development:
-
-```elixir
-BB.TUI.attach_telemetry_logger()
-# or, scoped to a single level / event subset
-BB.TUI.attach_telemetry_logger(level: :info)
-BB.TUI.detach_telemetry_logger()
-```
-
-For production observability, attach a custom handler that ships into Telemetry.Metrics, OpenTelemetry, or whatever the consumer app already uses. See `ExRatatui.Telemetry` for the full event reference (event names, measurement units, and metadata shapes).
+Robots can publish sensor data faster than a terminal can usefully redraw, so the event log debounces repeats of the same `{path, payload-type}` within a one-second window, and sensor-driven renders coalesce to at most one frame every ~33ms (~30fps). Key presses, command results, and safety/parameter/state changes still render immediately. Both windows are fields on `BB.TUI.State.Throttle`.
 
 ## Configuration
 
-| Key                       | Default     | Notes                                                                 |
-|---------------------------|-------------|-----------------------------------------------------------------------|
+| Key | Default | Notes |
+|---|---|---|
 | `:bb_tui, :command_timeout` | `30_000` ms | Wait window for `BB.Command.await/2` on commands dispatched from the UI. Compile-time only — downstream apps need `mix deps.compile bb_tui --force` after changing it. |
 
 ```elixir
@@ -330,194 +117,42 @@ For production observability, attach a custom handler that ships into Telemetry.
 config :bb_tui, command_timeout: 30_000
 ```
 
-## Keybindings
-
-### Global
-
-| Key             | Action                                                         |
-|-----------------|----------------------------------------------------------------|
-| `q`             | Quit                                                           |
-| `Tab`           | Cycle to the next panel                                        |
-| `Shift+Tab`     | Cycle to the previous panel                                    |
-| `1` `2` `3` `4` `5` | Jump directly to the panel whose title shows `[N]`         |
-| `?`             | Toggle help overlay                                            |
-| `a`             | Arm robot                                                      |
-| `d`             | Disarm robot                                                   |
-| `f`             | Force disarm (error only)                                      |
-
-Each panel's title carries a bold-cyan `[N]` badge that mirrors the number key for that panel: `[1]` Safety, `[2]` Commands, `[3]` Joints, `[4]` Events, `[5]` Parameters.
-
-### Events panel
-
-| Key          | Action              |
-|--------------|---------------------|
-| `j` / `Down` | Scroll down         |
-| `k` / `Up`   | Scroll up           |
-| `Enter`      | Show event details  |
-| `p`          | Pause / resume      |
-| `c`          | Clear events        |
-
-### Commands panel
-
-| Key           | Action                                          |
-|---------------|-------------------------------------------------|
-| `j` / `Down`  | Select next                                     |
-| `k` / `Up`    | Select previous                                 |
-| `Enter`       | Execute (or enter argument edit mode when args) |
-
-### Command edit mode
-
-Active when the selected command declares arguments and Enter is pressed.
-
-| Key             | Action                                                  |
-|-----------------|---------------------------------------------------------|
-| `Tab` / `Down`  | Focus next argument                                     |
-| `Shift+Tab` / `Up` | Focus previous argument                              |
-| Printable key   | Append to focused argument                              |
-| `Backspace`     | Delete last char of focused arg                         |
-| `←` / `h`       | Cycle to previous value (enum args only)                |
-| `→` / `l`       | Cycle to next value (enum args only)                    |
-| `Enter`         | Execute with current values                             |
-| `Esc`           | Exit edit mode (keeps values)                           |
-
-Enum-typed args (`{:in, [...]}` in the Spark schema) render as `‹ value ›` chevrons and respond to `←/→` (or `h/l`) instead of needing the atom typed literally. For non-enum args, `h`/`l` continue to append to the buffer; `←`/`→` are no-ops outside of enum picks.
-
-Values are parsed before dispatch: `"true"`/`"false"` → boolean, `":foo"` → atom, numeric → integer or float, otherwise string.
-
-### Joints panel
-
-| Key            | Action                       |
-|----------------|------------------------------|
-| `j` / `Down`   | Select next joint            |
-| `k` / `Up`     | Select previous joint        |
-| `l` / `Right`  | Increase position (1% step)  |
-| `h` / `Left`   | Decrease position (1% step)  |
-| `L`            | Increase position (10% step) |
-| `H`            | Decrease position (10% step) |
-
-### Parameters panel
-
-| Key            | Action                                                          |
-|----------------|-----------------------------------------------------------------|
-| `j` / `Down`   | Select next parameter                                           |
-| `k` / `Up`     | Select previous parameter                                       |
-| `l` / `Right`  | Increase value by one step                                      |
-| `h` / `Left`   | Decrease value by one step                                      |
-| `L`            | Increase value by ten steps                                     |
-| `H`            | Decrease value by ten steps                                     |
-| `Enter`        | Toggle boolean parameter                                        |
-| `t`            | Cycle to the next bridge tab (Local → bridges → Local)          |
-
-Step size is 1% of the declared range when min / max are known — the Spark schema's `{:float, min: 0.0, max: 1.0}` form on the Local tab, or the bridge's flat `:min` / `:max` keys on a bridge tab — and the new value is clamped to the bounds. Parameters without bounds use an absolute step of `+1` for integers and `+0.1` for floats. The same keybindings dispatch through `BB.Parameter.set` on the Local tab and `BB.Parameter.set_remote` on a bridge tab; a successful remote set refetches that bridge's parameter list so the cached values stay in sync.
-
-## How It Works
-
-BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to `[:state_machine]`, `[:sensor]`, and `[:param]` paths. `mount/1` takes a one-time ETS snapshot, then `handle_info/2` keeps state fresh via PubSub messages. Keyboard events in `handle_event/2` call BB APIs directly (safety, actuator, command execution). No optimistic updates, the TUI is a faithful reflection of the robot's actual state.
-
-All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — making the dashboard easy to test headlessly.
-
-The SSH transport is built on OTP's `:ssh` module. `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isolated `ExRatatui.SSH` channel process per client. Each channel owns an in-memory `ExRatatui.Session` (backed by a Rust VTE parser) and a linked server running `BB.TUI.App`. The `mount/render/handle_event/handle_info` callbacks are completely transport-agnostic — the same code path serves both local and SSH sessions.
-
-## High-rate sensor data
-
-Robots can publish sensor data faster than a terminal can usefully redraw. The TUI handles this in two ways:
-
-- **Event-log debouncing.** A repeat of the same sensor `{path, payload-type}` within a one-second window is dropped from the event log, so a fast stream can't evict every other event from the 100-entry buffer. Distinct paths or payload types always appear.
-- **Coalesced rendering.** Sensor updates are batched into at most one redraw every ~33ms (~30fps). Key presses, command results, and safety, parameter, and state-machine changes always render immediately, so the UI stays responsive.
-
-Both windows are fields on `BB.TUI.State` (`event_debounce_ms`, `sensor_flush_ms`), defaulting to 1000ms and 33ms.
-
 ## Development
 
 The project ships a simulated WidowX-200 robot arm that starts automatically in dev:
 
 ```sh
 mix deps.get
-iex -S mix
-```
-
-Then launch the TUI against the simulated robot:
-
-```elixir
-BB.TUI.start(Dev.TestRobot)
-```
-
-Or via the mix task:
-
-```sh
 mix bb.tui --robot Dev.TestRobot
 ```
 
 `Dev.TestRobot` exercises every panel feature end-to-end:
 
-- Commands with all argument shapes — `home` (no args), `move` (enum + float), `log` (string + integer), `wobble` (always returns `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber is visible).
+- Commands with all argument shapes — `home` (no args), `move` (enum + float), `log` (string + integer), `wobble` (always returns `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber is visible), and `stream` (emits a high-rate `JointState` burst to show debounce + render coalescing).
 - Parameter groups covering every primitive type — float, integer, boolean, atom — most with `:min` / `:max` so 1%-of-range stepping applies.
-- A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list (`PITCH_P`, `PITCH_I`, `MAX_RATE`, `ARM_CHECKS`, `FLIGHT_MODE`) and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab and edit those params via the same h/l/H/L/Enter keys.
+- A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab.
 
-### Testing SSH locally
+Exercising the SSH and Erlang-distribution transports against the simulated robot is covered in the [Transports guide](guides/transports.md#testing-transports-locally).
 
-Start the SSH daemon against the simulated robot:
+## Guides
 
-```sh
-mix bb.tui --robot Dev.TestRobot --ssh
-```
+| Guide | Description |
+|---|---|
+| [Transports](guides/transports.md) | Serve the dashboard over SSH or attach over Erlang distribution, inspect a running session, and test both locally |
+| [Keybindings](guides/keybindings.md) | Full per-panel key reference, including command argument editing and parameter stepping |
+| [Telemetry](guides/telemetry.md) | `:telemetry` events for mount, input, dispatch, and frames — logging and `Telemetry.Metrics` |
 
-This starts a daemon on port 2222 with auto-generated host keys and default credentials (`admin` / `admin`). Then from another terminal:
+## Ecosystem
 
-```sh
-ssh admin@localhost -p 2222
-```
+BB.TUI is built on [ExRatatui](https://github.com/mcass19/ex_ratatui) and serves [Beam Bots](https://github.com/beam-bots) robots. Other projects in the ExRatatui ecosystem:
 
-To use a custom port:
-
-```sh
-mix bb.tui --robot Dev.TestRobot --ssh --port 3333
-ssh admin@localhost -p 3333
-```
-
-Or from IEx for more control:
-
-```elixir
-BB.TUI.start_ssh(Dev.TestRobot,
-  port: 2222,
-  auto_host_key: true,
-  auth_methods: ~c"password",
-  user_passwords: [{~c"dev", ~c"dev"}]
-)
-```
-
-Then connect from another terminal. Multiple SSH sessions can run simultaneously — each gets its own independent dashboard.
-
-> **Tip:** A host key warning on reconnect (after recompiling) can be cleared with `ssh-keygen -R "[localhost]:2222"`.
-
-### Testing distribution locally
-
-The dev application ([`dev/application.ex`](dev/application.ex)) also supervises an `ExRatatui.Distributed.Listener` wired to `BB.TUI.App` with `Dev.TestRobot` as the robot, so no further setup is needed on the "robot" side — just boot two named BEAM nodes sharing a cookie.
-
-**Terminal 1 — robot node (app + listener, no terminal takeover):**
-
-```sh
-iex --sname robot --cookie demo -S mix
-```
-
-`Dev.Application` starts `BB.Supervisor` with the simulated robot and registers `ExRatatui.Distributed.Listener` under its default name. The shell stays idle.
-
-**Terminal 2 — client node (renders + forwards input):**
-
-```sh
-iex --sname dev --cookie demo -S mix
-```
-
-```elixir
-iex> Node.connect(:"robot@<your-hostname>")
-iex> ExRatatui.Distributed.attach(:"robot@<your-hostname>", BB.TUI.App)
-```
-
-Terminal 2 takes over with the dashboard while `mount/render/handle_event/handle_info` run on the robot node. Press `q` to disconnect — monitors fire on both sides and the local terminal is restored.
+- [ash_tui](https://github.com/mcass19/ash_tui) — interactive terminal explorer for [Ash](https://ash-hq.org) domains and resources.
+- [kino_ex_ratatui](https://github.com/mcass19/kino_ex_ratatui) — run TUIs inside [Livebook](https://livebook.dev) notebooks.
+- [phoenix_ex_ratatui](https://github.com/mcass19/phoenix_ex_ratatui) — run TUIs in the browser within [Phoenix LiveView](https://phoenix-live-view.hexdocs.pm/Phoenix.LiveView.html).
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and PR guidelines. If you're missing a feature or hit a bug, consider contributing upstream too, on [ExRatatui](https://github.com/mcass19/ex_ratatui) and [Beam Bots](https://github.com/beam-bots).
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and PR guidelines. If a feature is missing or something isn't working, consider contributing upstream too, on [ExRatatui](https://github.com/mcass19/ex_ratatui) and [Beam Bots](https://github.com/beam-bots).
 
 ## License
 
