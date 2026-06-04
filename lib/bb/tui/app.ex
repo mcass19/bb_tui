@@ -41,10 +41,32 @@ defmodule BB.TUI.App do
       `{:noreply, state, commands: [cmd]}` when an effect should fire.
     * `subscriptions/1` — declares the throbber tick interval whenever
       the dashboard has something animating (a `:disarming` safety
-      state or a command currently executing). The runtime diffs the
-      result against the previous one, so the timer only runs when
-      needed. This replaces the previously-dormant
-      `Process.send_after`-style throbber tick.
+      state or a command currently executing), and a one-shot
+      `:sensor_flush` tick whenever a sensor render is pending (see
+      *High-rate sensor handling*). The runtime diffs the result
+      against the previous one, so timers only run when needed. This
+      replaces the previously-dormant `Process.send_after`-style
+      throbber tick.
+
+  ## High-rate sensor handling
+
+  Robot sensor readings arrive on the `[:sensor | _]` path and can be
+  very fast. Two mechanisms keep the UI responsive without dropping
+  meaningful information:
+
+    * `BB.TUI.State.append_event/3` debounces the event log — a repeat
+      of the same `{path, payload-type}` within `event_debounce_ms`
+      (default 1s) is dropped, so one fast sensor cannot evict every
+      other event from the 100-entry log.
+    * Sensor messages update state but suppress their immediate render
+      (`render?: false`); a one-shot `:sensor_flush` tick
+      (`sensor_flush_ms`, default ~33ms / 30fps) armed by
+      `subscriptions/1` performs a single coalesced redraw. Every other
+      message — key presses, command results, safety/param/state
+      events — still renders immediately.
+
+  Both intervals are `BB.TUI.State` fields, so tests can shrink or
+  disable them (a debounce window of `0` disables debouncing).
 
   ## Async commands
 

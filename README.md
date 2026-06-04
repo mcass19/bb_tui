@@ -418,6 +418,15 @@ All state transitions live in `BB.TUI.State` as pure functions — no side effec
 
 The SSH transport is built on OTP's `:ssh` module. `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isolated `ExRatatui.SSH` channel process per client. Each channel owns an in-memory `ExRatatui.Session` (backed by a Rust VTE parser) and a linked server running `BB.TUI.App`. The `mount/render/handle_event/handle_info` callbacks are completely transport-agnostic — the same code path serves both local and SSH sessions.
 
+## High-rate sensor data
+
+Robots can publish sensor data faster than a terminal can usefully redraw. The TUI handles this in two ways:
+
+- **Event-log debouncing.** A repeat of the same sensor `{path, payload-type}` within a one-second window is dropped from the event log, so a fast stream can't evict every other event from the 100-entry buffer. Distinct paths or payload types always appear.
+- **Coalesced rendering.** Sensor updates are batched into at most one redraw every ~33ms (~30fps). Key presses, command results, and safety, parameter, and state-machine changes always render immediately, so the UI stays responsive.
+
+Both windows are fields on `BB.TUI.State` (`event_debounce_ms`, `sensor_flush_ms`), defaulting to 1000ms and 33ms.
+
 ## Development
 
 The project ships a simulated WidowX-200 robot arm that starts automatically in dev:
