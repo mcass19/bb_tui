@@ -22,6 +22,7 @@ defmodule BB.TUI.State do
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Parameters
+  alias BB.TUI.State.Power
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
   alias BB.TUI.State.UI
@@ -38,6 +39,7 @@ defmodule BB.TUI.State do
     events: %Events{},
     joints: %Joints{},
     safety: %Safety{},
+    power: %Power{},
     throttle: %Throttle{}
   ]
 
@@ -51,6 +53,7 @@ defmodule BB.TUI.State do
           events: Events.t(),
           joints: Joints.t(),
           safety: Safety.t(),
+          power: Power.t(),
           throttle: Throttle.t()
         }
 
@@ -316,6 +319,38 @@ defmodule BB.TUI.State do
 
     %{state | joints: %{state.joints | entries: updated}}
   end
+
+  @doc """
+  Records the latest battery or power telemetry from a sensor payload.
+
+  Recognizes `BB.Message.Sensor.BatteryState` and `BB.Message.Sensor.PowerState`
+  payloads and stashes the freshest of each in `state.power`; any other payload
+  passes through untouched. `BB.TUI.App` calls this for every `[:sensor | _]`
+  message, and the status bar renders the result.
+
+  ## Examples
+
+      iex> battery = %BB.Message.Sensor.BatteryState{voltage: 12.0, percentage: 0.8}
+      iex> BB.TUI.State.update_power(%BB.TUI.State{}, battery).power.battery.percentage
+      0.8
+
+      iex> reading = %BB.Message.Sensor.PowerState{voltage: 11.5, current: 2.0}
+      iex> BB.TUI.State.update_power(%BB.TUI.State{}, reading).power.power.voltage
+      11.5
+
+      iex> BB.TUI.State.update_power(%BB.TUI.State{}, %{names: [:a], positions: [0.0]}).power
+      %BB.TUI.State.Power{}
+  """
+  @spec update_power(t(), term()) :: t()
+  def update_power(%__MODULE__{power: power} = state, %BB.Message.Sensor.BatteryState{} = battery) do
+    %{state | power: %{power | battery: battery}}
+  end
+
+  def update_power(%__MODULE__{power: power} = state, %BB.Message.Sensor.PowerState{} = reading) do
+    %{state | power: %{power | power: reading}}
+  end
+
+  def update_power(%__MODULE__{} = state, _payload), do: state
 
   @doc """
   Updates parameters from a parameter list.

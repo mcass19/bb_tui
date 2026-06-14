@@ -138,7 +138,15 @@ defmodule BB.TUI.App do
 
     Robot.subscribe(
       robot,
-      [[:state_machine], [:sensor], [:param], [:actuator], [:command]],
+      [
+        [:state_machine],
+        [:sensor],
+        [:param],
+        [:actuator],
+        [:command],
+        [:safety],
+        [:estimator]
+      ],
       node
     )
 
@@ -605,6 +613,7 @@ defmodule BB.TUI.App do
     state =
       state
       |> State.update_positions(positions)
+      |> State.update_power(payload)
       |> State.append_event(path, msg)
       |> State.mark_render_pending()
 
@@ -622,6 +631,11 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
+  # Everything else we subscribe to but don't model in dedicated state —
+  # notably `[:safety, :error]` hardware-error reports and `[:estimator | _]`
+  # odometry/pose — lands here and is surfaced in the event log. Safety *state*
+  # transitions arrive separately on `[:state_machine]` (see above), so the
+  # badge already reflects an error before its detail shows up here.
   def update({:info, {:bb, path, msg}}, state) do
     {:noreply, State.append_event(state, path, msg)}
   end

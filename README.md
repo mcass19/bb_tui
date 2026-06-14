@@ -13,11 +13,11 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 
 - **Safety controls** — arm / disarm / force disarm with confirmation popup
 - **Joint control panel** — position table with type (revolute/prismatic/continuous), units (degrees/mm), visual range bars, target tracking, simulated joint markers, and direct position adjustment via keyboard (1% and 10% steps)
-- **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload
+- **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload. Surfaces hardware-error detail (`[:safety, :error]`) and estimator output (`[:estimator]`) alongside state, sensor, parameter, and command events
 - **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state. Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
 - **Parameters panel** — live parameter table grouped by path with real-time updates, plus bridge tabs for editing remote parameters
 - **High-rate-safe** — the event log debounces repeated sensor messages and renders coalesce to ~30fps, so fast telemetry never floods the log or stalls the UI
-- **Status bar, help overlay, and theming** — robot name / safety / runtime indicators, a scrollable keybinding reference, and a consistent semantic color palette
+- **Status bar, help overlay, and theming** — robot name / safety / runtime indicators, a battery / power readout when the robot reports it (colored by remaining charge), a scrollable keybinding reference, and a consistent semantic color palette
 - **Keyboard-driven navigation** — Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
 - **Three transports** — local terminal, SSH (multiple isolated operator sessions), and Erlang distribution (attach a thin renderer to a TUI running on the robot node)
 - **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime`
@@ -41,7 +41,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 │ 18:23:12 sensor.sim       JointState 2 joint(s)                    ││
 │ 18:23:11 state_machine    disarmed → armed                         ││
 ╰────────────────────────────────────────────────────────────────────╯╯
- MyApp.Robot │ ● ARMED │ idle   Tab panel  ? help  q quit  a arm  d disarm
+ MyApp.Robot │ ● ARMED │ idle │ 🔋 78%   Tab panel  ? help  q quit  a arm  d disarm
 ```
 
 ## Installation
@@ -98,7 +98,7 @@ Serving the dashboard over SSH or attaching to a robot on another BEAM node is c
 
 ## How It Works
 
-BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to the `[:state_machine]`, `[:sensor]`, and `[:param]` paths, takes a one-time ETS snapshot on mount, then keeps state fresh from PubSub messages. Keyboard events call BB APIs directly (safety, actuator, command execution) — there are no optimistic updates, so the dashboard is a faithful reflection of the robot's actual state.
+BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to the `[:state_machine]`, `[:sensor]`, `[:param]`, `[:actuator]`, `[:command]`, `[:safety]`, and `[:estimator]` paths, takes a one-time ETS snapshot on mount, then keeps state fresh from PubSub messages. Most paths drive dedicated panels; `[:safety, :error]` hardware-error reports and `[:estimator]` output flow into the event log. Keyboard events call BB APIs directly (safety, actuator, command execution) — there are no optimistic updates, so the dashboard is a faithful reflection of the robot's actual state.
 
 All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — which makes the dashboard easy to test headlessly. `BB.TUI.App` wires input and async results to those transitions through ExRatatui's reducer runtime.
 
@@ -127,6 +127,7 @@ mix bb.tui --robot Dev.TestRobot
 `Dev.TestRobot` exercises every panel feature end-to-end:
 
 - Commands with all argument shapes — `home` (no args), `move` (enum + float), `log` (string + integer), `wobble` (always returns `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber is visible), and `stream` (emits a high-rate `JointState` burst to show debounce + render coalescing).
+- Telemetry demos — `power` (drains a simulated battery so the status-bar readout shifts green → yellow → red) and `diagnostics` (publishes a `[:safety, :error]` hardware-error report and an `[:estimator]` pose so both surface in the event log).
 - Parameter groups covering every primitive type — float, integer, boolean, atom — most with `:min` / `:max` so 1%-of-range stepping applies.
 - A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab.
 

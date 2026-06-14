@@ -5,6 +5,7 @@ defmodule BB.TUI.Test.Fixtures do
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Parameters
+  alias BB.TUI.State.Power
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
   alias BB.TUI.State.UI
@@ -21,6 +22,8 @@ defmodule BB.TUI.Test.Fixtures do
     safety_state: {:safety, :state},
     runtime_state: {:safety, :runtime},
     confirm_force_disarm: {:safety, :confirm_force_disarm?},
+    battery: {:power, :battery},
+    power_reading: {:power, :power},
     joints: {:joints, :entries},
     joint_selected: {:joints, :selected},
     events: {:events, :list},
@@ -82,7 +85,8 @@ defmodule BB.TUI.Test.Fixtures do
       events: %Events{},
       ui: %UI{},
       parameters: %Parameters{},
-      commands: %Commands{}
+      commands: %Commands{},
+      power: %Power{}
     }
   end
 

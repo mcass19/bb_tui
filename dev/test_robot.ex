@@ -84,6 +84,21 @@ defmodule Dev.TestRobot do
         doc("Joint to sweep.")
       end
     end
+
+    # Battery / power telemetry demo (~2s drain) — lights up the status
+    # bar's battery readout and shifts it green → yellow → red.
+    command :power do
+      handler(Dev.PowerHandler)
+      allowed_states([:idle])
+    end
+
+    # Diagnostics demo — publishes a hardware-error report and an estimator
+    # pose so the newly-surfaced `[:safety, :error]` and `[:estimator | _]`
+    # subtrees show up in the event log.
+    command :diagnostics do
+      handler(Dev.DiagnosticsHandler)
+      allowed_states([:idle])
+    end
   end
 
   parameters do

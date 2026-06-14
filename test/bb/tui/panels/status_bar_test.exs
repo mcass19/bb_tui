@@ -156,4 +156,56 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert text(StatusBar.render(state)) =~ " q "
     end
   end
+
+  describe "battery / power segment" do
+    alias BB.Message.Sensor.BatteryState
+    alias BB.Message.Sensor.PowerState
+
+    test "shows battery charge percentage when battery telemetry is present" do
+      battery = %BatteryState{voltage: 12.0, percentage: 0.87}
+      state = Fixtures.sample_state(%{battery: battery})
+
+      assert text(StatusBar.render(state)) =~ "87%"
+    end
+
+    test "marks a charging battery with a bolt" do
+      battery = %BatteryState{voltage: 12.0, percentage: 0.5, power_supply_status: :charging}
+      state = Fixtures.sample_state(%{battery: battery})
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "50%"
+      assert txt =~ "⚡"
+    end
+
+    test "falls back to battery voltage when percentage is unmeasured" do
+      battery = %BatteryState{voltage: 12.4, percentage: nil}
+      state = Fixtures.sample_state(%{battery: battery})
+
+      assert text(StatusBar.render(state)) =~ "12.4V"
+    end
+
+    test "shows power-bus voltage when only a PowerState reading is present" do
+      reading = %PowerState{voltage: 11.5, current: 2.0}
+      state = Fixtures.sample_state(%{power_reading: reading})
+
+      assert text(StatusBar.render(state)) =~ "11.5V"
+    end
+
+    test "prefers battery over a bare power reading when both are present" do
+      battery = %BatteryState{voltage: 12.0, percentage: 0.9}
+      reading = %PowerState{voltage: 11.5, current: 2.0}
+      state = Fixtures.sample_state(%{battery: battery, power_reading: reading})
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "90%"
+      refute txt =~ "11.5V"
+    end
+
+    test "omits the segment entirely when no electrical telemetry has arrived" do
+      txt = text(StatusBar.render(Fixtures.sample_state()))
+
+      refute txt =~ "🔋"
+      refute txt =~ "⚡"
+    end
+  end
 end

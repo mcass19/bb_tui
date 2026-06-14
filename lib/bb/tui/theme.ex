@@ -509,6 +509,32 @@ defmodule BB.TUI.Theme do
   def proximity_color(_), do: dim_text()
 
   @doc """
+  Foreground color for a battery charge readout, keyed on the remaining
+  percentage (`0`..`100`).
+
+  | level     | color  |
+  | --------- | ------ |
+  | `> 50`    | green  |
+  | `21`..`50`| yellow |
+  | `<= 20`   | red    |
+
+  ## Examples
+
+      iex> BB.TUI.Theme.battery_color(80)
+      :green
+
+      iex> BB.TUI.Theme.battery_color(35)
+      :yellow
+
+      iex> BB.TUI.Theme.battery_color(20)
+      :red
+  """
+  @spec battery_color(integer()) :: ExRatatui.Style.color()
+  def battery_color(level) when is_integer(level) and level <= 20, do: red()
+  def battery_color(level) when is_integer(level) and level <= 50, do: yellow()
+  def battery_color(_level), do: green()
+
+  @doc """
   Returns the solid-pill badge spans for a panel title. The number
   renders bold-black over a cyan background, mirroring the footer
   keybind pills so the global `1`..`5` shortcuts are unmistakable in

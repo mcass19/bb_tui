@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Battery / power readout in the status bar.** When the robot publishes `BB.Message.Sensor.BatteryState` or `BB.Message.Sensor.PowerState`, the status bar shows an at-a-glance segment — charge percentage (colored green / yellow / red by remaining charge, with a bolt while charging), falling back to bus voltage when percentage is unmeasured. Latest-reading-wins; the event log keeps the history. Especially useful when driving a headless robot over SSH.
+- **Hardware-error and estimator events.** The dashboard now also subscribes to `[:safety]` and `[:estimator]`, so `BB.Safety.HardwareError` detail (the component and reason behind an error badge) and estimator output (`Odometry` / `Pose`) surface in the event log. Safety *state* transitions already arrived via `[:state_machine]`, so the badge was already accurate — this adds the missing diagnostic detail.
+- **Dev demo commands.** `Dev.TestRobot` gains `power` (drains a simulated battery so the status-bar readout shifts green → yellow → red) and `diagnostics` (publishes a hardware-error report and an estimator pose so both surface in the event log).
+
 ## [0.1.0] - 2026-06-04
 
 Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam-bots) robots, built on [ExRatatui](https://github.com/mcass19/ex_ratatui).

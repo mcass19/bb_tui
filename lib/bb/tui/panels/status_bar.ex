@@ -3,19 +3,28 @@ defmodule BB.TUI.Panels.StatusBar do
   Status bar — single-line bar at the bottom of the dashboard.
 
   Carries (in order) the robot module, a colored safety badge, a
-  runtime-state pill, the global key hints (`Tab` / `q` / `?`), and a
-  set of context-sensitive key pills for the active panel.
+  runtime-state pill, a battery / power segment (only when the robot has
+  published electrical telemetry), the global key hints (`Tab` / `q` /
+  `?`), and a set of context-sensitive key pills for the active panel.
 
   Every segment is a `%ExRatatui.Text.Span{}` so each piece can carry
   its own color: the safety badge changes color with the safety
-  state (green / yellow / red / dim), key labels render as cyan
-  pills (red for `q`), descriptions render dim. See
+  state (green / yellow / red / dim), the battery readout colors by
+  remaining charge (`BB.TUI.Theme.battery_color/1`), key labels render
+  as cyan pills (red for `q`), descriptions render dim. See
   `BB.TUI.Theme.brand_title/2`, `safety_badge/1`, `key_pill/2` for
   the underlying primitives.
+
+  The battery segment prefers `BB.Message.Sensor.BatteryState` (charge
+  percentage, or voltage when percentage is unmeasured) and falls back
+  to `BB.Message.Sensor.PowerState` (bus voltage) when only the latter
+  is available — making the charge level visible at a glance over SSH.
 
   Pure function — takes state, returns a widget struct.
   """
 
+  alias BB.Message.Sensor.BatteryState
+  alias BB.Message.Sensor.PowerState
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Style
@@ -66,9 +75,11 @@ defmodule BB.TUI.Panels.StatusBar do
         %Span{content: " ", style: %Style{}},
         Theme.dim_span("│"),
         %Span{content: " ", style: %Style{}},
-        runtime_pill(state.safety.runtime),
-        %Span{content: "  ", style: %Style{}}
-      ] ++ key_hints(state)
+        runtime_pill(state.safety.runtime)
+      ] ++
+        power_spans(state) ++
+        [%Span{content: "  ", style: %Style{}}] ++
+        key_hints(state)
 
     %Line{spans: spans}
   end
@@ -78,6 +89,58 @@ defmodule BB.TUI.Panels.StatusBar do
       content: " #{runtime_state} ",
       style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
     }
+  end
+
+  # Battery wins over a bare power reading when both are present — charge
+  # percentage is the more actionable number. Returns `[]` (no segment, no
+  # separator) until the robot publishes electrical telemetry.
+  defp power_spans(%State{power: %{battery: %BatteryState{} = battery}}) do
+    power_segment(battery_span(battery))
+  end
+
+  defp power_spans(%State{power: %{power: %PowerState{} = reading}}) do
+    power_segment(power_span(reading))
+  end
+
+  defp power_spans(_state), do: []
+
+  defp power_segment(content_span) do
+    [
+      %Span{content: " ", style: %Style{}},
+      Theme.dim_span("│"),
+      %Span{content: " ", style: %Style{}},
+      content_span
+    ]
+  end
+
+  defp battery_span(%BatteryState{percentage: percentage} = battery) when is_number(percentage) do
+    level = round(percentage * 100)
+
+    %Span{
+      content: "🔋 #{level}%#{charging_suffix(battery.power_supply_status)}",
+      style: %Style{fg: Theme.battery_color(level), modifiers: [:bold]}
+    }
+  end
+
+  defp battery_span(%BatteryState{voltage: voltage}) do
+    %Span{
+      content: "🔋 #{format_voltage(voltage)}",
+      style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+    }
+  end
+
+  defp power_span(%PowerState{voltage: voltage}) do
+    %Span{
+      content: "⚡ #{format_voltage(voltage)}",
+      style: %Style{fg: Theme.cyan(), modifiers: [:bold]}
+    }
+  end
+
+  defp charging_suffix(:charging), do: " ⚡"
+  defp charging_suffix(_status), do: ""
+
+  defp format_voltage(voltage) when is_number(voltage) do
+    "#{:erlang.float_to_binary(voltage / 1, decimals: 1)}V"
   end
 
   defp key_hints(%State{ui: %{active_panel: panel}, safety: %{state: safety}} = state) do

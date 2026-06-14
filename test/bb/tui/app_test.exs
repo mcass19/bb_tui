@@ -35,6 +35,25 @@ defmodule BB.TUI.AppTest do
       end
     end
 
+    test "subscribes to safety and estimator paths so their messages reach the event log" do
+      Fixtures.stub_bb_modules()
+      test_pid = self()
+
+      Mimic.stub(BB, :subscribe, fn _robot, path ->
+        send(test_pid, {:subscribed, path})
+        :ok
+      end)
+
+      assert {:ok, _state} = App.init(robot: BB.TUI.TestRobot)
+
+      # The newly-surfaced subtrees: hardware-error detail and estimator output.
+      assert_received {:subscribed, [:safety]}
+      assert_received {:subscribed, [:estimator]}
+      # …without dropping the pre-existing subscriptions.
+      assert_received {:subscribed, [:state_machine]}
+      assert_received {:subscribed, [:sensor]}
+    end
+
     test "loads commands from BB.Dsl.Info" do
       Fixtures.stub_bb_modules()
 
@@ -1677,6 +1696,20 @@ defmodule BB.TUI.AppTest do
       assert new_state.throttle.render_pending?
     end
 
+    test "sensor message carrying battery telemetry records it in state.power" do
+      Fixtures.stub_bb_modules()
+
+      state = Fixtures.sample_state()
+      battery = %BB.Message.Sensor.BatteryState{voltage: 12.0, percentage: 0.42}
+      msg = %{payload: battery}
+
+      assert {:noreply, new_state, render?: false} =
+               App.update({:info, {:bb, [:sensor, :battery_bus], msg}}, state)
+
+      assert new_state.power.battery == battery
+      assert length(new_state.events.list) == 1
+    end
+
     test "sensor message with non-standard payload still appends event" do
       Fixtures.stub_bb_modules()
 
@@ -1729,6 +1762,27 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:info, {:bb, [:unknown], msg}}, state)
       assert length(new_state.events.list) == 1
+    end
+
+    test "hardware-error detail on [:safety, :error] surfaces in the event log" do
+      state = Fixtures.sample_state()
+      error = %BB.Safety.HardwareError{path: [:actuator, :elbow], error: :overcurrent}
+      msg = %{payload: error}
+
+      assert {:noreply, new_state} =
+               App.update({:info, {:bb, [:safety, :error], msg}}, state)
+
+      assert [{_ts, [:safety, :error], ^msg}] = new_state.events.list
+    end
+
+    test "estimator output on [:estimator | _] surfaces in the event log" do
+      state = Fixtures.sample_state()
+      msg = %{payload: %BB.Message.Estimator.Pose{transform: :stub}}
+
+      assert {:noreply, new_state} =
+               App.update({:info, {:bb, [:estimator, :base_link], msg}}, state)
+
+      assert [{_ts, [:estimator, :base_link], ^msg}] = new_state.events.list
     end
 
     test "command_result message sets result" do
