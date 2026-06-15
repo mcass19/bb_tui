@@ -10,23 +10,25 @@ defmodule BB.TUI.Panels.Visualization do
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias BB.TUI.Viz.RobotScene
+  alias ExRatatui.Style
+  alias ExRatatui.Text.{Line, Span}
   alias ExRatatui.Widgets.{Block, Viewport3D}
 
   @spec render_panes(State.t(), struct()) :: [{struct(), struct()}]
   def render_panes(%State{robot_struct: robot} = state, area) do
     scene = RobotScene.build(robot, positions(state))
+    mode = State.viz_render_mode(state)
 
-    # `render_mode` (cycled with `m`) is a cell-blit mode — `:braille` is the
-    # supersampled, anti-aliased default. For crisp pixel graphics on Kitty/Sixel
-    # terminals (Ghostty/WezTerm), see the "Future: true pixel graphics" note on
-    # `BB.TUI.State.Viz`.
+    # `render_mode` (cycled with `m`) is `:auto` by default — crisp pixel graphics
+    # (Kitty/Sixel) on capable terminals, braille fallback elsewhere. The active
+    # mode is shown dim in the title so it is clear what is on screen.
     widget = %Viewport3D{
       scene: scene,
       camera: State.viz_camera(state),
-      render_mode: State.viz_render_mode(state),
+      render_mode: mode,
       pipeline: :rasterize,
       block: %Block{
-        title: "Robot",
+        title: title_line(mode),
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(true)
@@ -34,6 +36,15 @@ defmodule BB.TUI.Panels.Visualization do
     }
 
     [{widget, area}]
+  end
+
+  defp title_line(mode) do
+    %Line{
+      spans: [
+        %Span{content: "Robot "},
+        %Span{content: "[#{mode}]", style: %Style{fg: Theme.dim_text()}}
+      ]
+    }
   end
 
   defp positions(%State{joints: %{entries: entries}}) do

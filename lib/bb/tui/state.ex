@@ -156,7 +156,7 @@ defmodule BB.TUI.State do
     %{state | viz: %{state.viz | camera: RobotScene.default_camera()}}
   end
 
-  @render_modes [:braille, :half_block, :ascii]
+  @render_modes [:auto, :kitty, :sixel, :iterm2, :half_block, :braille, :ascii]
 
   @doc """
   Returns the ordered list of `Viewport3D` render modes.
@@ -164,7 +164,7 @@ defmodule BB.TUI.State do
   ## Examples
 
       iex> BB.TUI.State.render_modes()
-      [:braille, :half_block, :ascii]
+      [:auto, :kitty, :sixel, :iterm2, :half_block, :braille, :ascii]
   """
   @spec render_modes() :: [atom()]
   def render_modes, do: @render_modes
@@ -180,13 +180,13 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{viz: %BB.TUI.State.Viz{render_mode: :braille}}
+      iex> state = %BB.TUI.State{viz: %BB.TUI.State.Viz{render_mode: :auto}}
       iex> BB.TUI.State.cycle_render_mode(state).viz.render_mode
-      :half_block
+      :kitty
 
       iex> state = %BB.TUI.State{viz: %BB.TUI.State.Viz{render_mode: :ascii}}
       iex> BB.TUI.State.cycle_render_mode(state).viz.render_mode
-      :braille
+      :auto
   """
   @spec cycle_render_mode(t()) :: t()
   def cycle_render_mode(%__MODULE__{viz: %{render_mode: current}} = state) do
