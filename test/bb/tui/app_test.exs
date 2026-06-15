@@ -245,6 +245,7 @@ defmodule BB.TUI.AppTest do
   end
 
   describe "visualization camera keys" do
+    alias BB.TUI.State
     alias BB.TUI.Viz.RobotScene
 
     defp viz_state do
@@ -253,7 +254,7 @@ defmodule BB.TUI.AppTest do
       %{
         base
         | ui: %{base.ui | active_tab: :visualization},
-          viz: %BB.TUI.State.Viz{camera: RobotScene.default_camera()}
+          viz: %State.Viz{camera: RobotScene.default_camera()}
       }
     end
 
@@ -270,11 +271,19 @@ defmodule BB.TUI.AppTest do
 
     test "r resets the camera to the default" do
       state = viz_state()
-      moved = BB.TUI.State.orbit_camera(state, 0.5, 0.3)
+      moved = State.orbit_camera(state, 0.5, 0.3)
       event = %ExRatatui.Event.Key{code: "r", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, moved)
       assert new_state.viz.camera == RobotScene.default_camera()
+    end
+
+    test "m cycles the render mode on the visualization tab" do
+      state = viz_state()
+      event = %ExRatatui.Event.Key{code: "m", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.viz.render_mode == :half_block
     end
   end
 

@@ -34,10 +34,23 @@ defmodule BB.TUI.Panels.VisualizationTest do
 
     [{widget, rect}] = Visualization.render_panes(state, %Rect{x: 0, y: 0, width: 80, height: 24})
 
-    assert %Viewport3D{scene: %Scene{} = scene, camera: cam, render_mode: :half_block} = widget
+    assert %Viewport3D{scene: %Scene{} = scene, camera: cam, render_mode: :braille} = widget
     assert length(scene.objects) == 1
     assert cam == RobotScene.default_camera()
     assert %Rect{} = rect
+  end
+
+  test "uses the render mode from viz state" do
+    state = %BB.TUI.State{
+      robot_struct: robot(),
+      joints: %BB.TUI.State.Joints{entries: %{}},
+      viz: %BB.TUI.State.Viz{camera: RobotScene.default_camera(), render_mode: :ascii}
+    }
+
+    [{%Viewport3D{render_mode: mode}, _rect}] =
+      Visualization.render_panes(state, %Rect{x: 0, y: 0, width: 80, height: 24})
+
+    assert mode == :ascii
   end
 
   test "falls back to the default camera when viz camera is nil" do

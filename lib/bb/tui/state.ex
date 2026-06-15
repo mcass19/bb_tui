@@ -156,6 +156,45 @@ defmodule BB.TUI.State do
     %{state | viz: %{state.viz | camera: RobotScene.default_camera()}}
   end
 
+  @render_modes [:braille, :half_block, :ascii]
+
+  @doc """
+  Returns the ordered list of `Viewport3D` render modes.
+
+  ## Examples
+
+      iex> BB.TUI.State.render_modes()
+      [:braille, :half_block, :ascii]
+  """
+  @spec render_modes() :: [atom()]
+  def render_modes, do: @render_modes
+
+  @doc """
+  Returns the visualization render mode.
+  """
+  @spec viz_render_mode(t()) :: atom()
+  def viz_render_mode(%__MODULE__{viz: %{render_mode: mode}}), do: mode
+
+  @doc """
+  Cycles the visualization render mode to the next one in order, wrapping around.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{viz: %BB.TUI.State.Viz{render_mode: :braille}}
+      iex> BB.TUI.State.cycle_render_mode(state).viz.render_mode
+      :half_block
+
+      iex> state = %BB.TUI.State{viz: %BB.TUI.State.Viz{render_mode: :ascii}}
+      iex> BB.TUI.State.cycle_render_mode(state).viz.render_mode
+      :braille
+  """
+  @spec cycle_render_mode(t()) :: t()
+  def cycle_render_mode(%__MODULE__{viz: %{render_mode: current}} = state) do
+    idx = Enum.find_index(@render_modes, &(&1 == current)) || 0
+    next = Enum.at(@render_modes, rem(idx + 1, length(@render_modes)))
+    %{state | viz: %{state.viz | render_mode: next}}
+  end
+
   @doc """
   Cycles the active panel to the next one in order.
 

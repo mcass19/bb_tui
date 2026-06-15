@@ -14,7 +14,9 @@ defmodule BB.TUI.IntegrationTest do
   use ExUnit.Case, async: false
   use Mimic
 
+  alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
+  alias BB.TUI.Viz.RobotScene
   alias ExRatatui.Event.Key
   alias ExRatatui.Runtime
 
@@ -63,13 +65,13 @@ defmodule BB.TUI.IntegrationTest do
       pid = start_tui!()
 
       # On the control tab, an orbit key is inert for the camera.
-      before = BB.TUI.State.viz_camera(current_state(pid))
+      before = State.viz_camera(current_state(pid))
       :ok = Runtime.inject_event(pid, %Key{code: "l", kind: "press"})
-      assert BB.TUI.State.viz_camera(current_state(pid)) == before
+      assert State.viz_camera(current_state(pid)) == before
 
       :ok = Runtime.inject_event(pid, %Key{code: "]", kind: "press"})
       :ok = Runtime.inject_event(pid, %Key{code: "l", kind: "press"})
-      refute BB.TUI.State.viz_camera(current_state(pid)) == before
+      refute State.viz_camera(current_state(pid)) == before
     end
 
     test "r resets the camera on the visualization tab" do
@@ -77,7 +79,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "]", kind: "press"})
       :ok = Runtime.inject_event(pid, %Key{code: "l", kind: "press"})
       :ok = Runtime.inject_event(pid, %Key{code: "r", kind: "press"})
-      assert BB.TUI.State.viz_camera(current_state(pid)) == BB.TUI.Viz.RobotScene.default_camera()
+      assert State.viz_camera(current_state(pid)) == RobotScene.default_camera()
     end
 
     test "arming publishes through BB.Safety.arm" do

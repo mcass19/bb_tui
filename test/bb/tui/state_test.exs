@@ -44,6 +44,11 @@ defmodule BB.TUI.StateTest do
       state = State.reset_camera(state)
       assert state.viz.camera == RobotScene.default_camera()
     end
+
+    test "viz_render_mode defaults to braille and reflects cycling" do
+      assert State.viz_render_mode(%State{}) == :braille
+      assert State.viz_render_mode(State.cycle_render_mode(%State{})) == :half_block
+    end
   end
 
   describe "cycle_panel/1" do
