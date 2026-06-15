@@ -16,10 +16,14 @@ defmodule BB.TUI.Panels.Visualization do
   def render_panes(%State{robot_struct: robot} = state, area) do
     scene = RobotScene.build(robot, positions(state))
 
+    # `render_mode` (cycled with `m`) is a cell-blit mode — `:braille` is the
+    # supersampled, anti-aliased default. For crisp pixel graphics on Kitty/Sixel
+    # terminals (Ghostty/WezTerm), see the "Future: true pixel graphics" note on
+    # `BB.TUI.State.Viz`.
     widget = %Viewport3D{
       scene: scene,
       camera: State.viz_camera(state),
-      render_mode: :half_block,
+      render_mode: State.viz_render_mode(state),
       pipeline: :rasterize,
       block: %Block{
         title: "Robot",

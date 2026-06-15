@@ -375,6 +375,13 @@ defmodule BB.TUI.App do
   end
 
   def update(
+        {:event, %Event.Key{code: "m", kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      ) do
+    {:noreply, State.cycle_render_mode(state)}
+  end
+
+  def update(
         {:event, %Event.Key{code: "tab", kind: "press"}},
         %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
       ) do
