@@ -7,8 +7,9 @@ The dashboard is fully keyboard-driven. Global keys work from any panel; the res
 | Key | Action |
 |---|---|
 | `q` | Quit |
-| `Tab` | Cycle to the next panel |
-| `Shift+Tab` | Cycle to the previous panel |
+| `[` `]` | Switch top-level tab (Control Panel / Visualization) |
+| `Tab` | Cycle to the next panel (Control Panel tab) |
+| `Shift+Tab` | Cycle to the previous panel (Control Panel tab) |
 | `1` `2` `3` `4` `5` | Jump directly to the panel whose title shows `[N]` |
 | `?` | Toggle help overlay |
 | `a` | Arm robot |
@@ -16,6 +17,17 @@ The dashboard is fully keyboard-driven. Global keys work from any panel; the res
 | `f` | Force disarm (error state only) |
 
 Each panel's title carries a bold-cyan `[N]` badge that mirrors the number key for that panel: `[1]` Safety, `[2]` Commands, `[3]` Joints, `[4]` Events, `[5]` Parameters.
+
+## Visualization tab
+
+The Visualization tab renders the live robot in 3D from its URDF topology and joint positions. The camera orbits the robot and reposes in real time as sensor data arrives.
+
+| Key | Action |
+|---|---|
+| `Left` / `Right` or `h` / `l` | Orbit the camera |
+| `Up` / `Down` or `k` / `j` | Tilt the camera |
+| `+` / `-` | Zoom in / out |
+| `r` | Reset the camera |
 
 ## Events panel
 

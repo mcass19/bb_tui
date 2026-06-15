@@ -16,9 +16,10 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload. Surfaces hardware-error detail (`[:safety, :error]`) and estimator output (`[:estimator]`) alongside state, sensor, parameter, and command events
 - **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state. Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
 - **Parameters panel** — live parameter table grouped by path with real-time updates, plus bridge tabs for editing remote parameters
+- **3D visualization tab** — renders the live robot in the terminal from its URDF topology and joint positions, with an orbitable/zoomable camera. Built on `ExRatatui`'s `Viewport3D`; the arm reposes in real time as sensor data arrives
 - **High-rate-safe** — the event log debounces repeated sensor messages and renders coalesce to ~30fps, so fast telemetry never floods the log or stalls the UI
 - **Status bar, help overlay, and theming** — robot name / safety / runtime indicators, a battery / power readout when the robot reports it (colored by remaining charge), a scrollable keybinding reference, and a consistent semantic color palette
-- **Keyboard-driven navigation** — Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
+- **Keyboard-driven navigation** — `[`/`]` to switch between the Control Panel and Visualization tabs, Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
 - **Three transports** — local terminal, SSH (multiple isolated operator sessions), and Erlang distribution (attach a thin renderer to a TUI running on the robot node)
 - **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime`
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
