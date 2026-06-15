@@ -194,6 +194,27 @@ defmodule BB.TUI.App do
         {:length, 1}
       ])
 
+    # Title bar: brand on the left, top-level tabs on the right
+    [brand_area, tabs_area] =
+      Layout.split(title_bar_area, :horizontal, [
+        {:min, 0},
+        {:length, 32}
+      ])
+
+    chrome = [
+      {Panels.TitleBar.render(state), brand_area},
+      {Panels.TabBar.render(state.ui.active_tab), tabs_area},
+      {Panels.StatusBar.render(state), status_bar_area}
+    ]
+
+    maybe_add_popup(chrome ++ render_body(state, main), state, full)
+  end
+
+  defp render_body(%{ui: %{active_tab: :visualization}} = state, main) do
+    Panels.Visualization.render_panes(state, main)
+  end
+
+  defp render_body(state, main) do
     # Top section (60%) + bottom section (40%)
     [top, bottom] =
       Layout.split(main, :vertical, [
@@ -222,20 +243,13 @@ defmodule BB.TUI.App do
         {:percentage, 45}
       ])
 
-    panels =
-      [
-        {Panels.TitleBar.render(state), title_bar_area},
-        {Panels.Safety.render(state, state.ui.active_panel == :safety), safety_area},
-        {Panels.Commands.render(state, state.ui.active_panel == :commands), commands_area},
-        {Panels.Joints.render(state, state.ui.active_panel == :joints), joints_area}
-      ] ++
-        Panels.Events.render_panes(state, state.ui.active_panel == :events, events_area) ++
-        [
-          {Panels.Parameters.render(state, state.ui.active_panel == :parameters), params_area},
-          {Panels.StatusBar.render(state), status_bar_area}
-        ]
-
-    maybe_add_popup(panels, state, full)
+    [
+      {Panels.Safety.render(state, state.ui.active_panel == :safety), safety_area},
+      {Panels.Commands.render(state, state.ui.active_panel == :commands), commands_area},
+      {Panels.Joints.render(state, state.ui.active_panel == :joints), joints_area}
+    ] ++
+      Panels.Events.render_panes(state, state.ui.active_panel == :events, events_area) ++
+      [{Panels.Parameters.render(state, state.ui.active_panel == :parameters), params_area}]
   end
 
   # ── Update — popup intercepts ────────────────────────────────
@@ -293,6 +307,14 @@ defmodule BB.TUI.App do
     {:stop, state}
   end
 
+  def update({:event, %Event.Key{code: "]", kind: "press"}}, state) do
+    {:noreply, State.next_tab(state)}
+  end
+
+  def update({:event, %Event.Key{code: "[", kind: "press"}}, state) do
+    {:noreply, State.prev_tab(state)}
+  end
+
   def update(
         {:event, %Event.Key{code: "tab", kind: "press"}},
         %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state
@@ -307,17 +329,23 @@ defmodule BB.TUI.App do
     {:noreply, State.focus_prev_arg(state)}
   end
 
-  def update({:event, %Event.Key{code: "tab", kind: "press"}}, state) do
+  def update(
+        {:event, %Event.Key{code: "tab", kind: "press"}},
+        %{ui: %{active_tab: :control}} = state
+      ) do
     {:noreply, State.cycle_panel(state)}
   end
 
-  def update({:event, %Event.Key{code: "back_tab", kind: "press"}}, state) do
+  def update(
+        {:event, %Event.Key{code: "back_tab", kind: "press"}},
+        %{ui: %{active_tab: :control}} = state
+      ) do
     {:noreply, State.cycle_panel_back(state)}
   end
 
   def update(
         {:event, %Event.Key{code: code, kind: "press"}},
-        %{commands: %{edit_mode?: false}} = state
+        %{ui: %{active_tab: :control}, commands: %{edit_mode?: false}} = state
       )
       when code in ["1", "2", "3", "4", "5"] do
     panel = State.panel_at(String.to_integer(code))

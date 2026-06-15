@@ -99,10 +99,26 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      # title_bar, safety, commands, joints, events, parameters, status_bar = 7
+      # brand, tab_bar, status_bar, safety, commands, joints, events, parameters = 8
       # No scrollbar pane when events are empty.
       assert is_list(widgets)
-      assert length(widgets) == 7
+      assert length(widgets) == 8
+
+      Enum.each(widgets, fn {widget, rect} ->
+        assert is_struct(widget)
+        assert %Rect{} = rect
+      end)
+    end
+
+    test "renders the visualization tab body when active_tab is visualization" do
+      base = Fixtures.sample_state()
+      state = %{base | ui: %{base.ui | active_tab: :visualization}}
+      frame = %ExRatatui.Frame{width: 120, height: 40}
+
+      widgets = App.render(state, frame)
+
+      # brand, tab_bar, status_bar, visualization pane = 4
+      assert length(widgets) == 4
 
       Enum.each(widgets, fn {widget, rect} ->
         assert is_struct(widget)
@@ -120,8 +136,8 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      # 7 base panels + 1 scrollbar overlay = 8
-      assert length(widgets) == 8
+      # 8 base panels + 1 scrollbar overlay = 9
+      assert length(widgets) == 9
       assert Enum.any?(widgets, fn {w, _} -> match?(%ExRatatui.Widgets.Scrollbar{}, w) end)
     end
 
@@ -131,7 +147,7 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 8
+      assert length(widgets) == 9
     end
 
     test "includes force disarm popup when confirm_force_disarm is true" do
@@ -140,7 +156,7 @@ defmodule BB.TUI.AppTest do
 
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 8
+      assert length(widgets) == 9
     end
 
     test "popup is rendered last (on top)" do
@@ -168,8 +184,8 @@ defmodule BB.TUI.AppTest do
       frame = %ExRatatui.Frame{width: 120, height: 40}
       widgets = App.render(state, frame)
 
-      # 7 base panels + 1 scrollbar overlay + 1 popup = 9
-      assert length(widgets) == 9
+      # 8 base panels + 1 scrollbar overlay + 1 popup = 10
+      assert length(widgets) == 10
       {last_widget, _rect} = List.last(widgets)
       assert %ExRatatui.Widgets.Popup{} = last_widget
     end
@@ -185,8 +201,8 @@ defmodule BB.TUI.AppTest do
       frame = %ExRatatui.Frame{width: 120, height: 40}
       widgets = App.render(state, frame)
 
-      # No popup added — just the 7 base panels.
-      assert length(widgets) == 7
+      # No popup added — just the 8 base panels.
+      assert length(widgets) == 8
     end
 
     test "includes the command-edit popup when in edit mode on an arg-bearing command" do
@@ -206,7 +222,7 @@ defmodule BB.TUI.AppTest do
       frame = %ExRatatui.Frame{width: 120, height: 40}
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 8
+      assert length(widgets) == 9
       {last_widget, _rect} = List.last(widgets)
       assert %ExRatatui.Widgets.Popup{} = last_widget
     end
@@ -224,7 +240,7 @@ defmodule BB.TUI.AppTest do
       frame = %ExRatatui.Frame{width: 120, height: 40}
       widgets = App.render(state, frame)
 
-      assert length(widgets) == 7
+      assert length(widgets) == 8
     end
   end
 
