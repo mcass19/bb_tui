@@ -39,6 +39,26 @@ defmodule BB.TUI.IntegrationTest do
       assert :joints = current_panel(pid)
     end
 
+    test "bracket keys switch the top-level tab" do
+      pid = start_tui!()
+      assert :control = current_state(pid).ui.active_tab
+
+      :ok = Runtime.inject_event(pid, %Key{code: "]", kind: "press"})
+      assert :visualization = current_state(pid).ui.active_tab
+
+      :ok = Runtime.inject_event(pid, %Key{code: "[", kind: "press"})
+      assert :control = current_state(pid).ui.active_tab
+    end
+
+    test "tab key does not cycle panels while on the visualization tab" do
+      pid = start_tui!()
+      :ok = Runtime.inject_event(pid, %Key{code: "]", kind: "press"})
+      panel_before = current_panel(pid)
+
+      :ok = Runtime.inject_event(pid, %Key{code: "tab", kind: "press"})
+      assert current_panel(pid) == panel_before
+    end
+
     test "arming publishes through BB.Safety.arm" do
       test_pid = self()
 

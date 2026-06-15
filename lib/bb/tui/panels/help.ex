@@ -22,6 +22,7 @@ defmodule BB.TUI.Panels.Help do
   ## Global
 
   - `q` — Quit
+  - `[` / `]` — Switch top-level tab (Control Panel / Visualization)
   - `Tab` — Cycle to the next panel
   - `Shift+Tab` — Cycle to the previous panel
   - `1` / `2` / `3` / `4` / `5` — Jump directly to the panel whose

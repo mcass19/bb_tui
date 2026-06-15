@@ -70,6 +70,56 @@ defmodule BB.TUI.State do
   @spec panels() :: [atom()]
   def panels, do: @panels
 
+  @tabs [:control, :visualization]
+
+  @doc """
+  Returns the ordered list of top-level tabs.
+
+  ## Examples
+
+      iex> BB.TUI.State.tabs()
+      [:control, :visualization]
+  """
+  @spec tabs() :: [atom()]
+  def tabs, do: @tabs
+
+  @doc """
+  Switches to the next top-level tab, wrapping around.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_tab: :control}}
+      iex> BB.TUI.State.next_tab(state).ui.active_tab
+      :visualization
+
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_tab: :visualization}}
+      iex> BB.TUI.State.next_tab(state).ui.active_tab
+      :control
+  """
+  @spec next_tab(t()) :: t()
+  def next_tab(%__MODULE__{ui: %{active_tab: current}} = state) do
+    idx = Enum.find_index(@tabs, &(&1 == current)) || 0
+    next = Enum.at(@tabs, rem(idx + 1, length(@tabs)))
+    %{state | ui: %{state.ui | active_tab: next}}
+  end
+
+  @doc """
+  Switches to the previous top-level tab, wrapping around.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_tab: :control}}
+      iex> BB.TUI.State.prev_tab(state).ui.active_tab
+      :visualization
+  """
+  @spec prev_tab(t()) :: t()
+  def prev_tab(%__MODULE__{ui: %{active_tab: current}} = state) do
+    count = length(@tabs)
+    idx = Enum.find_index(@tabs, &(&1 == current)) || 0
+    prev = Enum.at(@tabs, rem(idx - 1 + count, count))
+    %{state | ui: %{state.ui | active_tab: prev}}
+  end
+
   @doc """
   Cycles the active panel to the next one in order.
 

@@ -312,6 +312,28 @@ defmodule BB.TUI.Theme do
   @spec title_fg() :: ExRatatui.Style.color()
   def title_fg, do: {:rgb, 230, 210, 245}
 
+  @doc """
+  Style for the active top-level tab in the tab bar.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.tab_active_style().modifiers
+      [:bold]
+  """
+  @spec tab_active_style() :: Style.t()
+  def tab_active_style, do: %Style{fg: :black, bg: cyan(), modifiers: [:bold]}
+
+  @doc """
+  Style for inactive top-level tabs in the tab bar.
+
+  ## Examples
+
+      iex> BB.TUI.Theme.tab_inactive_style().fg
+      :dark_gray
+  """
+  @spec tab_inactive_style() :: Style.t()
+  def tab_inactive_style, do: %Style{fg: dim_text(), bg: title_bg()}
+
   # ── Rich Text ──────────────────────────────────────────────
 
   @doc ~S"""
