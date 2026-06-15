@@ -59,6 +59,27 @@ defmodule BB.TUI.IntegrationTest do
       assert current_panel(pid) == panel_before
     end
 
+    test "orbit keys move the camera only on the visualization tab" do
+      pid = start_tui!()
+
+      # On the control tab, an orbit key is inert for the camera.
+      before = BB.TUI.State.viz_camera(current_state(pid))
+      :ok = Runtime.inject_event(pid, %Key{code: "l", kind: "press"})
+      assert BB.TUI.State.viz_camera(current_state(pid)) == before
+
+      :ok = Runtime.inject_event(pid, %Key{code: "]", kind: "press"})
+      :ok = Runtime.inject_event(pid, %Key{code: "l", kind: "press"})
+      refute BB.TUI.State.viz_camera(current_state(pid)) == before
+    end
+
+    test "r resets the camera on the visualization tab" do
+      pid = start_tui!()
+      :ok = Runtime.inject_event(pid, %Key{code: "]", kind: "press"})
+      :ok = Runtime.inject_event(pid, %Key{code: "l", kind: "press"})
+      :ok = Runtime.inject_event(pid, %Key{code: "r", kind: "press"})
+      assert BB.TUI.State.viz_camera(current_state(pid)) == BB.TUI.Viz.RobotScene.default_camera()
+    end
+
     test "arming publishes through BB.Safety.arm" do
       test_pid = self()
 

@@ -11,6 +11,41 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "viz camera" do
+    alias BB.TUI.Viz.RobotScene
+
+    test "viz_camera falls back to the default when unset" do
+      assert State.viz_camera(%State{}) == RobotScene.default_camera()
+    end
+
+    test "viz_camera returns the stored camera when set" do
+      cam = RobotScene.default_camera()
+      state = %State{viz: %BB.TUI.State.Viz{camera: cam}}
+      assert State.viz_camera(state) == cam
+    end
+
+    test "orbit_camera changes the camera position" do
+      state = %State{viz: %BB.TUI.State.Viz{camera: RobotScene.default_camera()}}
+      before = state.viz.camera.position
+      state = State.orbit_camera(state, 0.2, 0.0)
+      refute state.viz.camera.position == before
+    end
+
+    test "zoom_camera changes the camera position" do
+      state = %State{viz: %BB.TUI.State.Viz{camera: RobotScene.default_camera()}}
+      before = state.viz.camera.position
+      state = State.zoom_camera(state, 0.2)
+      refute state.viz.camera.position == before
+    end
+
+    test "reset_camera restores the default" do
+      state = %State{viz: %BB.TUI.State.Viz{camera: RobotScene.default_camera()}}
+      state = State.orbit_camera(state, 0.5, 0.3)
+      state = State.reset_camera(state)
+      assert state.viz.camera == RobotScene.default_camera()
+    end
+  end
+
   describe "cycle_panel/1" do
     test "cycles through panels in order" do
       state = Fixtures.sample_state(%{active_panel: :safety})

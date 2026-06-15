@@ -91,15 +91,82 @@ defmodule BB.TUI.Test.Fixtures do
   end
 
   @doc """
-  Returns a sample robot struct with shoulder and elbow joints.
+  Returns a sample `%BB.Robot{}` with a base and a shoulder/elbow chain.
+
+  This is a valid topology (links with box visuals, revolute joints) so the
+  3D visualization render path works in tests, not just the joint table.
   """
   def sample_robot_struct do
+    %BB.Robot{
+      name: :test_robot,
+      root_link: :base,
+      actuators: %{},
+      links: %{
+        base: %BB.Robot.Link{
+          name: :base,
+          parent_joint: nil,
+          child_joints: [:shoulder],
+          visual:
+            sample_box(%{x: 0.06, y: 0.06, z: 0.04}, %{
+              red: 0.3,
+              green: 0.3,
+              blue: 0.3,
+              alpha: 1.0
+            })
+        },
+        upper: %BB.Robot.Link{
+          name: :upper,
+          parent_joint: :shoulder,
+          child_joints: [:elbow],
+          visual:
+            sample_box(%{x: 0.04, y: 0.04, z: 0.2}, %{
+              red: 0.7,
+              green: 0.7,
+              blue: 0.75,
+              alpha: 1.0
+            })
+        },
+        fore: %BB.Robot.Link{
+          name: :fore,
+          parent_joint: :elbow,
+          child_joints: [],
+          visual:
+            sample_box(%{x: 0.04, y: 0.04, z: 0.18}, %{
+              red: 0.7,
+              green: 0.7,
+              blue: 0.75,
+              alpha: 1.0
+            })
+        }
+      },
+      joints: %{
+        shoulder: %BB.Robot.Joint{
+          name: :shoulder,
+          type: :revolute,
+          parent_link: :base,
+          child_link: :upper,
+          origin: %{position: {0.0, 0.0, 0.04}, orientation: {0.0, 0.0, 0.0}},
+          axis: {0.0, 1.0, 0.0},
+          limits: %{lower: -1.5, upper: 1.5}
+        },
+        elbow: %BB.Robot.Joint{
+          name: :elbow,
+          type: :revolute,
+          parent_link: :upper,
+          child_link: :fore,
+          origin: %{position: {0.0, 0.0, 0.2}, orientation: {0.0, 0.0, 0.0}},
+          axis: {0.0, 1.0, 0.0},
+          limits: %{lower: 0.0, upper: 2.3}
+        }
+      }
+    }
+  end
+
+  defp sample_box(dims, color) do
     %{
-      name: BB.TUI.TestRobot,
-      joints: [
-        %{name: :shoulder, type: :revolute, limits: %{lower: -90.0, upper: 90.0}},
-        %{name: :elbow, type: :revolute, limits: %{lower: 0.0, upper: 135.0}}
-      ]
+      origin: {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
+      geometry: {:box, dims},
+      material: %{name: :grey, color: color}
     }
   end
 

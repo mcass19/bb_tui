@@ -1,22 +1,28 @@
 defmodule BB.TUI.Panels.Visualization do
   @moduledoc """
-  Visualization tab — renders the live robot in 3D. Pure function: takes state and
-  the main `Rect`, returns `[{widget, rect}]`.
+  Visualization tab — renders the live robot in 3D via `ExRatatui.Widgets.Viewport3D`.
 
-  This is a placeholder pane; the 3D viewport is wired in a later step.
+  The scene is rebuilt from the current joint positions each render, so the robot
+  animates as sensor data arrives. Pure function: state + main `Rect` ->
+  `[{widget, rect}]`.
   """
 
+  alias BB.TUI.State
   alias BB.TUI.Theme
-  alias ExRatatui.Style
-  alias ExRatatui.Widgets.{Block, Paragraph}
+  alias BB.TUI.Viz.RobotScene
+  alias ExRatatui.Widgets.{Block, Viewport3D}
 
-  @spec render_panes(struct(), struct()) :: [{struct(), struct()}]
-  def render_panes(_state, area) do
-    widget = %Paragraph{
-      text: "3D visualization - coming soon",
-      style: %Style{fg: Theme.dim_text()},
+  @spec render_panes(State.t(), struct()) :: [{struct(), struct()}]
+  def render_panes(%State{robot_struct: robot} = state, area) do
+    scene = RobotScene.build(robot, positions(state))
+
+    widget = %Viewport3D{
+      scene: scene,
+      camera: State.viz_camera(state),
+      render_mode: :half_block,
+      pipeline: :rasterize,
       block: %Block{
-        title: "Visualization",
+        title: "Robot",
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(true)
@@ -24,5 +30,9 @@ defmodule BB.TUI.Panels.Visualization do
     }
 
     [{widget, area}]
+  end
+
+  defp positions(%State{joints: %{entries: entries}}) do
+    Map.new(entries, fn {name, %{position: pos}} -> {name, pos} end)
   end
 end

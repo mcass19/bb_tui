@@ -26,6 +26,9 @@ defmodule BB.TUI.State do
   alias BB.TUI.State.Safety
   alias BB.TUI.State.Throttle
   alias BB.TUI.State.UI
+  alias BB.TUI.State.Viz
+  alias BB.TUI.Viz.RobotScene
+  alias ExRatatui.ThreeD.Camera
 
   @max_events 100
 
@@ -40,7 +43,8 @@ defmodule BB.TUI.State do
     joints: %Joints{},
     safety: %Safety{},
     power: %Power{},
-    throttle: %Throttle{}
+    throttle: %Throttle{},
+    viz: %Viz{}
   ]
 
   @type t :: %__MODULE__{
@@ -54,7 +58,8 @@ defmodule BB.TUI.State do
           joints: Joints.t(),
           safety: Safety.t(),
           power: Power.t(),
-          throttle: Throttle.t()
+          throttle: Throttle.t(),
+          viz: Viz.t()
         }
 
   @panels [:safety, :commands, :joints, :events, :parameters]
@@ -118,6 +123,37 @@ defmodule BB.TUI.State do
     idx = Enum.find_index(@tabs, &(&1 == current)) || 0
     prev = Enum.at(@tabs, rem(idx - 1 + count, count))
     %{state | ui: %{state.ui | active_tab: prev}}
+  end
+
+  @doc """
+  Returns the visualization-tab camera, defaulting when unset.
+  """
+  @spec viz_camera(t()) :: Camera.t()
+  def viz_camera(%__MODULE__{viz: %{camera: nil}}), do: RobotScene.default_camera()
+  def viz_camera(%__MODULE__{viz: %{camera: camera}}), do: camera
+
+  @doc """
+  Orbits the visualization camera by `yaw`/`pitch` deltas (radians).
+  """
+  @spec orbit_camera(t(), number(), number()) :: t()
+  def orbit_camera(%__MODULE__{} = state, yaw, pitch) do
+    %{state | viz: %{state.viz | camera: Camera.orbit(viz_camera(state), yaw, pitch)}}
+  end
+
+  @doc """
+  Zooms the visualization camera; a positive `delta` moves farther from the robot.
+  """
+  @spec zoom_camera(t(), number()) :: t()
+  def zoom_camera(%__MODULE__{} = state, delta) do
+    %{state | viz: %{state.viz | camera: Camera.zoom(viz_camera(state), delta)}}
+  end
+
+  @doc """
+  Resets the visualization camera to the default framing.
+  """
+  @spec reset_camera(t()) :: t()
+  def reset_camera(%__MODULE__{} = state) do
+    %{state | viz: %{state.viz | camera: RobotScene.default_camera()}}
   end
 
   @doc """
