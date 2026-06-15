@@ -32,6 +32,13 @@ defmodule BB.TUI.Panels.Help do
   - `d` — Disarm robot
   - `f` — Force disarm (error state only)
 
+  ## Visualization tab
+
+  - `←` / `→` or `h` / `l` — Orbit the camera
+  - `↑` / `↓` or `k` / `j` — Tilt the camera
+  - `+` / `-` — Zoom in / out
+  - `r` — Reset the camera
+
   ## Events panel
 
   - `j` / `↓` — Scroll down

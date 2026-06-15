@@ -244,6 +244,40 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "visualization camera keys" do
+    alias BB.TUI.Viz.RobotScene
+
+    defp viz_state do
+      base = Fixtures.sample_state()
+
+      %{
+        base
+        | ui: %{base.ui | active_tab: :visualization},
+          viz: %BB.TUI.State.Viz{camera: RobotScene.default_camera()}
+      }
+    end
+
+    for code <- ["left", "h", "right", "l", "up", "k", "down", "j", "+", "=", "-"] do
+      test "#{code} moves the camera on the visualization tab" do
+        state = viz_state()
+        before = state.viz.camera.position
+        event = %ExRatatui.Event.Key{code: unquote(code), kind: "press"}
+
+        assert {:noreply, new_state} = App.update({:event, event}, state)
+        refute new_state.viz.camera.position == before
+      end
+    end
+
+    test "r resets the camera to the default" do
+      state = viz_state()
+      moved = BB.TUI.State.orbit_camera(state, 0.5, 0.3)
+      event = %ExRatatui.Event.Key{code: "r", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, moved)
+      assert new_state.viz.camera == RobotScene.default_camera()
+    end
+  end
+
   describe "handle_event/2" do
     setup do
       Mimic.stub(BB, :publish, fn _robot, _path, _msg -> :ok end)
@@ -1100,6 +1134,33 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
       # No matching actuator → simulated path → local position updated
+      assert new_state.joints.entries.shoulder.position > 0.0
+    end
+
+    test "l key publishes simulated state when robot_struct has no actuators field" do
+      Fixtures.stub_bb_modules(safety_state: :armed)
+
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      # A robot_struct without an `:actuators` field exercises the
+      # find_actuator_for_joint/2 catch-all clause.
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed,
+          robot_struct: %{name: :bare}
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
       assert new_state.joints.entries.shoulder.position > 0.0
     end
 

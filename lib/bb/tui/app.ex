@@ -123,6 +123,10 @@ defmodule BB.TUI.App do
 
   @command_timeout Application.compile_env(:bb_tui, :command_timeout, 30_000)
 
+  # Visualization-tab camera step sizes (radians / world units per keypress).
+  @viz_orbit 0.15
+  @viz_zoom 0.1
+
   # ── Init ──────────────────────────────────────────────────────
 
   @impl true
@@ -313,6 +317,61 @@ defmodule BB.TUI.App do
 
   def update({:event, %Event.Key{code: "[", kind: "press"}}, state) do
     {:noreply, State.prev_tab(state)}
+  end
+
+  # Visualization-tab camera controls.
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      )
+      when code in ["left", "h"] do
+    {:noreply, State.orbit_camera(state, -@viz_orbit, 0.0)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      )
+      when code in ["right", "l"] do
+    {:noreply, State.orbit_camera(state, @viz_orbit, 0.0)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      )
+      when code in ["up", "k"] do
+    {:noreply, State.orbit_camera(state, 0.0, @viz_orbit)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      )
+      when code in ["down", "j"] do
+    {:noreply, State.orbit_camera(state, 0.0, -@viz_orbit)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      )
+      when code in ["+", "="] do
+    {:noreply, State.zoom_camera(state, -@viz_zoom)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "-", kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      ) do
+    {:noreply, State.zoom_camera(state, @viz_zoom)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "r", kind: "press"}},
+        %{ui: %{active_tab: :visualization}} = state
+      ) do
+    {:noreply, State.reset_camera(state)}
   end
 
   def update(
