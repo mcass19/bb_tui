@@ -28,7 +28,7 @@ The Visualization tab renders the live robot in 3D from its URDF topology and jo
 | `Up` / `Down` or `k` / `j` | Tilt the camera |
 | `+` / `-` | Zoom in / out |
 | `r` | Reset the camera |
-| `m` | Cycle render mode (braille / half-block / ascii) |
+| `m` | Cycle render mode (auto / kitty / sixel / iterm2 / half-block / braille / ascii) |
 
 ## Events panel
 

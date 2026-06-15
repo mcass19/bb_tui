@@ -38,7 +38,7 @@ defmodule BB.TUI.Panels.Help do
   - `↑` / `↓` or `k` / `j` — Tilt the camera
   - `+` / `-` — Zoom in / out
   - `r` — Reset the camera
-  - `m` — Cycle render mode (braille / half-block / ascii)
+  - `m` — Cycle render mode (auto / kitty / sixel / iterm2 / half-block / braille / ascii)
 
   ## Events panel
 

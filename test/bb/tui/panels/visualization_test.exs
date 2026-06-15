@@ -34,7 +34,7 @@ defmodule BB.TUI.Panels.VisualizationTest do
 
     [{widget, rect}] = Visualization.render_panes(state, %Rect{x: 0, y: 0, width: 80, height: 24})
 
-    assert %Viewport3D{scene: %Scene{} = scene, camera: cam, render_mode: :braille} = widget
+    assert %Viewport3D{scene: %Scene{} = scene, camera: cam, render_mode: :auto} = widget
     assert length(scene.objects) == 1
     assert cam == RobotScene.default_camera()
     assert %Rect{} = rect

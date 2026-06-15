@@ -283,7 +283,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "m", kind: "press"}
 
       assert {:noreply, new_state} = App.update({:event, event}, state)
-      assert new_state.viz.render_mode == :half_block
+      assert new_state.viz.render_mode == :kitty
     end
   end
 
