@@ -181,7 +181,13 @@ defmodule BB.TUI.App do
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
 
-    {:ok, state}
+    # Probe the terminal once on mount so the Visualization tab's pixel
+    # render modes (Kitty / Sixel / iTerm2) and `render_mode: :auto` pick up
+    # the real protocol and cell pixel size. Without this the font size
+    # defaults to 8x16, sizing the rendered image far too small and anchoring
+    # it in the pane's corner. Soft-fails (no TTY) and is skipped under
+    # test_mode, so it has no effect on the suite.
+    {:ok, state, probe_image_protocol: true}
   end
 
   # ── Render ────────────────────────────────────────────────────

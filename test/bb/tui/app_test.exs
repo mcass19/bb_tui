@@ -14,7 +14,10 @@ defmodule BB.TUI.AppTest do
     test "initializes state from robot module" do
       Fixtures.stub_bb_modules()
 
-      assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
+      assert {:ok, state, opts} = App.init(robot: BB.TUI.TestRobot)
+
+      # Probe the terminal on mount so pixel render modes get the real cell size.
+      assert opts[:probe_image_protocol] == true
 
       assert state.robot == BB.TUI.TestRobot
       assert state.safety.state == :disarmed
@@ -44,7 +47,7 @@ defmodule BB.TUI.AppTest do
         :ok
       end)
 
-      assert {:ok, _state} = App.init(robot: BB.TUI.TestRobot)
+      assert {:ok, _state, _opts} = App.init(robot: BB.TUI.TestRobot)
 
       # The newly-surfaced subtrees: hardware-error detail and estimator output.
       assert_received {:subscribed, [:safety]}
@@ -61,7 +64,7 @@ defmodule BB.TUI.AppTest do
         [%{name: :home, allowed_states: [:idle]}]
       end)
 
-      assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
       assert [%{name: :home, allowed_states: [:idle], arguments: []}] = state.commands.available
     end
 
@@ -69,7 +72,7 @@ defmodule BB.TUI.AppTest do
       Fixtures.stub_bb_modules()
       Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> raise "boom" end)
 
-      assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
       assert state.commands.available == []
     end
 
@@ -83,7 +86,7 @@ defmodule BB.TUI.AppTest do
         ]
       end)
 
-      assert {:ok, state} = App.init(robot: BB.TUI.TestRobot)
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
 
       assert state.parameters.list == [
                {[:controller, :kp], 1.0},
