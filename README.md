@@ -67,7 +67,7 @@ To skip Igniter, add the dep directly:
 ```elixir
 def deps do
   [
-    {:bb_tui, "~> 0.1"}
+    {:bb_tui, "~> 0.2"}
   ]
 end
 ```
