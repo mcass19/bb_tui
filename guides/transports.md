@@ -92,6 +92,10 @@ The `-t` flag is required — it forces PTY allocation, which the TUI needs for 
 
 Under the hood, `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isolated `ExRatatui.SSH` channel process per client; each channel owns an in-memory `ExRatatui.Session` (backed by a Rust VTE parser) and a linked server running `BB.TUI.App`. See `ExRatatui.SSH.Daemon` for the full list of SSH options (authentication, host keys, idle timeout, max sessions).
 
+### The Visualization tab over SSH
+
+The 3D Visualization tab works over SSH, but how crisply it renders depends on the *client* terminal. `Viewport3D` negotiates the sharpest pixel protocol the connecting terminal advertises (kitty / sixel / iTerm2) and falls back to half-block, braille, or ASCII when none is available — so a Ghostty/WezTerm/Kitty client sees pixel graphics, while a plainer client degrades gracefully to a braille mesh instead of failing. The `m` key cycles render modes if the auto-detected one isn't ideal for a given link. This negotiation happens per session, so two operators on the same robot can each get the best mode their own terminal supports.
+
 ## Erlang distribution
 
 When the robot runs on a different BEAM node, the dashboard can render on the robot's terminal, on a local terminal that pulls all data from the robot node, or as a thin renderer attached to a TUI already running on the robot node.
