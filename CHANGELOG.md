@@ -40,5 +40,5 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
 [Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/mcass19/bb_tui/releases/tag/v0.2.0...0.1.0
+[0.2.0]: https://github.com/mcass19/bb_tui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mcass19/bb_tui/releases/tag/v0.1.0

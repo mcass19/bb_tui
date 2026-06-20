@@ -122,6 +122,8 @@ defmodule BB.TUI.MixProject do
           BB.TUI.State.Events,
           BB.TUI.State.Joints,
           BB.TUI.State.Safety,
+          BB.TUI.State.Power,
+          BB.TUI.State.Viz,
           BB.TUI.State.Throttle
         ],
         Rendering: [
@@ -134,9 +136,14 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Panels.Parameters,
           BB.TUI.Panels.StatusBar,
           BB.TUI.Panels.TitleBar,
+          BB.TUI.Panels.TabBar,
           BB.TUI.Panels.Help,
           BB.TUI.Panels.ForceDisarm,
           BB.TUI.Theme
+        ],
+        Visualization: [
+          BB.TUI.Panels.Visualization,
+          BB.TUI.Viz.RobotScene
         ],
         Robot: [
           BB.TUI.Robot,
@@ -154,7 +161,9 @@ defmodule BB.TUI.MixProject do
           Dev.StreamHandler,
           Dev.EchoHandler,
           Dev.CalibrateHandler,
-          Dev.WobbleHandler
+          Dev.WobbleHandler,
+          Dev.DiagnosticsHandler,
+          Dev.PowerHandler
         ]
       ]
     ]
