@@ -153,6 +153,8 @@ defmodule BB.TUI.App do
 
     Robot.subscribe(robot, paths, node)
 
+    renderers = Keyword.get(opts, :renderers, %{})
+
     robot_struct = Robot.get_robot(robot, node)
     positions = Robot.positions(robot, node)
 
@@ -175,7 +177,8 @@ defmodule BB.TUI.App do
           runtime: Robot.runtime_state(robot, node)
         },
         joints: %State.Joints{entries: joints},
-        commands: %State.Commands{available: commands}
+        commands: %State.Commands{available: commands},
+        renderers: renderers
       }
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
@@ -730,6 +733,30 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
+  # Consumer-renderer seam: a path matching a registered renderer prefix
+  # (longest-prefix match, like a routing table) is handed off to the consumer's
+  # module rather than pattern-matched here — bb_tui never inspects the payload's
+  # struct. The renderer's `observed/2` (if exported) feeds the at-a-glance
+  # status-bar readout; the event row is rendered later from the same renderer
+  # (see `BB.TUI.Panels.Events`). The render is coalesced like sensors
+  # (render?: false + the :sensor_flush tick) so a fast consumer stays smooth.
+  # Falls through to the catch-all below when no renderer matches.
+  def update({:info, {:bb, path, %{payload: payload} = msg}}, state) do
+    case State.renderer_for(state, path) do
+      nil ->
+        {:noreply, State.append_event(state, path, msg)}
+
+      renderer ->
+        state =
+          state
+          |> maybe_put_observed(renderer, path, payload)
+          |> State.append_event(path, msg)
+          |> State.mark_render_pending()
+
+        {:noreply, state, render?: false}
+    end
+  end
+
   # Everything else we subscribe to but don't model in dedicated state —
   # notably `[:safety, :error]` hardware-error reports and `[:estimator | _]`
   # odometry/pose — lands here and is surfaced in the event log. Safety *state*
@@ -784,6 +811,28 @@ defmodule BB.TUI.App do
   defp sensor_flush_subscriptions(_state), do: []
 
   # ── Helpers ──────────────────────────────────────────────────
+
+  # Feed the status-bar readout from the consumer's optional `observed/2`. The
+  # callback is optional (`@optional_callbacks observed: 2`), so skip the call
+  # entirely when the renderer doesn't export it. A `nil` return (or a
+  # non-tuple) means "no slot for this payload" — leave `state.observed` as is.
+  defp maybe_put_observed(state, renderer, path, payload) do
+    # `observed/2` is optional. Force the module loaded before checking — under
+    # Elixir 1.19+ module loading is lazier, so `function_exported?/3` can return
+    # false for a not-yet-loaded module and the optional callback would be silently
+    # skipped (it passed on 1.18 only because the module happened to be loaded).
+    if Code.ensure_loaded?(renderer) and function_exported?(renderer, :observed, 2) do
+      case renderer.observed(path, payload) do
+        {slot_key, display, meta} ->
+          State.put_observed(state, slot_key, %{display: display, meta: meta})
+
+        _ ->
+          state
+      end
+    else
+      state
+    end
+  end
 
   defp needs_throbber?(%State{safety: %{state: :disarming}}), do: true
   defp needs_throbber?(%State{commands: %{executing: marker}}) when marker != nil, do: true

@@ -208,4 +208,61 @@ defmodule BB.TUI.Panels.StatusBarTest do
       refute txt =~ "⚡"
     end
   end
+
+  describe "observed (consumer-renderer) segment" do
+    test "omits the segment entirely when no renderer has populated observed" do
+      txt = text(StatusBar.render(Fixtures.sample_state()))
+
+      refute txt =~ "👁"
+      refute txt =~ "⚠"
+    end
+
+    test "shows the renderer-supplied label of the freshest entry" do
+      observed = %{
+        {:wheels, :imu} => %{display: %{label: "imu:7"}, meta: %{seq: 5, freshness: :fresh}}
+      }
+
+      state = Fixtures.sample_state(%{observed: observed})
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "👁"
+      assert txt =~ "imu:7"
+    end
+
+    test "picks the entry with the maximum meta.seq as freshest" do
+      observed = %{
+        {:wheels, :imu} => %{display: %{label: "old"}, meta: %{seq: 1, freshness: :fresh}},
+        {:wheels, :pose} => %{display: %{label: "new"}, meta: %{seq: 9, freshness: :fresh}}
+      }
+
+      state = Fixtures.sample_state(%{observed: observed})
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "new"
+      refute txt =~ "old"
+    end
+
+    test "dims a stale entry with a warning glyph" do
+      observed = %{
+        {:wheels, :imu} => %{display: %{label: "imu:7"}, meta: %{seq: 5, freshness: :stale}}
+      }
+
+      state = Fixtures.sample_state(%{observed: observed})
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "⚠"
+      refute txt =~ "👁"
+    end
+
+    test "inspects a display map with no string label" do
+      observed = %{
+        bare: %{display: %{foo: :bar}, meta: %{seq: 1, freshness: :fresh}}
+      }
+
+      state = Fixtures.sample_state(%{observed: observed})
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "foo: :bar"
+    end
+  end
 end

@@ -30,8 +30,11 @@ defmodule BB.TUI.Panels.Events do
       []
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{events: %{list: events, scroll_offset: offset, paused?: paused}}, focused?) do
-    items = Enum.map(events, &event_line/1)
+  def render(
+        %State{events: %{list: events, scroll_offset: offset, paused?: paused}} = state,
+        focused?
+      ) do
+    items = Enum.map(events, &event_line(&1, state))
 
     %WidgetList{
       items: items,
@@ -224,10 +227,21 @@ defmodule BB.TUI.Panels.Events do
       "18:23:12 state_machine      disarmed → armed"
   """
   @spec event_line({DateTime.t(), list(), term()}) :: Line.t()
-  def event_line({timestamp, path, message}) do
+  def event_line({_timestamp, _path, _message} = event) do
+    event_line(event, %State{})
+  end
+
+  @doc """
+  Builds an event `%Line{}`, consulting any consumer renderer registered in
+  `state` for the event's path before falling back to the built-in `summarize/2`
+  clauses. The dashboard never inspects the payload's struct: a renderer-owned
+  path is summarised by the consumer's `BB.TUI.Renderer.summarize/2`.
+  """
+  @spec event_line({DateTime.t(), list(), term()}, State.t()) :: Line.t()
+  def event_line({timestamp, path, message}, %State{} = state) do
     time = Calendar.strftime(timestamp, "%H:%M:%S")
     path_str = path |> format_path() |> String.pad_trailing(18)
-    summary = summarize(path, message)
+    summary = summarize_with_renderer(state, path, message)
 
     %Line{
       spans: [
@@ -239,6 +253,24 @@ defmodule BB.TUI.Panels.Events do
       ]
     }
   end
+
+  # Prefer the consumer renderer registered for this path (longest-prefix
+  # match). When a renderer matches and its `summarize/2` returns a string, use
+  # it; a `nil` return — or no registered renderer — falls back to the built-in
+  # `summarize/2` clauses (which end in a generic `inspect`). bb_tui never
+  # pattern-matches the renderer-owned payload itself.
+  defp summarize_with_renderer(%State{} = state, path, message) do
+    with renderer when not is_nil(renderer) <- State.renderer_for(state, path),
+         payload <- renderer_payload(message),
+         summary when is_binary(summary) <- renderer.summarize(path, payload) do
+      summary
+    else
+      _ -> summarize(path, message)
+    end
+  end
+
+  defp renderer_payload(%{payload: payload}), do: payload
+  defp renderer_payload(message), do: message
 
   @doc """
   Formats a single event as a display string.

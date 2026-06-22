@@ -20,7 +20,10 @@ defmodule BB.TUI.MixProject do
         ignore_modules: [
           # fixtures - exercised by tests.
           BB.TUI.TestRobot,
-          BB.TUI.Test.Fixtures
+          BB.TUI.Test.Fixtures,
+          BB.TUI.Test.EchoRenderer,
+          BB.TUI.Test.SummaryOnlyRenderer,
+          BB.TUI.Test.NilSummaryRenderer
         ]
       ],
       dialyzer: [
