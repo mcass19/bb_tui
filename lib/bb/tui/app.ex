@@ -140,9 +140,8 @@ defmodule BB.TUI.App do
       raise ArgumentError, "#{inspect(robot)} is not a valid BB robot module"
     end
 
-    Robot.subscribe(
-      robot,
-      [
+    paths =
+      Keyword.get(opts, :subscribe_paths, [
         [:state_machine],
         [:sensor],
         [:param],
@@ -150,9 +149,9 @@ defmodule BB.TUI.App do
         [:command],
         [:safety],
         [:estimator]
-      ],
-      node
-    )
+      ])
+
+    Robot.subscribe(robot, paths, node)
 
     robot_struct = Robot.get_robot(robot, node)
     positions = Robot.positions(robot, node)

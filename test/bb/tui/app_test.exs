@@ -57,6 +57,53 @@ defmodule BB.TUI.AppTest do
       assert_received {:subscribed, [:sensor]}
     end
 
+    test "subscribe_paths option overrides exactly which paths are subscribed" do
+      Fixtures.stub_bb_modules()
+      test_pid = self()
+
+      Mimic.stub(BB, :subscribe, fn _robot, path ->
+        send(test_pid, {:subscribed, path})
+        :ok
+      end)
+
+      paths = [[:state_machine], [:command]]
+      assert {:ok, _state, _opts} = App.init(robot: BB.TUI.TestRobot, subscribe_paths: paths)
+
+      # Exactly the override set is subscribed — nothing more, nothing less.
+      assert_received {:subscribed, [:state_machine]}
+      assert_received {:subscribed, [:command]}
+      refute_received {:subscribed, [:sensor]}
+      refute_received {:subscribed, [:estimator]}
+      refute_received {:subscribed, _other}
+    end
+
+    test "without subscribe_paths the default control-plane set is unchanged" do
+      Fixtures.stub_bb_modules()
+      test_pid = self()
+
+      Mimic.stub(BB, :subscribe, fn _robot, path ->
+        send(test_pid, {:subscribed, path})
+        :ok
+      end)
+
+      assert {:ok, _state, _opts} = App.init(robot: BB.TUI.TestRobot)
+
+      for path <- [
+            [:state_machine],
+            [:sensor],
+            [:param],
+            [:actuator],
+            [:command],
+            [:safety],
+            [:estimator]
+          ] do
+        assert_received {:subscribed, ^path}
+      end
+
+      # Exactly the default set — no extra paths subscribed.
+      refute_received {:subscribed, _other}
+    end
+
     test "loads commands from BB.Dsl.Info" do
       Fixtures.stub_bb_modules()
 
