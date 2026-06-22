@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable subscription paths.** `BB.TUI.run/2` (and `start/2` / `start_ssh/2`) now accept a `:subscribe_paths` option that overrides the default control-plane set the dashboard subscribes to — e.g. `[[:state_machine], [:command]]` to narrow it, or a downsampled observability topic instead of the high-rate sensor firehose. Threaded through both the local and SSH transports; default behaviour is unchanged when the option is omitted. Thanks to [@lostbean](https://github.com/lostbean).
+
 ## [0.2.0] - 2026-06-19
 
 ### Added
