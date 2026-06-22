@@ -119,6 +119,38 @@ defmodule BB.TUITest do
                  node: :"robot@127.0.0.1"
                )
     end
+
+    test "passes :subscribe_paths straight through for local transport" do
+      paths = [[:state_machine], [:command]]
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:robot] == BB.TUI.TestRobot
+        assert opts[:subscribe_paths] == paths
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, subscribe_paths: paths)
+    end
+
+    test "wraps :subscribe_paths into :app_opts when transport is :ssh" do
+      paths = [[:state_machine], [:command]]
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:transport] == :ssh
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        assert opts[:app_opts][:subscribe_paths] == paths
+        # Must move into :app_opts, not linger as a top-level daemon option.
+        refute Keyword.has_key?(opts, :subscribe_paths)
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start(BB.TUI.TestRobot,
+                 transport: :ssh,
+                 port: 0,
+                 subscribe_paths: paths
+               )
+    end
   end
 
   describe "start_ssh/2" do
@@ -144,6 +176,18 @@ defmodule BB.TUITest do
                  port: 0,
                  node: :"robot@127.0.0.1"
                )
+    end
+
+    test "forwards :subscribe_paths into :app_opts" do
+      paths = [[:state_machine], [:command]]
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:app_opts][:subscribe_paths] == paths
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start_ssh(BB.TUI.TestRobot, port: 0, subscribe_paths: paths)
     end
 
     test "merges caller-supplied :app_opts with :robot" do
