@@ -211,6 +211,11 @@ defmodule BB.TUI do
       overriding the default control-plane set. For example,
       `[[:state_machine], [:command]]` narrows the dashboard to just
       state-machine and command traffic instead of the full firehose.
+    * `:renderers` — a `%{path_prefix => module}` map registering consumer
+      `BB.TUI.Renderer` implementations. A message whose path matches a
+      registered prefix (longest prefix wins) is rendered by the consumer's
+      module — the dashboard never inspects the payload itself. Default `%{}`
+      (no renderers). See `BB.TUI.Renderer`.
     * `:test_mode` — `{width, height}` tuple for headless testing
       (optional).
 
@@ -257,6 +262,7 @@ defmodule BB.TUI do
       `:system_dir`, `:auto_host_key`, etc.).
     * `:subscribe_paths` — PubSub paths the dashboard subscribes to,
       overriding the default control-plane set (see `run/2`).
+    * `:renderers` — consumer `BB.TUI.Renderer` map (see `run/2`).
     * `:test_mode` — `{width, height}` tuple for headless testing
       (optional).
 
@@ -304,6 +310,8 @@ defmodule BB.TUI do
       `mount/1`.
     * `:subscribe_paths` — PubSub paths the dashboard subscribes to,
       forwarded to each client's `mount/1` (see `run/2`).
+    * `:renderers` — consumer `BB.TUI.Renderer` map, forwarded to each
+      client's `mount/1` (see `run/2`).
 
   All other OTP `:ssh.daemon/2` options are forwarded as-is.
 
@@ -411,20 +419,22 @@ defmodule BB.TUI do
     to: ExRatatui.Telemetry,
     as: :detach_default_logger
 
-  # Moves :robot, :node and :subscribe_paths into :app_opts so they reach
-  # each SSH client's mount/1 via the daemon. The daemon passes :app_opts to
-  # every spawned channel's Server, which forwards them to mount/1. App-level
+  # Moves :robot, :node, :subscribe_paths and :renderers into :app_opts so they
+  # reach each SSH client's mount/1 via the daemon. The daemon passes :app_opts
+  # to every spawned channel's Server, which forwards them to mount/1. App-level
   # options must travel through this channel rather than staying at the top
   # level, where they'd be handed to the SSH daemon as daemon options.
   defp wrap_app_opts(opts, robot) do
     {node, opts} = Keyword.pop(opts, :node)
     {subscribe_paths, opts} = Keyword.pop(opts, :subscribe_paths)
+    {renderers, opts} = Keyword.pop(opts, :renderers)
 
     app_opts =
       Keyword.get(opts, :app_opts, [])
       |> Keyword.put(:robot, robot)
       |> maybe_put(:node, node)
       |> maybe_put(:subscribe_paths, subscribe_paths)
+      |> maybe_put(:renderers, renderers)
 
     Keyword.put(opts, :app_opts, app_opts)
   end

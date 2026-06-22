@@ -4,6 +4,7 @@ defmodule BB.TUI.AppTest do
   doctest BB.TUI
 
   alias BB.TUI.App
+  alias BB.TUI.Panels.Events
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
 
@@ -1942,6 +1943,147 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state()
 
       assert {:noreply, ^state} = App.update({:info, :random_message}, state)
+    end
+  end
+
+  describe "consumer-renderer dispatch" do
+    alias BB.TUI.Test.EchoRenderer
+    alias BB.TUI.Test.NilSummaryRenderer
+    alias BB.TUI.Test.SummaryOnlyRenderer
+
+    test "a renderer-owned path routes to the renderer, records observed, coalesces render" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 0})
+      state = %{state | renderers: %{[:demo] => EchoRenderer}}
+
+      payload = %{slot: {:wheels, :imu}, label: "imu", value: 7, freshness: :fresh, seq: 3}
+      msg = %{payload: payload}
+
+      assert {:noreply, new_state, render?: false} =
+               App.update({:info, {:bb, [:demo, :imu], msg}}, state)
+
+      # observed/2 populated state.observed under the renderer-supplied slot key.
+      assert new_state.observed == %{
+               {:wheels, :imu} => %{
+                 display: %{label: "imu"},
+                 meta: %{freshness: :fresh, seq: 3}
+               }
+             }
+
+      # Event appended and the render coalesced like sensors.
+      assert length(new_state.events.list) == 1
+      assert new_state.throttle.render_pending?
+    end
+
+    test "renderer summarize/2 result lands in the event log (not generic inspect)" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 0})
+      state = %{state | renderers: %{[:demo] => EchoRenderer}}
+
+      payload = %{slot: {:wheels, :imu}, label: "imu", value: 7}
+      msg = %{payload: payload}
+
+      {:noreply, new_state, render?: false} =
+        App.update({:info, {:bb, [:demo, :imu], msg}}, state)
+
+      widget = Events.render(new_state, false)
+      [line] = widget.items
+      text = Enum.map_join(line.spans, "", & &1.content)
+
+      assert text =~ "echo imu=7"
+      refute text =~ "%{"
+    end
+
+    test "a renderer with no observed/2 still summarises and skips observed" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 0})
+      state = %{state | renderers: %{[:demo] => SummaryOnlyRenderer}}
+
+      msg = %{payload: %{slot: :x, label: "only"}}
+
+      assert {:noreply, new_state, render?: false} =
+               App.update({:info, {:bb, [:demo], msg}}, state)
+
+      assert new_state.observed == %{}
+      assert length(new_state.events.list) == 1
+    end
+
+    test "renderer returning nil summary falls back to generic inspect" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 0})
+      state = %{state | renderers: %{[:demo] => NilSummaryRenderer}}
+
+      msg = %{payload: %{a: 1}}
+
+      {:noreply, new_state, render?: false} =
+        App.update({:info, {:bb, [:demo], msg}}, state)
+
+      widget = Events.render(new_state, false)
+      [line] = widget.items
+      text = Enum.map_join(line.spans, "", & &1.content)
+
+      assert text =~ "%{a: 1}"
+    end
+
+    test "default-off: with no renderers a [:demo] message falls to the generic fallback" do
+      state = Fixtures.sample_state()
+      msg = %{payload: %{slot: :x, label: "imu", value: 7}}
+
+      # The catch-all clause appends without coalescing and without observed.
+      assert {:noreply, new_state} = App.update({:info, {:bb, [:demo], msg}}, state)
+
+      assert new_state.observed == %{}
+      assert length(new_state.events.list) == 1
+
+      widget = Events.render(new_state, false)
+      [line] = widget.items
+      text = Enum.map_join(line.spans, "", & &1.content)
+
+      # Generic inspect, not the renderer's "echo ..." form.
+      assert text =~ "label:"
+      refute text =~ "echo"
+    end
+
+    test "observed/2 returning nil leaves state.observed untouched" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 0})
+      state = %{state | renderers: %{[:demo] => EchoRenderer}}
+
+      # No :slot key → EchoRenderer.observed/2 returns nil → no observed entry,
+      # but summarize/2 still matches so the event is rendered by the renderer.
+      msg = %{payload: %{label: "imu", value: 7}}
+
+      assert {:noreply, new_state, render?: false} =
+               App.update({:info, {:bb, [:demo], msg}}, state)
+
+      assert new_state.observed == %{}
+      assert length(new_state.events.list) == 1
+    end
+
+    test "a renderer-owned bb message without a :payload key falls to the catch-all" do
+      state = Fixtures.sample_state()
+      state = %{state | renderers: %{[:demo] => EchoRenderer}}
+
+      # No %{payload: _} → skips the renderer clause entirely, lands on the
+      # generic catch-all (plain append, no coalescing).
+      assert {:noreply, new_state} = App.update({:info, {:bb, [:demo], :bare_term}}, state)
+
+      assert new_state.observed == %{}
+      assert length(new_state.events.list) == 1
+
+      # Rendering the bare-term event still consults the registered renderer:
+      # the stored message isn't a %{payload: _}, so it's passed through as-is to
+      # the renderer, which declines (nil) and falls back to generic inspect.
+      widget = Events.render(new_state, false)
+      [line] = widget.items
+      text = Enum.map_join(line.spans, "", & &1.content)
+      assert text =~ ":bare_term"
+    end
+
+    test "init/1 reads :renderers into state (default %{})" do
+      Fixtures.stub_bb_modules()
+
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
+      assert state.renderers == %{}
+
+      renderers = %{[:demo] => EchoRenderer}
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot, renderers: renderers)
+      assert state.renderers == renderers
     end
   end
 

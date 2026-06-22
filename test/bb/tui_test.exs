@@ -151,6 +151,38 @@ defmodule BB.TUITest do
                  subscribe_paths: paths
                )
     end
+
+    test "passes :renderers straight through for local transport" do
+      renderers = %{[:demo] => BB.TUI.Test.EchoRenderer}
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:robot] == BB.TUI.TestRobot
+        assert opts[:renderers] == renderers
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, renderers: renderers)
+    end
+
+    test "wraps :renderers into :app_opts when transport is :ssh" do
+      renderers = %{[:demo] => BB.TUI.Test.EchoRenderer}
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:transport] == :ssh
+        assert opts[:app_opts][:robot] == BB.TUI.TestRobot
+        assert opts[:app_opts][:renderers] == renderers
+        # Must move into :app_opts, not linger as a top-level daemon option.
+        refute Keyword.has_key?(opts, :renderers)
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start(BB.TUI.TestRobot,
+                 transport: :ssh,
+                 port: 0,
+                 renderers: renderers
+               )
+    end
   end
 
   describe "start_ssh/2" do
@@ -188,6 +220,18 @@ defmodule BB.TUITest do
 
       assert {:ok, _pid} =
                BB.TUI.start_ssh(BB.TUI.TestRobot, port: 0, subscribe_paths: paths)
+    end
+
+    test "forwards :renderers into :app_opts" do
+      renderers = %{[:demo] => BB.TUI.Test.EchoRenderer}
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:app_opts][:renderers] == renderers
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start_ssh(BB.TUI.TestRobot, port: 0, renderers: renderers)
     end
 
     test "merges caller-supplied :app_opts with :robot" do

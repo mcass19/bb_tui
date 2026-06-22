@@ -43,6 +43,8 @@ defmodule BB.TUI.State do
     joints: %Joints{},
     safety: %Safety{},
     power: %Power{},
+    renderers: %{},
+    observed: %{},
     throttle: %Throttle{},
     viz: %Viz{}
   ]
@@ -58,6 +60,8 @@ defmodule BB.TUI.State do
           joints: Joints.t(),
           safety: Safety.t(),
           power: Power.t(),
+          renderers: %{optional([atom()]) => module()},
+          observed: %{optional(term()) => %{display: map(), meta: map()}},
           throttle: Throttle.t(),
           viz: Viz.t()
         }
@@ -476,6 +480,74 @@ defmodule BB.TUI.State do
   end
 
   def update_power(%__MODULE__{} = state, _payload), do: state
+
+  # ── Consumer-renderer seam ──────────────────────────────────
+
+  @doc """
+  Returns the renderer module registered for `path`, or `nil`.
+
+  Registered renderers are keyed by a path *prefix*; a message's `path` matches
+  a prefix when the prefix is a leading sublist of the path (`[:demo]` matches
+  `[:demo]`, `[:demo, :imu]`, `[:demo, :imu, 1]`, …). When several prefixes
+  match, the **longest** wins — a routing-table style most-specific match — so a
+  consumer can register a broad `[:demo]` renderer and override a narrower
+  `[:demo, :raw]` one. Returns `nil` when no prefix matches, so the caller falls
+  through to the built-in handling.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{renderers: %{[:demo] => A, [:demo, :raw] => B}}
+      iex> BB.TUI.State.renderer_for(state, [:demo, :imu])
+      A
+
+      iex> state = %BB.TUI.State{renderers: %{[:demo] => A, [:demo, :raw] => B}}
+      iex> BB.TUI.State.renderer_for(state, [:demo, :raw, 1])
+      B
+
+      iex> state = %BB.TUI.State{renderers: %{[:demo] => A}}
+      iex> BB.TUI.State.renderer_for(state, [:other])
+      nil
+
+      iex> BB.TUI.State.renderer_for(%BB.TUI.State{}, [:demo])
+      nil
+  """
+  @spec renderer_for(t(), [atom()]) :: module() | nil
+  def renderer_for(%__MODULE__{renderers: renderers}, path) when map_size(renderers) > 0 do
+    case matching_renderers(renderers, path) do
+      [] -> nil
+      matches -> matches |> Enum.max_by(fn {prefix, _mod} -> length(prefix) end) |> elem(1)
+    end
+  end
+
+  def renderer_for(%__MODULE__{}, _path), do: nil
+
+  defp matching_renderers(renderers, path) do
+    Enum.filter(renderers, fn {prefix, _mod} -> List.starts_with?(path, prefix) end)
+  end
+
+  @doc """
+  Records the latest observed entry for a renderer-supplied `slot_key`.
+
+  The dashboard keeps only the freshest `%{display: ..., meta: ...}` per
+  `slot_key` (a faster slot overwrites the previous reading rather than
+  accumulating; the event log carries the history). The status bar reads
+  `state.observed` to surface the freshest slot at a glance.
+
+  `bb_tui` never inspects `display` or `meta` beyond the generic keys the status
+  bar reads (`display.label`, `meta.seq`, `meta.freshness`) — both are supplied
+  verbatim by the consumer's renderer.
+
+  ## Examples
+
+      iex> state = BB.TUI.State.put_observed(%BB.TUI.State{}, {:wheels, :imu},
+      ...>   %{display: %{label: "imu"}, meta: %{seq: 1, freshness: :fresh}})
+      iex> state.observed
+      %{{:wheels, :imu} => %{display: %{label: "imu"}, meta: %{seq: 1, freshness: :fresh}}}
+  """
+  @spec put_observed(t(), term(), %{display: map(), meta: map()}) :: t()
+  def put_observed(%__MODULE__{observed: observed} = state, slot_key, entry) do
+    %{state | observed: Map.put(observed, slot_key, entry)}
+  end
 
   @doc """
   Updates parameters from a parameter list.

@@ -78,11 +78,50 @@ defmodule BB.TUI.Panels.StatusBar do
         runtime_pill(state.safety.runtime)
       ] ++
         power_spans(state) ++
+        observed_spans(state) ++
         [%Span{content: "  ", style: %Style{}}] ++
         key_hints(state)
 
     %Line{spans: spans}
   end
+
+  # Consumer-renderer readout: the freshest observed entry (max `meta.seq`),
+  # rendered as an at-a-glance segment so a renderer-fed dashboard surfaces a
+  # live value even when its data never reaches the joints/sensor panels.
+  # Returns `[]` (no segment, no separator) until a renderer populates
+  # `state.observed`. Stale entries (`meta.freshness == :stale`) dim. The bar
+  # reads only the generic `display`/`meta` the renderer produced — no struct
+  # knowledge.
+  defp observed_spans(%State{observed: observed}) when map_size(observed) > 0 do
+    {_slot, entry} =
+      Enum.max_by(observed, fn {_slot, %{meta: meta}} -> Map.get(meta, :seq, 0) end)
+
+    [
+      %Span{content: " ", style: %Style{}},
+      Theme.dim_span("│"),
+      %Span{content: " ", style: %Style{}},
+      observed_span(entry)
+    ]
+  end
+
+  defp observed_spans(_state), do: []
+
+  defp observed_span(%{display: display, meta: meta}) do
+    fresh? = Map.get(meta, :freshness) != :stale
+
+    style =
+      if fresh? do
+        %Style{fg: Theme.cyan(), modifiers: [:bold]}
+      else
+        %Style{fg: Theme.dim_text()}
+      end
+
+    mark = if fresh?, do: "\u{1F441}", else: "\u{26A0}"
+    %Span{content: "#{mark} #{observed_label(display)}", style: style}
+  end
+
+  defp observed_label(%{label: label}) when is_binary(label), do: label
+  defp observed_label(display), do: inspect(display)
 
   defp runtime_pill(runtime_state) do
     %Span{
