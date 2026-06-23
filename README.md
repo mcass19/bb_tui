@@ -22,6 +22,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Keyboard-driven navigation** — `[`/`]` to switch between the Control Panel and Visualization tabs, Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
 - **Three transports** — local terminal, SSH (multiple isolated operator sessions), and Erlang distribution (attach a thin renderer to a TUI running on the robot node)
 - **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime`
+- **Extensible rendering** — register `BB.TUI.Renderer` modules per PubSub path prefix (`:renderers`) to render a consumer's own payloads in the event log and status bar, without bb_tui depending on their structs
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
 - **Headless test suite** — full coverage using Mimic and ExRatatui's test backend
 
@@ -101,7 +102,7 @@ Serving the dashboard over SSH or attaching to a robot on another BEAM node is c
 
 ## How It Works
 
-BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to the `[:state_machine]`, `[:sensor]`, `[:param]`, `[:actuator]`, `[:command]`, `[:safety]`, and `[:estimator]` paths, takes a one-time ETS snapshot on mount, then keeps state fresh from PubSub messages. This subscription set is configurable — passing `:subscribe_paths` to `BB.TUI.run/2` points the dashboard at a narrower or downsampled set of paths instead. Most paths drive dedicated panels; `[:safety, :error]` hardware-error reports and `[:estimator]` output flow into the event log. Keyboard events call BB APIs directly (safety, actuator, command execution) — there are no optimistic updates, so the dashboard is a faithful reflection of the robot's actual state.
+BB stores state in ETS and publishes changes over PubSub. The TUI subscribes to the `[:state_machine]`, `[:sensor]`, `[:param]`, `[:actuator]`, `[:command]`, `[:safety]`, and `[:estimator]` paths, takes a one-time ETS snapshot on mount, then keeps state fresh from PubSub messages. This subscription set is configurable — passing `:subscribe_paths` to `BB.TUI.run/2` points the dashboard at a narrower or downsampled set of paths instead. Most paths drive dedicated panels; `[:safety, :error]` hardware-error reports and `[:estimator]` output flow into the event log. A consumer can override that fallback for paths it owns by passing `:renderers` — a `%{prefix => module}` map of `BB.TUI.Renderer` implementations — so its own payloads get a custom event-log summary (and an optional status-bar readout) without bb_tui depending on their structs; messages route to a renderer by longest-matching prefix. Keyboard events call BB APIs directly (safety, actuator, command execution) — there are no optimistic updates, so the dashboard is a faithful reflection of the robot's actual state.
 
 All state transitions live in `BB.TUI.State` as pure functions — no side effects, no process communication — which makes the dashboard easy to test headlessly. `BB.TUI.App` wires input and async results to those transitions through ExRatatui's reducer runtime.
 

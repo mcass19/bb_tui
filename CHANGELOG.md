@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Configurable subscription paths.** `BB.TUI.run/2` (and `start/2` / `start_ssh/2`) now accept a `:subscribe_paths` option that overrides the default control-plane set the dashboard subscribes to — e.g. `[[:state_machine], [:command]]` to narrow it, or a downsampled observability topic instead of the high-rate sensor firehose. Threaded through both the local and SSH transports; default behaviour is unchanged when the option is omitted. Thanks to [@lostbean](https://github.com/lostbean).
+- **Consumer-supplied renderers.** `BB.TUI.run/2` (and `start/2` / `start_ssh/2`) now accept a `:renderers` option — a `%{path_prefix => module}` map that lets a consumer teach the dashboard how to render a payload on a PubSub path it owns, without bb_tui knowing the payload's struct. A module implements the new `BB.TUI.Renderer` behaviour: `summarize/2` returns the event-log line (or `nil` to fall back to the generic `inspect/2`), and the optional `observed/2` feeds an at-a-glance status-bar slot. Messages route to a renderer by longest-matching prefix, like a routing table. Fully additive — with no `:renderers`, dispatch is unchanged. Threaded through both the local and SSH transports. Thanks to [@lostbean](https://github.com/lostbean).
 
 ## [0.2.0] - 2026-06-19
 

@@ -115,7 +115,8 @@ defmodule BB.TUI.MixProject do
       groups_for_modules: [
         Core: [
           BB.TUI,
-          BB.TUI.App
+          BB.TUI.App,
+          BB.TUI.Renderer
         ],
         State: [
           BB.TUI.State,

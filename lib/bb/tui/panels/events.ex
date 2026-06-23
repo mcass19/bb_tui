@@ -235,7 +235,7 @@ defmodule BB.TUI.Panels.Events do
   Builds an event `%Line{}`, consulting any consumer renderer registered in
   `state` for the event's path before falling back to the built-in `summarize/2`
   clauses. The dashboard never inspects the payload's struct: a renderer-owned
-  path is summarised by the consumer's `BB.TUI.Renderer.summarize/2`.
+  path is summarised by the consumer's `c:BB.TUI.Renderer.summarize/2`.
   """
   @spec event_line({DateTime.t(), list(), term()}, State.t()) :: Line.t()
   def event_line({timestamp, path, message}, %State{} = state) do
