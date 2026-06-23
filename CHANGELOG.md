@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-23
+
 ### Added
 
 - **Configurable subscription paths.** `BB.TUI.run/2` (and `start/2` / `start_ssh/2`) now accept a `:subscribe_paths` option that overrides the default control-plane set the dashboard subscribes to — e.g. `[[:state_machine], [:command]]` to narrow it, or a downsampled observability topic instead of the high-rate sensor firehose. Threaded through both the local and SSH transports; default behaviour is unchanged when the option is omitted. Thanks to [@lostbean](https://github.com/lostbean).
@@ -44,6 +46,7 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mcass19/bb_tui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mcass19/bb_tui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mcass19/bb_tui/releases/tag/v0.1.0
