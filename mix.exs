@@ -61,7 +61,7 @@ defmodule BB.TUI.MixProject do
   defp deps do
     [
       {:ex_ratatui, "~> 0.11"},
-      {:bb, "~> 0.20"},
+      {:bb, bb_dep("~> 0.20")},
 
       # Test
       {:mimic, "~> 2.2", only: :test},
@@ -70,8 +70,22 @@ defmodule BB.TUI.MixProject do
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
+      {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.8", only: [:dev, :test], runtime: false}
     ]
+  end
+
+  # Resolve the `bb` dependency against hex, a sibling checkout, or `bb`'s main
+  # branch depending on `BB_VERSION` — the beam-bots ecosystem convention that
+  # lets the workspace's integration tests run this package against an
+  # in-development `bb` (`BB_VERSION=local` → `../bb`).
+  defp bb_dep(default) do
+    case System.get_env("BB_VERSION") do
+      nil -> default
+      "local" -> [path: "../bb", override: true]
+      "main" -> [git: "https://github.com/beam-bots/bb.git", override: true]
+      version -> "~> #{version}"
+    end
   end
 
   defp package do
