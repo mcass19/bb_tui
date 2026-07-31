@@ -347,16 +347,32 @@ defmodule BB.TUI.Robot do
   end
 
   @doc """
-  Cancels a running command, resolving whatever is awaiting it.
+  Cancels a running command, resolving whatever is awaiting it. Best-effort.
 
-  The remote clause routes through `Rpc` for the same reason the rest of this
-  module does — so the cross-node path is exercisable in tests — even though a
-  cross-node pid would also be reachable directly over distribution.
+  `BB.Command.cancel/1` is `GenServer.stop(pid, {:shutdown, :cancelled})`, which
+  exits when the command terminates for any *other* reason. A handler that stops
+  cleanly on cancellation exits `:normal`, so the stop call raises even though
+  the cancel did exactly what was asked. bb only catches `{:noproc, _}`, so that
+  exit escapes — and since this is dispatched inline from `BB.TUI.App`, an
+  escaping exit would take the whole dashboard down with it.
+
+  The authoritative outcome is the pending await resolving into
+  `{:command_result, _}`, so failures here are swallowed rather than surfaced.
+  The remote clause calls `Rpc` directly instead of the raising `rpc/4` wrapper
+  for the same reason: a remote exit comes back as `{:badrpc, {:EXIT, _}}`, which
+  is a value to ignore, not a reason to kill the UI.
   """
-  @spec cancel_command(pid(), maybe_node()) :: term()
-  def cancel_command(pid, nil), do: BB.Command.cancel(pid)
+  @spec cancel_command(pid(), maybe_node()) :: :ok
+  def cancel_command(pid, node) do
+    do_cancel(pid, node)
+    :ok
+  catch
+    :exit, _reason -> :ok
+  end
 
-  def cancel_command(pid, node), do: rpc(node, BB.Command, :cancel, [pid])
+  defp do_cancel(pid, nil), do: BB.Command.cancel(pid)
+
+  defp do_cancel(pid, node), do: Rpc.call(node, BB.Command, :cancel, [pid])
 
   # ── Internal ───────────────────────────────────────────────
 

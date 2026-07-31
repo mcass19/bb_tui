@@ -391,6 +391,21 @@ defmodule BB.TUI.RobotTest do
 
       assert Robot.cancel_command(cmd_pid, nil) == :ok
     end
+
+    # BB.Command.cancel/1 is GenServer.stop(pid, {:shutdown, :cancelled}), which
+    # exits when the command stops for any other reason — a handler that ends
+    # cleanly on cancellation exits :normal. bb only catches {:noproc, _}, so
+    # that exit escapes. This runs inline from update/2, so letting it through
+    # kills the whole dashboard.
+    test "cancel_command/2 swallows the exit when the command stops normally" do
+      cmd_pid = self()
+
+      Mimic.expect(BB.Command, :cancel, fn ^cmd_pid ->
+        exit({:normal, {GenServer, :stop, [cmd_pid, {:shutdown, :cancelled}, :infinity]}})
+      end)
+
+      assert Robot.cancel_command(cmd_pid, nil) == :ok
+    end
   end
 
   # `subscribe/3 (remote)` lives in
@@ -573,6 +588,18 @@ defmodule BB.TUI.RobotTest do
 
       Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :cancel, [^cmd_pid] ->
         :ok
+      end)
+
+      assert Robot.cancel_command(cmd_pid, @remote) == :ok
+    end
+
+    # Unlike every other remote call here, a :badrpc from cancel is ignored
+    # rather than raised — the await resolving is the authoritative outcome.
+    test "cancel_command/2 ignores a :badrpc reply instead of raising" do
+      cmd_pid = self()
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :cancel, [^cmd_pid] ->
+        {:badrpc, {:EXIT, {:normal, {GenServer, :stop, []}}}}
       end)
 
       assert Robot.cancel_command(cmd_pid, @remote) == :ok

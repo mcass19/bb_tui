@@ -158,6 +158,46 @@ defmodule BB.TUI.IntegrationTest do
       assert current_state(pid).commands.executing == nil
     end
 
+    # Regression: `BB.Command.cancel/1` is a `GenServer.stop/3` that exits when
+    # the command stops for any reason other than the requested one — a handler
+    # ending cleanly on cancellation exits :normal. Cancel is dispatched inline
+    # from `update/2`, so an escaping exit killed `ExRatatui.Server` and took the
+    # whole dashboard down mid-session.
+    test "cancel: `c` survives a command that stops with a different reason" do
+      cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal -> {:ok, cmd_pid} end)
+
+      # Stays pending so the command is still running when `c` arrives —
+      # awaiting with :infinity is exactly what makes that window real.
+      Mimic.stub(BB.Command, :await, fn _pid, _timeout ->
+        receive do
+        after
+          5_000 -> {:error, :test_timeout}
+        end
+      end)
+
+      Mimic.stub(BB.Command, :cancel, fn ^cmd_pid ->
+        exit({:normal, {GenServer, :stop, [cmd_pid, {:shutdown, :cancelled}, :infinity]}})
+      end)
+
+      pid = start_tui_on_commands_panel!()
+
+      :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
+
+      eventually(fn ->
+        assert current_state(pid).commands.executing_pid == cmd_pid
+      end)
+
+      :ok = Runtime.inject_event(pid, %Key{code: "c", kind: "press"})
+
+      # The dashboard is still alive and still serving state.
+      eventually(fn ->
+        assert Process.alive?(pid)
+        assert current_state(pid).ui.active_panel == :commands
+      end)
+    end
+
     test "completion with options: 3-tuple surfaces as {:ok, result}" do
       Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal ->
         {:ok, spawn(fn -> :ok end)}
