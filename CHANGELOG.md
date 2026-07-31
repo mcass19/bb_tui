@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-31
+
 ### Added
 
 - **`usage-rules.md`, shipped in the package.** Matches the convention `bb` and `bb_liveview` already follow, so an agent working in a Beam Bots workspace picks up rules for the TUI layer alongside the framework's own (`mix usage_rules.sync <file> bb_tui`). Covers the entry points and how to pick between them, the full option table, `BB.TUI.Renderer` for consumer-owned payloads, command cancellation, and the anti-patterns that actually bite — declaring the dashboard in `topology`, calling the blocking `run/2` from a supervision tree, or setting `:node` without connecting first. Added `{:usage_rules, "~> 1.2", only: [:dev]}` for the sync tooling.
@@ -62,7 +64,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/mcass19/bb_tui/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mcass19/bb_tui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mcass19/bb_tui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mcass19/bb_tui/releases/tag/v0.1.0
