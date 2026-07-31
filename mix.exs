@@ -71,7 +71,8 @@ defmodule BB.TUI.MixProject do
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
-      {:igniter, "~> 0.8", only: [:dev, :test], runtime: false}
+      {:igniter, "~> 0.8", only: [:dev, :test], runtime: false},
+      {:usage_rules, "~> 1.2", only: [:dev], runtime: false}
     ]
   end
 
@@ -96,7 +97,8 @@ defmodule BB.TUI.MixProject do
         "Changelog" => @changelog_url,
         "Beam Bots" => "https://github.com/beam-bots"
       },
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md CONTRIBUTING.md),
+      files:
+        ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md CONTRIBUTING.md usage-rules.md),
       keywords: [
         "beam_bots",
         "robotics",

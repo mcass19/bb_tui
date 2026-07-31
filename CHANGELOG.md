@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`usage-rules.md`, shipped in the package.** Matches the convention `bb` and `bb_liveview` already follow, so an agent working in a Beam Bots workspace picks up rules for the TUI layer alongside the framework's own (`mix usage_rules.sync <file> bb_tui`). Covers the entry points and how to pick between them, the full option table, `BB.TUI.Renderer` for consumer-owned payloads, command cancellation, and the anti-patterns that actually bite — declaring the dashboard in `topology`, calling the blocking `run/2` from a supervision tree, or setting `:node` without connecting first. Added `{:usage_rules, "~> 1.2", only: [:dev]}` for the sync tooling.
+
 ### Fixed
 
 - **Continuous commands are no longer reported as timed out while they are still running.** Commands dispatched from the UI were awaited with a UI-side deadline (`:bb_tui, :command_timeout`, default 30s), so a continuous command — one that only returns when it stops or is cancelled — surfaced `{:error, :timeout}` in the result panel after 30 seconds even though it was running normally, with no way to stop it. `BB.Command.await/2` is now called with `:infinity`; runaways stay bounded by the command's own DSL `timeout`. Matches `BB.LiveView.Components.Command`, which bb_tui mirrors.
