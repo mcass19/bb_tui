@@ -110,16 +110,9 @@ Robots can publish sensor data faster than a terminal can usefully redraw, so th
 
 The Visualization tab is built the same way — as a pure projection of state. `BB.TUI.Viz.RobotScene` reads the robot's URDF topology and the live joint positions, runs forward kinematics down the kinematic chain, and emits an `ExRatatui.ThreeD` scene-graph of links and joints; `BB.TUI.Panels.Visualization` hands that scene, plus the orbit camera and render mode held in `BB.TUI.State.Viz`, to ExRatatui's `Viewport3D` widget. Every sensor frame that moves a joint re-runs the kinematics, so the on-screen arm tracks the real one. `Viewport3D` picks the sharpest pixel protocol the terminal advertises (kitty / sixel / iTerm2) and falls back to half-block, braille, or ASCII when those aren't available — which is why the view stays usable over SSH; the `m` key forces a specific mode.
 
-## Configuration
+## Running commands
 
-| Key | Default | Notes |
-|---|---|---|
-| `:bb_tui, :command_timeout` | `30_000` ms | Wait window for `BB.Command.await/2` on commands dispatched from the UI. Compile-time only — downstream apps need `mix deps.compile bb_tui --force` after changing it. |
-
-```elixir
-# config/config.exs
-config :bb_tui, command_timeout: 30_000
-```
+Commands dispatched from the UI are awaited with `:infinity`, so a continuous command — one that only returns when it stops or is cancelled — is never reported as timed out while it is still running. Runaways stay bounded by the command's own DSL `timeout`. Press `c` in the commands panel to cancel the running command; the result panel then shows the cancellation.
 
 ## Development
 

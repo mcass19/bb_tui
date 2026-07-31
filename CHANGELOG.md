@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Continuous commands are no longer reported as timed out while they are still running.** Commands dispatched from the UI were awaited with a UI-side deadline (`:bb_tui, :command_timeout`, default 30s), so a continuous command — one that only returns when it stops or is cancelled — surfaced `{:error, :timeout}` in the result panel after 30 seconds even though it was running normally, with no way to stop it. `BB.Command.await/2` is now called with `:infinity`; runaways stay bounded by the command's own DSL `timeout`. Matches `BB.LiveView.Components.Command`, which bb_tui mirrors.
+
+### Added
+
+- **Cancel a running command with `c` in the commands panel.** Command execution is now two-phase — one async starts the command and reports `{:command_started, _}`, a second awaits it and reports `{:command_result, _}` — so the running command's pid reaches state (`BB.TUI.State.Commands.executing_pid`) and can be cancelled. `BB.TUI.Robot.cancel_command/2` routes locally or over `:rpc` like every other runtime call. Cancelling resolves the pending await, so the result panel shows the cancellation instead of hanging on the throbber.
+
+### Removed
+
+- **The `:bb_tui, :command_timeout` config key.** It no longer has anything to bound now that the await is `:infinity` — the DSL `timeout` and the new cancel key cover both cases. Setting it is now a no-op and can be deleted from consumer config.
+
 ## [0.3.0] - 2026-06-23
 
 ### Added

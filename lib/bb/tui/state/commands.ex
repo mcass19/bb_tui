@@ -4,14 +4,17 @@ defmodule BB.TUI.State.Commands do
 
   `available` is the discovered command list; `selected` is the highlighted
   row; `result` is the last execution result; `executing` is a marker held
-  while a command runs; `edit_mode?`/`focused_arg`/`form_values` drive the
-  inline argument editor. `available` is seeded when `BB.TUI.App` starts.
+  while a command runs; `executing_pid` is the running command's process,
+  held so the panel can cancel it; `edit_mode?`/`focused_arg`/`form_values`
+  drive the inline argument editor. `available` is seeded when `BB.TUI.App`
+  starts.
   """
 
   defstruct available: [],
             selected: 0,
             result: nil,
             executing: nil,
+            executing_pid: nil,
             edit_mode?: false,
             focused_arg: 0,
             form_values: %{}
@@ -21,6 +24,7 @@ defmodule BB.TUI.State.Commands do
           selected: non_neg_integer(),
           result: {:ok, term()} | {:error, term()} | nil,
           executing: term() | nil,
+          executing_pid: pid() | nil,
           edit_mode?: boolean(),
           focused_arg: non_neg_integer(),
           form_values: %{atom() => %{atom() => String.t()}}

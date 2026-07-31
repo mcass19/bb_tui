@@ -346,6 +346,18 @@ defmodule BB.TUI.Robot do
     rpc(node, BB.Robot.Runtime, :execute, [robot, name, args])
   end
 
+  @doc """
+  Cancels a running command, resolving whatever is awaiting it.
+
+  The remote clause routes through `Rpc` for the same reason the rest of this
+  module does — so the cross-node path is exercisable in tests — even though a
+  cross-node pid would also be reachable directly over distribution.
+  """
+  @spec cancel_command(pid(), maybe_node()) :: term()
+  def cancel_command(pid, nil), do: BB.Command.cancel(pid)
+
+  def cancel_command(pid, node), do: rpc(node, BB.Command, :cancel, [pid])
+
   # ── Internal ───────────────────────────────────────────────
 
   defp rpc(node, mod, fun, args) do

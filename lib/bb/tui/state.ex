@@ -1152,10 +1152,17 @@ defmodule BB.TUI.State do
       iex> new_state = BB.TUI.State.set_command_result(state, {:ok, :done})
       iex> {new_state.commands.result, new_state.commands.executing}
       {{:ok, :done}, nil}
+
+  The running process is released along with the marker:
+
+      iex> commands = %BB.TUI.State.Commands{executing: :running, executing_pid: self()}
+      iex> state = %BB.TUI.State{commands: commands}
+      iex> BB.TUI.State.set_command_result(state, {:error, :cancelled}).commands.executing_pid
+      nil
   """
   @spec set_command_result(t(), {:ok, term()} | {:error, term()}) :: t()
   def set_command_result(%__MODULE__{commands: commands} = state, result) do
-    %{state | commands: %{commands | result: result, executing: nil}}
+    %{state | commands: %{commands | result: result, executing: nil, executing_pid: nil}}
   end
 
   @doc """
@@ -1168,10 +1175,41 @@ defmodule BB.TUI.State do
       iex> new_state = BB.TUI.State.start_command(state, pid)
       iex> {new_state.commands.executing, new_state.commands.result}
       {pid, nil}
+
+  Any process left over from a previous run is cleared:
+
+      iex> commands = %BB.TUI.State.Commands{executing_pid: self()}
+      iex> state = %BB.TUI.State{commands: commands}
+      iex> BB.TUI.State.start_command(state, :running).commands.executing_pid
+      nil
   """
   @spec start_command(t(), term()) :: t()
   def start_command(%__MODULE__{commands: commands} = state, marker) do
-    %{state | commands: %{commands | executing: marker, result: nil}}
+    %{state | commands: %{commands | executing: marker, result: nil, executing_pid: nil}}
+  end
+
+  @doc """
+  Records the process of the command that just started, so it can be cancelled.
+
+  Ignored when nothing is executing — a late `{:command_started, _}` for a run
+  that already resolved must not resurrect a cancellable process.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{executing: :running}}
+      iex> pid = self()
+      iex> BB.TUI.State.set_command_pid(state, pid).commands.executing_pid
+      pid
+
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{executing: nil}}
+      iex> BB.TUI.State.set_command_pid(state, self()).commands.executing_pid
+      nil
+  """
+  @spec set_command_pid(t(), pid()) :: t()
+  def set_command_pid(%__MODULE__{commands: %{executing: nil}} = state, _pid), do: state
+
+  def set_command_pid(%__MODULE__{commands: commands} = state, pid) when is_pid(pid) do
+    %{state | commands: %{commands | executing_pid: pid}}
   end
 
   # ── Joint control ──────────────────────────────────────────

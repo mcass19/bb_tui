@@ -53,6 +53,7 @@ defmodule BB.TUI.Panels.Help do
   - `j` / `↓` — Select next command
   - `k` / `↑` — Select previous command
   - `⏎` — Execute (or enter argument edit mode)
+  - `c` — Cancel the running command
 
   ## Command edit mode
 

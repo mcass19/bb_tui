@@ -94,19 +94,14 @@ defmodule BB.TUI.App do
   `Robot.execute_command/4`, which monitors a spawned command process
   and waits for its `:DOWN`, goes through `Command.async/2`.
 
-  ## Configuration
+  ## Cancelling a running command
 
-  The wait window for `BB.Command.await/2` is compile-time configurable
-  via `Application.compile_env/3`:
-
-      # config/config.exs
-      config :bb_tui, command_timeout: 30_000
-
-  Default is `30_000` ms. The test suite overrides this to `100` ms in
-  `config/test.exs` to keep timeout assertions snappy. Because the
-  value is read with `compile_env`, downstream apps need to recompile
-  `:bb_tui` after changing the config (`mix deps.compile bb_tui
-  --force`).
+  `BB.Command.await/2` is called with `:infinity`, so a continuous
+  command — one that only returns when it stops or is cancelled — is
+  never reported as timed out while it is still running. Runaways stay
+  bounded by the command's own DSL `timeout`. The escape hatch is `c`
+  in the commands panel, which cancels the running command and resolves
+  the await.
   """
 
   use ExRatatui.App, runtime: :reducer
@@ -120,8 +115,6 @@ defmodule BB.TUI.App do
   alias ExRatatui.Layout
   alias ExRatatui.Layout.Rect
   alias ExRatatui.Subscription
-
-  @command_timeout Application.compile_env(:bb_tui, :command_timeout, 30_000)
 
   # Visualization-tab camera step sizes (radians / world units per keypress).
   @viz_orbit 0.15
@@ -491,6 +484,21 @@ defmodule BB.TUI.App do
     end
   end
 
+  # ── Update — commands panel: cancel a running command ────────
+
+  # Above the edit-mode clauses so `c` cancels rather than typing into a
+  # focused argument. Only reachable while a command is running, which
+  # cannot overlap edit mode — executing exits it.
+
+  def update(
+        {:event, %Event.Key{code: "c", kind: "press"}},
+        %{ui: %{active_panel: :commands}, commands: %{executing_pid: pid}} = state
+      )
+      when is_pid(pid) do
+    Robot.cancel_command(pid, state.node)
+    {:noreply, state}
+  end
+
   # ── Update — commands panel: argument-edit mode ──────────────
   # These clauses run only when the user has entered edit mode on a
   # command with arguments (Enter from the list view enters edit mode
@@ -764,6 +772,14 @@ defmodule BB.TUI.App do
   # badge already reflects an error before its detail shows up here.
   def update({:info, {:bb, path, msg}}, state) do
     {:noreply, State.append_event(state, path, msg)}
+  end
+
+  def update({:info, {:command_started, {:ok, cmd_pid}}}, state) do
+    {:noreply, State.set_command_pid(state, cmd_pid), commands: [await_command_command(cmd_pid)]}
+  end
+
+  def update({:info, {:command_started, {:error, reason}}}, state) do
+    {:noreply, State.set_command_result(state, {:error, reason})}
   end
 
   def update({:info, {:command_result, result}}, state) do
@@ -1066,20 +1082,23 @@ defmodule BB.TUI.App do
     end
   end
 
+  # Execution is two-phase so the running command's pid reaches state and
+  # can be cancelled: phase one starts it and reports `{:command_started,
+  # _}`, phase two awaits it and reports `{:command_result, _}`.
   defp execute_command_command(%State{robot: robot, node: node}, cmd, args) do
     name = cmd.name
 
     Command.async(
-      fn -> wait_for_command_result(robot, name, args, node) end,
-      fn result -> {:command_result, result} end
+      fn -> Robot.execute_command(robot, name, args, node) end,
+      fn result -> {:command_started, result} end
     )
   end
 
-  defp wait_for_command_result(robot, name, args, node) do
-    case Robot.execute_command(robot, name, args, node) do
-      {:ok, cmd_pid} -> await_command(cmd_pid)
-      {:error, reason} -> {:error, reason}
-    end
+  defp await_command_command(cmd_pid) do
+    Command.async(
+      fn -> await_command(cmd_pid) end,
+      fn result -> {:command_result, result} end
+    )
   end
 
   # BB.Command.await/2 traps `:exit, {:noproc, _}` and falls back to the
@@ -1087,13 +1106,18 @@ defmodule BB.TUI.App do
   # (e.g. a synchronous {:stop, :normal, _}) terminates between
   # `Robot.execute_command/4` returning the pid and us awaiting on it.
   # The earlier Process.monitor approach surfaced that race as a
-  # spurious {:error, :noproc}; await also enforces a timeout, so we no
-  # longer need a separate Command.send_after backstop.
+  # spurious {:error, :noproc}.
+  #
+  # Awaits `:infinity` rather than a UI-side deadline: a continuous command
+  # only returns when it stops or is cancelled, and the command's own DSL
+  # `timeout` already bounds runaways. The user-facing escape hatch is `c`
+  # in the commands panel, which cancels the command and resolves this
+  # await. Matches `BB.LiveView.Components.Command`.
   #
   # Unwrap {:command_failed, reason} at the boundary so the panel shows
-  # the bare reason (`:timeout`, `:noproc`, etc.) consistently.
+  # the bare reason (`:cancelled`, `:noproc`, etc.) consistently.
   defp await_command(cmd_pid) do
-    case BB.Command.await(cmd_pid, @command_timeout) do
+    case BB.Command.await(cmd_pid, :infinity) do
       {:ok, result} -> {:ok, result}
       {:ok, result, _opts} -> {:ok, result}
       {:error, {:command_failed, reason}} -> {:error, reason}

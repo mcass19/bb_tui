@@ -631,9 +631,58 @@ defmodule BB.TUI.AppTest do
       assert new_state.commands.executing == :running
       assert new_state.commands.result == nil
 
-      # BB.Command.await/2 enforces the timeout internally, so we hand
-      # the runtime a single async (no separate send_after backstop).
+      # Phase one only starts the command; the await is issued once the
+      # pid comes back as {:command_started, _}.
       assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
+    end
+
+    test "{:command_started, {:ok, pid}} records the pid and issues the await" do
+      cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      state =
+        Fixtures.sample_state(%{active_panel: :commands})
+        |> then(&%{&1 | commands: %{&1.commands | executing: :running}})
+
+      assert {:noreply, new_state, opts} =
+               App.update({:info, {:command_started, {:ok, cmd_pid}}}, state)
+
+      assert new_state.commands.executing_pid == cmd_pid
+      assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
+    end
+
+    test "{:command_started, {:error, reason}} surfaces as the command result" do
+      state = Fixtures.sample_state(%{active_panel: :commands})
+
+      assert {:noreply, new_state} =
+               App.update({:info, {:command_started, {:error, :no_runtime}}}, state)
+
+      assert new_state.commands.result == {:error, :no_runtime}
+      assert new_state.commands.executing == nil
+    end
+
+    test "c cancels the running command" do
+      cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      state =
+        Fixtures.sample_state(%{active_panel: :commands})
+        |> then(&%{&1 | commands: %{&1.commands | executing: :running, executing_pid: cmd_pid}})
+
+      Mimic.expect(BB.Command, :cancel, fn ^cmd_pid -> :ok end)
+
+      event = %ExRatatui.Event.Key{code: "c", kind: "press"}
+
+      assert {:noreply, unchanged} = App.update({:event, event}, state)
+      assert unchanged.commands.executing_pid == cmd_pid
+    end
+
+    test "c is inert in the commands panel when nothing is running" do
+      state = Fixtures.sample_state(%{active_panel: :commands})
+
+      Mimic.reject(&BB.Command.cancel/1)
+
+      event = %ExRatatui.Event.Key{code: "c", kind: "press"}
+
+      assert {:noreply, _state} = App.update({:event, event}, state)
     end
 
     test "enter does nothing for blocked command" do
