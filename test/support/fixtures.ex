@@ -225,7 +225,7 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Robot, :joints_in_order, fn _robot -> sample_joint_list() end)
     Mimic.stub(BB.Robot.Joint, :movable?, fn _joint -> true end)
     Mimic.stub(BB.Robot.Runtime, :get_robot, fn _robot -> sample_robot_struct() end)
-    Mimic.stub(BB.Robot.Runtime, :positions, fn _robot -> %{shoulder: 0.0, elbow: 45.0} end)
+    Mimic.stub(BB.Robot.Runtime, :configurations, fn _robot -> %{shoulder: 0.0, elbow: 45.0} end)
     Mimic.stub(BB.Robot.Runtime, :state, fn _robot -> runtime_state end)
     Mimic.stub(BB.Parameter, :list, fn _robot, _opts -> [] end)
     Mimic.stub(BB.Parameter, :set, fn _robot, _path, _value -> :ok end)

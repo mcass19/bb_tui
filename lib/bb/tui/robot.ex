@@ -92,10 +92,14 @@ defmodule BB.TUI.Robot do
   def get_robot(robot, nil), do: Runtime.get_robot(robot)
   def get_robot(robot, node), do: rpc(node, BB.Robot.Runtime, :get_robot, [robot])
 
-  @doc "Returns the latest joint positions known by the runtime."
-  @spec positions(module(), maybe_node()) :: %{atom() => float()}
-  def positions(robot, nil), do: Runtime.positions(robot)
-  def positions(robot, node), do: rpc(node, BB.Robot.Runtime, :positions, [robot])
+  @doc """
+  Returns the latest joint configurations known by the runtime.
+
+  Values are floats for single-DoF joints — the only kind the TUI drives. Planar and floating joints yield transform structs; see `BB.Robot.Runtime.configurations/1`.
+  """
+  @spec configurations(module(), maybe_node()) :: %{atom() => float() | struct()}
+  def configurations(robot, nil), do: Runtime.configurations(robot)
+  def configurations(robot, node), do: rpc(node, BB.Robot.Runtime, :configurations, [robot])
 
   @doc "Returns the parameter list (with metadata maps) for the robot."
   @spec list_parameters(module(), keyword(), maybe_node()) :: [{list(), term()}]
