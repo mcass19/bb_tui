@@ -149,13 +149,13 @@ defmodule BB.TUI.App do
     renderers = Keyword.get(opts, :renderers, %{})
 
     robot_struct = Robot.get_robot(robot, node)
-    positions = Robot.positions(robot, node)
+    configurations = Robot.configurations(robot, node)
 
     joints =
       robot_struct
       |> BB.Robot.joints_in_order()
       |> Enum.filter(&Joint.movable?/1)
-      |> Map.new(&{&1.name, %{joint: &1, position: positions[&1.name] || 0.0, target: nil}})
+      |> Map.new(&{&1.name, %{joint: &1, position: configurations[&1.name] || 0.0, target: nil}})
 
     commands = Robot.discover_commands(robot, node)
     bridges = Robot.list_bridges(robot, node)
