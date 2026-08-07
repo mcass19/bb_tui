@@ -108,7 +108,7 @@ All state transitions live in `BB.TUI.State` as pure functions — no side effec
 
 Robots can publish sensor data faster than a terminal can usefully redraw, so the event log debounces repeats of the same `{path, payload-type}` within a one-second window, and sensor-driven renders coalesce to at most one frame every ~33ms (~30fps). Key presses, command results, and safety/parameter/state changes still render immediately. Both windows are fields on `BB.TUI.State.Throttle`.
 
-The Visualization tab is built the same way — as a pure projection of state. `BB.TUI.Viz.RobotScene` reads the robot's URDF topology and the live joint positions, runs forward kinematics down the kinematic chain, and emits an `ExRatatui.ThreeD` scene-graph of links and joints; `BB.TUI.Panels.Visualization` hands that scene, plus the orbit camera and render mode held in `BB.TUI.State.Viz`, to ExRatatui's `Viewport3D` widget. Every sensor frame that moves a joint re-runs the kinematics, so the on-screen arm tracks the real one. `Viewport3D` picks the sharpest pixel protocol the terminal advertises (kitty / sixel / iTerm2) and falls back to half-block, braille, or ASCII when those aren't available — which is why the view stays usable over SSH; the `m` key forces a specific mode.
+The Visualization tab is built the same way — as a pure projection of state. `BB.TUI.Viz.RobotScene` reads the robot's URDF topology and the live joint configurations, hands them to bb core's `BB.Robot.Kinematics` for base-frame link transforms — so every joint type poses correctly, planar and floating included — and emits an `ExRatatui.ThreeD` scene of the robot's links; `BB.TUI.Panels.Visualization` hands that scene, plus the orbit camera and render mode held in `BB.TUI.State.Viz`, to ExRatatui's `Viewport3D` widget. Every sensor frame that moves a joint re-runs the kinematics, so the on-screen arm tracks the real one. `Viewport3D` picks the sharpest pixel protocol the terminal advertises (kitty / sixel / iTerm2) and falls back to half-block, braille, or ASCII when those aren't available — which is why the view stays usable over SSH; the `m` key forces a specific mode.
 
 ## Running commands
 
@@ -127,10 +127,11 @@ mix bb.tui --robot Dev.TestRobot
 
 - Commands with all argument shapes — `home` (no args), `move` (enum + float), `log` (string + integer), `wobble` (always returns `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber is visible), and `stream` (emits a high-rate `JointState` burst to show debounce + render coalescing).
 - Telemetry demos — `power` (drains a simulated battery so the status-bar readout shifts green → yellow → red) and `diagnostics` (publishes a `[:safety, :error]` hardware-error report and an `[:estimator]` pose so both surface in the event log).
+- A multi-DoF demo — the arm rides a planar `base_motion` joint, and `drive` sends the base around a ~3s circle of `Transform2D` poses: the joints panel shows the read-only `pla` row tracking the pose, the event stream renders it compactly as `(x, y, θ°)`, and the 3D view shows the whole arm driving the loop.
 - Parameter groups covering every primitive type — float, integer, boolean, atom — most with `:min` / `:max` so 1%-of-range stepping applies.
 - A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab.
 
-The WidowX-200 ships a full URDF, so the Visualization tab is live in dev too — press `]` to switch to it, then move joints from the Joint Control panel or run `stream` to watch the 3D arm repose in real time.
+The WidowX-200 ships a full URDF, so the Visualization tab is live in dev too — press `]` to switch to it, then move joints from the Joint Control panel, run `stream` to watch the 3D arm repose in real time, or run `drive` to watch it tour the ground plane.
 
 Exercising the SSH and Erlang-distribution transports against the simulated robot is covered in the [Transports guide](guides/transports.md#testing-transports-locally).
 
