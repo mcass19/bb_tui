@@ -9,10 +9,13 @@ defmodule BB.TUI.Panels.VisualizationTest do
 
   defp robot do
     %BB.Robot{
+      name: :viz_test_robot,
       root_link: :base,
+      topology: %BB.Robot.Topology{link_order: [:base]},
       links: %{
         base: %BB.Robot.Link{
           name: :base,
+          parent_joint: nil,
           child_joints: [],
           visual: %{
             origin: {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},

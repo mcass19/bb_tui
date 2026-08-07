@@ -1,30 +1,51 @@
 defmodule BB.TUI.Viz.RobotScene do
   @moduledoc """
   Builds an `ExRatatui.ThreeD.Scene` from a `BB.Robot` topology and live joint
-  positions, running forward kinematics.
+  configurations.
 
-  The robot is Z-up (URDF); the whole tree is wrapped in a -90°-about-X root frame
-  so it renders in the engine's Y-up conventions. Pure: `(robot_struct, positions)`
+  Forward kinematics is delegated to `BB.Robot.Kinematics.all_link_transforms/2`,
+  so every joint type — planar and floating included — poses correctly; this
+  module only converts base-frame link transforms into the engine's scene. The
+  robot is Z-up (URDF); the scene is wrapped in a -90°-about-X root frame so it
+  renders in the engine's Y-up conventions. Pure: `(robot_struct, configurations)`
   in, `Scene` out.
   """
 
   require Logger
 
+  alias BB.Math.{Quaternion, Vec3}
+  alias BB.Math.Transform, as: BBTransform
+  alias BB.Robot.Kinematics
   alias ExRatatui.ThreeD.{Camera, Light, Material, Mesh, Node, Object, Scene, Transform}
 
   @default_color {160, 160, 170}
   @half_pi :math.pi() / 2.0
 
   @doc """
-  Builds the 3D scene for `robot` at the given joint `positions`.
+  Builds the 3D scene for `robot` at the given joint `configurations`.
 
   Options: `:lights` and `:background` override the defaults.
   """
-  @spec build(struct(), %{atom() => number()}, keyword()) :: Scene.t()
-  def build(robot, positions, opts \\ []) do
+  @spec build(struct(), %{atom() => number() | struct()}, keyword()) :: Scene.t()
+  def build(robot, configurations, opts \\ []) do
+    transforms = Kinematics.all_link_transforms(robot, configurations)
+
+    link_nodes =
+      Enum.flat_map(robot.topology.link_order, fn link_name ->
+        link = Map.fetch!(robot.links, link_name)
+
+        case visual_object(link.visual) do
+          nil ->
+            []
+
+          visual ->
+            [%Node{transform: world_transform(Map.fetch!(transforms, link_name)), visual: visual}]
+        end
+      end)
+
     root_node = %Node{
       transform: %Transform{rotation: {:axis_angle, {1.0, 0.0, 0.0}, -@half_pi}},
-      children: [link_node(robot, robot.root_link, positions)]
+      children: link_nodes
     }
 
     Node.to_scene(root_node,
@@ -47,52 +68,15 @@ defmodule BB.TUI.Viz.RobotScene do
     ]
   end
 
-  # A link node: identity frame, optional visual, children = child joint nodes.
-  defp link_node(robot, link_name, positions) do
-    link = Map.fetch!(robot.links, link_name)
+  # bb base-frame transform (4x4) -> engine node transform (translation + quaternion).
+  defp world_transform(%BBTransform{} = transform) do
+    translation = BBTransform.get_translation(transform)
+    q = Quaternion.from_rotation_matrix(BBTransform.get_rotation(transform))
 
-    %Node{
-      transform: %Transform{},
-      visual: visual_object(link.visual),
-      children: Enum.map(link.child_joints, &joint_node(robot, &1, positions))
+    %Transform{
+      position: {Vec3.x(translation), Vec3.y(translation), Vec3.z(translation)},
+      rotation: {:quat, {Quaternion.x(q), Quaternion.y(q), Quaternion.z(q), Quaternion.w(q)}}
     }
-  end
-
-  # A joint node: frame = origin ∘ motion, child = the joint's child link.
-  defp joint_node(robot, joint_name, positions) do
-    joint = Map.fetch!(robot.joints, joint_name)
-    value = Map.get(positions, joint_name, 0.0)
-
-    %Node{
-      transform: joint_frame(joint, value),
-      children: [link_node(robot, joint.child_link, positions)]
-    }
-  end
-
-  defp joint_frame(joint, value) do
-    origin = origin_transform(joint.origin)
-    Transform.compose(origin, motion(joint.type, joint.axis, value))
-  end
-
-  defp motion(type, axis, value) when type in [:revolute, :continuous] do
-    %Transform{rotation: {:axis_angle, axis_or_z(axis), value}}
-  end
-
-  defp motion(:prismatic, axis, value) do
-    {ax, ay, az} = axis_or_z(axis)
-    %Transform{position: {ax * value, ay * value, az * value}}
-  end
-
-  defp motion(_type, _axis, _value), do: %Transform{}
-
-  defp axis_or_z(nil), do: {0.0, 0.0, 1.0}
-  defp axis_or_z({_, _, _} = axis), do: axis
-
-  # Joint origin: %{position:, orientation:}. Build translate ∘ rpy.
-  defp origin_transform(nil), do: %Transform{}
-
-  defp origin_transform(%{position: pos, orientation: rpy}) do
-    Transform.compose(%Transform{position: pos}, rpy_transform(rpy))
   end
 
   # URDF rpy = Rz(yaw)·Ry(pitch)·Rx(roll).

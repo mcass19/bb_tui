@@ -16,7 +16,7 @@ defmodule BB.TUI.Panels.Visualization do
 
   @spec render_panes(State.t(), struct()) :: [{struct(), struct()}]
   def render_panes(%State{robot_struct: robot} = state, area) do
-    scene = RobotScene.build(robot, positions(state))
+    scene = RobotScene.build(robot, configurations(state))
     mode = State.viz_render_mode(state)
 
     # `render_mode` (cycled with `m`) is `:auto` by default — crisp pixel graphics
@@ -47,7 +47,7 @@ defmodule BB.TUI.Panels.Visualization do
     }
   end
 
-  defp positions(%State{joints: %{entries: entries}}) do
+  defp configurations(%State{joints: %{entries: entries}}) do
     Map.new(entries, fn {name, %{position: pos}} -> {name, pos} end)
   end
 end
