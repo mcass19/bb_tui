@@ -3,6 +3,8 @@ defmodule BB.TUI.AppTest do
   use Mimic
   doctest BB.TUI
 
+  alias BB.Math.Transform
+  alias BB.Math.Transform2D
   alias BB.TUI.App
   alias BB.TUI.Panels.Events
   alias BB.TUI.Test.Fixtures
@@ -103,6 +105,23 @@ defmodule BB.TUI.AppTest do
 
       # Exactly the default set — no extra paths subscribed.
       refute_received {:subscribed, _other}
+    end
+
+    test "init seeds joints absent from the runtime with their type's identity" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.stub(BB.Robot, :joints_in_order, fn _robot ->
+        [
+          %BB.Robot.Joint{name: :base_motion, type: :planar},
+          %BB.Robot.Joint{name: :body, type: :floating},
+          %BB.Robot.Joint{name: :lift, type: :prismatic}
+        ]
+      end)
+
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
+      assert state.joints.entries.base_motion.position == Transform2D.identity()
+      assert state.joints.entries.body.position == Transform.identity()
+      assert state.joints.entries.lift.position == 0.0
     end
 
     test "loads commands from BB.Dsl.Info" do
@@ -1039,6 +1058,29 @@ defmodule BB.TUI.AppTest do
       assert new_state.joints.entries.shoulder.position > 0.0
     end
 
+    test "right arrow does not adjust a planar joint" do
+      joints = %{
+        base_motion: %{
+          joint: %{name: :base_motion, type: :planar},
+          position: Transform2D.identity()
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed
+        })
+
+      event = %ExRatatui.Event.Key{code: "right", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.joints.entries.base_motion.position == Transform2D.identity()
+      assert new_state.joints.entries.base_motion[:target] == nil
+    end
+
     test "L key increases position by 10x step" do
       joints = %{
         shoulder: %{
@@ -1880,6 +1922,23 @@ defmodule BB.TUI.AppTest do
       assert new_state.joints.entries.elbow.position == 20.0
       assert length(new_state.events.list) == 1
       assert new_state.throttle.render_pending?
+    end
+
+    test "sensor message carrying a planar configuration stores the struct" do
+      Fixtures.stub_bb_modules()
+
+      entries = %{
+        base_motion: %{joint: %{type: :planar}, position: Transform2D.identity()}
+      }
+
+      state = Fixtures.sample_state(%{joints: entries})
+      pose = Transform2D.new(0.5, -0.25, 1.0)
+      msg = %{payload: %{names: [:base_motion], positions: [pose]}}
+
+      assert {:noreply, new_state, render?: false} =
+               App.update({:info, {:bb, [:sensor, :odom], msg}}, state)
+
+      assert new_state.joints.entries.base_motion.position == pose
     end
 
     test "sensor message carrying battery telemetry records it in state.power" do

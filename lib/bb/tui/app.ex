@@ -106,6 +106,8 @@ defmodule BB.TUI.App do
 
   use ExRatatui.App, runtime: :reducer
 
+  alias BB.Math.Transform
+  alias BB.Math.Transform2D
   alias BB.Robot.Joint
   alias BB.TUI.Panels
   alias BB.TUI.Robot
@@ -155,7 +157,10 @@ defmodule BB.TUI.App do
       robot_struct
       |> BB.Robot.joints_in_order()
       |> Enum.filter(&Joint.movable?/1)
-      |> Map.new(&{&1.name, %{joint: &1, position: configurations[&1.name] || 0.0, target: nil}})
+      |> Map.new(
+        &{&1.name,
+         %{joint: &1, position: configurations[&1.name] || default_configuration(&1), target: nil}}
+      )
 
     commands = Robot.discover_commands(robot, node)
     bridges = Robot.list_bridges(robot, node)
@@ -714,7 +719,7 @@ defmodule BB.TUI.App do
   # immediate render (render?: false) and flag a pending render; the
   # :sensor_flush tick armed by subscriptions/1 performs one coalesced frame.
   def update({:info, {:bb, [:sensor | _] = path, %{payload: payload} = msg}}, state) do
-    positions =
+    configurations =
       case payload do
         %{names: names, positions: pos} -> Enum.zip(names, pos) |> Map.new()
         _ -> %{}
@@ -722,7 +727,7 @@ defmodule BB.TUI.App do
 
     state =
       state
-      |> State.update_positions(positions)
+      |> State.update_configurations(configurations)
       |> State.update_power(payload)
       |> State.append_event(path, msg)
       |> State.mark_render_pending()
@@ -890,7 +895,7 @@ defmodule BB.TUI.App do
       nil ->
         {:noreply, state}
 
-      %{position: nil} ->
+      %{position: pos} when not is_number(pos) ->
         {:noreply, state}
 
       %{position: pos, joint: joint} ->
@@ -927,6 +932,11 @@ defmodule BB.TUI.App do
 
     Robot.publish(robot, [:sensor, :simulated], msg, node)
   end
+
+  # A joint the runtime has no configuration for starts at its type's identity.
+  defp default_configuration(%{type: :planar}), do: Transform2D.identity()
+  defp default_configuration(%{type: :floating}), do: Transform.identity()
+  defp default_configuration(_joint), do: 0.0
 
   defp find_actuator_for_joint(%{actuators: actuators}, joint_name) do
     actuators

@@ -10,6 +10,9 @@ defmodule BB.TUI.Panels.Joints do
   Pure function — takes state, returns a widget struct.
   """
 
+  alias BB.Math.Transform
+  alias BB.Math.Transform2D
+  alias BB.Math.Vec3
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Style
@@ -104,6 +107,12 @@ defmodule BB.TUI.Panels.Joints do
       iex> BB.TUI.Panels.Joints.format_type(%{type: :continuous})
       "con"
 
+      iex> BB.TUI.Panels.Joints.format_type(%{type: :planar})
+      "pla"
+
+      iex> BB.TUI.Panels.Joints.format_type(%{type: :floating})
+      "flo"
+
       iex> BB.TUI.Panels.Joints.format_type(%{type: :fixed})
       "fix"
 
@@ -115,12 +124,17 @@ defmodule BB.TUI.Panels.Joints do
   def format_type(%{type: :prismatic}), do: "pri"
   def format_type(%{type: :continuous}), do: "con"
   def format_type(%{type: :fixed}), do: "fix"
+  def format_type(%{type: :planar}), do: "pla"
+  def format_type(%{type: :floating}), do: "flo"
   def format_type(_), do: "-"
 
   @doc """
   Formats position with appropriate units based on joint type.
 
   Revolute/continuous joints show degrees, prismatic joints show millimeters.
+  Multi-DoF configurations render as a compact pose — `(x, y, θ°)` in meters
+  for planar, the translation `(x, y, z)` in meters for floating; both are
+  display-only.
 
   ## Examples
 
@@ -132,9 +146,25 @@ defmodule BB.TUI.Panels.Joints do
 
       iex> BB.TUI.Panels.Joints.format_position(nil, %{type: :revolute})
       "N/A"
+
+      iex> BB.TUI.Panels.Joints.format_position(BB.Math.Transform2D.new(0.12, -0.3, 1.5708), %{type: :planar})
+      "(0.12, -0.30, 90.0°)"
+
+      iex> BB.TUI.Panels.Joints.format_position(BB.Math.Transform.identity(), %{type: :floating})
+      "(0.00, 0.00, 0.00)"
   """
-  @spec format_position(number() | nil, map()) :: String.t()
+  @spec format_position(number() | nil | struct(), map()) :: String.t()
   def format_position(nil, _joint), do: "N/A"
+
+  def format_position(%Transform2D{x: x, y: y, theta: theta}, _joint) do
+    "(#{meters(x)}, #{meters(y)}, #{float_to_str(theta * 180.0 / :math.pi())}°)"
+  end
+
+  def format_position(%Transform{} = transform, _joint) do
+    translation = Transform.get_translation(transform)
+
+    "(#{meters(Vec3.x(translation))}, #{meters(Vec3.y(translation))}, #{meters(Vec3.z(translation))})"
+  end
 
   def format_position(pos, %{type: :prismatic}) do
     mm = pos * 1000
@@ -188,6 +218,8 @@ defmodule BB.TUI.Panels.Joints do
   defp float_to_str(val) when is_float(val), do: :erlang.float_to_binary(val, decimals: 1)
   defp float_to_str(val) when is_integer(val), do: "#{val}.0"
 
+  defp meters(value), do: :erlang.float_to_binary(value * 1.0, decimals: 2)
+
   # ── Rich-text cell helpers ─────────────────────────────────
 
   defp name_span(name, %{actuators: []}) do
@@ -221,6 +253,11 @@ defmodule BB.TUI.Panels.Joints do
   defp position_modifiers(_), do: [:bold]
 
   defp position_bar_line(nil, _joint, _proximity, _target), do: ""
+
+  defp position_bar_line(pos, _joint, _proximity, _target) when is_struct(pos) do
+    %Line{spans: [%Span{content: "read-only", style: %Style{fg: Theme.dim_text()}}]}
+  end
+
   defp position_bar_line(_pos, %{type: :continuous}, _proximity, _target), do: ""
 
   defp position_bar_line(pos, joint, proximity, target) do

@@ -2,6 +2,7 @@ defmodule BB.TUI.Panels.JointsTest do
   use ExUnit.Case, async: true
   doctest BB.TUI.Panels.Joints
 
+  alias BB.Math.Transform2D
   alias BB.TUI.Panels.Joints
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Text.{Line, Span}
@@ -47,6 +48,20 @@ defmodule BB.TUI.Panels.JointsTest do
       row = hd(widget.rows)
       assert Enum.at(row, 1) == "rev"
       assert cell_text(Enum.at(row, 2)) == "28.6°"
+    end
+
+    test "renders a planar joint row read-only" do
+      entries = %{
+        base_motion: %{
+          joint: %{name: :base_motion, type: :planar},
+          position: Transform2D.new(0.12, -0.3, 1.5708)
+        }
+      }
+
+      state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
+      assert %ExRatatui.Widgets.Table{rows: [row]} = BB.TUI.Panels.Joints.render(state, false)
+      assert [_name, "pla", _position, bar] = row
+      assert %ExRatatui.Text.Line{spans: [%ExRatatui.Text.Span{content: "read-only"}]} = bar
     end
 
     test "formats prismatic positions in millimeters" do

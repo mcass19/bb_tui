@@ -424,24 +424,31 @@ defmodule BB.TUI.State do
   end
 
   @doc """
-  Updates joint positions from a sensor message.
+  Updates joint configurations from a sensor message.
 
   Only updates joints that exist in the current state; unknown joint names
-  are silently ignored.
+  are silently ignored. Values are stored verbatim — a float for single-DoF
+  joints, a `BB.Math.Transform2D` for planar, a `BB.Math.Transform` for
+  floating.
 
   ## Examples
 
       iex> entries = %{shoulder: %{joint: %{}, position: 0.0}}
       iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
-      iex> BB.TUI.State.update_positions(state, %{shoulder: 42.0}).joints.entries.shoulder.position
+      iex> BB.TUI.State.update_configurations(state, %{shoulder: 42.0}).joints.entries.shoulder.position
       42.0
+
+      iex> entries = %{base: %{joint: %{}, position: 0.0}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
+      iex> BB.TUI.State.update_configurations(state, %{base: BB.Math.Transform2D.new(1.0, 2.0, 0.0)}).joints.entries.base.position
+      %BB.Math.Transform2D{x: 1.0, y: 2.0, theta: 0.0}
   """
-  @spec update_positions(t(), %{atom() => float()}) :: t()
-  def update_positions(%__MODULE__{joints: %{entries: entries}} = state, new_positions) do
+  @spec update_configurations(t(), %{atom() => float() | struct()}) :: t()
+  def update_configurations(%__MODULE__{joints: %{entries: entries}} = state, new_configurations) do
     updated =
       Map.new(entries, fn {name, joint_data} ->
-        case Map.fetch(new_positions, name) do
-          {:ok, position} -> {name, %{joint_data | position: position}}
+        case Map.fetch(new_configurations, name) do
+          {:ok, configuration} -> {name, %{joint_data | position: configuration}}
           :error -> {name, joint_data}
         end
       end)
@@ -1768,9 +1775,12 @@ defmodule BB.TUI.State do
 
       iex> BB.TUI.State.limit_proximity(99.0, %{type: :continuous})
       :normal
+
+      iex> BB.TUI.State.limit_proximity(BB.Math.Transform2D.identity(), %{limits: %{lower: -1.0, upper: 1.0}})
+      :normal
   """
-  @spec limit_proximity(number() | nil, map()) :: :normal | :warning | :danger
-  def limit_proximity(nil, _joint), do: :normal
+  @spec limit_proximity(term(), map()) :: :normal | :warning | :danger
+  def limit_proximity(pos, _joint) when not is_number(pos), do: :normal
 
   def limit_proximity(pos, joint) do
     case joint_limits(joint) do
