@@ -9,6 +9,9 @@ defmodule BB.TUI.Panels.Events do
   Pure function — takes state, returns a widget struct.
   """
 
+  alias BB.Math.Transform
+  alias BB.Math.Transform2D
+  alias BB.Math.Vec3
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Layout.Rect
@@ -362,16 +365,26 @@ defmodule BB.TUI.Panels.Events do
   end
 
   defp format_value(list) when is_list(list) do
-    items =
-      Enum.map(list, fn
-        f when is_float(f) -> :erlang.float_to_binary(f, decimals: 3)
-        other -> inspect(other)
-      end)
-
-    "[#{Enum.join(items, ", ")}]"
+    "[#{Enum.map_join(list, ", ", &format_scalar/1)}]"
   end
 
-  defp format_value(other), do: inspect(other)
+  defp format_value(other), do: format_scalar(other)
+
+  defp format_scalar(f) when is_float(f), do: :erlang.float_to_binary(f, decimals: 3)
+
+  defp format_scalar(%Transform2D{x: x, y: y, theta: theta}) do
+    "(#{compact(x)}, #{compact(y)}, #{:erlang.float_to_binary(theta * 180.0 / :math.pi(), decimals: 1)}°)"
+  end
+
+  defp format_scalar(%Transform{} = transform) do
+    translation = Transform.get_translation(transform)
+
+    "(#{compact(Vec3.x(translation))}, #{compact(Vec3.y(translation))}, #{compact(Vec3.z(translation))})"
+  end
+
+  defp format_scalar(other), do: inspect(other)
+
+  defp compact(value), do: :erlang.float_to_binary(value * 1.0, decimals: 2)
 
   # bb's command pubsub paths look like `[:command, :move, #Reference<…>]`.
   # The execution_id reference is internal correlation and doesn't render

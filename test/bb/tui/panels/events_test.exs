@@ -2,6 +2,8 @@ defmodule BB.TUI.Panels.EventsTest do
   use ExUnit.Case, async: true
   doctest BB.TUI.Panels.Events
 
+  alias BB.Math.Transform
+  alias BB.Math.Transform2D
   alias BB.TUI.Panels.Events
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
@@ -150,6 +152,25 @@ defmodule BB.TUI.Panels.EventsTest do
 
       assert scrollbar_rect.width == 0
       assert scrollbar_rect.height == 0
+    end
+  end
+
+  describe "format_event_details/1 with multi-DoF configurations" do
+    test "detail lines render planar and floating configurations compactly" do
+      pose2d = Transform2D.new(0.1, 0.2, :math.pi() / 2)
+      ts = ~U[2026-01-15 18:23:12.000Z]
+
+      event =
+        {ts, [:sensor, :odom], %{payload: %{names: [:base, :lift], positions: [pose2d, 0.5]}}}
+
+      details = Events.format_event_details(event)
+      positions_line = Enum.find(details, &(&1 =~ "positions"))
+      assert positions_line =~ "(0.10, 0.20, 90.0°)"
+      assert positions_line =~ "0.500"
+
+      floating = {ts, [:sensor, :odom], %{payload: %{positions: [Transform.identity()]}}}
+      [floating_line] = Events.format_event_details(floating)
+      assert floating_line =~ "(0.00, 0.00, 0.00)"
     end
   end
 
