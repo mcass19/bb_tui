@@ -33,7 +33,7 @@ defmodule BB.TUI.RobotTest do
       Mimic.stub(BB.Safety, :state, fn BB.TUI.TestRobot -> :disarmed end)
       Mimic.stub(BB.Robot.Runtime, :state, fn BB.TUI.TestRobot -> :idle end)
       Mimic.stub(BB.Robot.Runtime, :get_robot, fn BB.TUI.TestRobot -> %{name: @robot} end)
-      Mimic.stub(BB.Robot.Runtime, :positions, fn BB.TUI.TestRobot -> %{shoulder: 1.0} end)
+      Mimic.stub(BB.Robot.Runtime, :configurations, fn BB.TUI.TestRobot -> %{shoulder: 1.0} end)
 
       Mimic.stub(BB.Parameter, :list, fn BB.TUI.TestRobot, [] ->
         [{[:speed], %{value: 100, type: :integer}}]
@@ -54,8 +54,8 @@ defmodule BB.TUI.RobotTest do
       assert Robot.get_robot(@robot, nil) == %{name: @robot}
     end
 
-    test "positions/2 delegates locally when node is nil" do
-      assert Robot.positions(@robot, nil) == %{shoulder: 1.0}
+    test "configurations/2 delegates locally when node is nil" do
+      assert Robot.configurations(@robot, nil) == %{shoulder: 1.0}
     end
 
     test "list_parameters/3 delegates locally when node is nil" do
@@ -442,15 +442,15 @@ defmodule BB.TUI.RobotTest do
       assert Robot.get_robot(@robot, @remote) == %{name: BB.TUI.TestRobot}
     end
 
-    test "positions/2 routes through :rpc.call" do
+    test "configurations/2 routes through :rpc.call" do
       Mimic.expect(BB.TUI.Rpc, :call, fn @remote,
                                          BB.Robot.Runtime,
-                                         :positions,
+                                         :configurations,
                                          [BB.TUI.TestRobot] ->
         %{shoulder: 1.5}
       end)
 
-      assert Robot.positions(@robot, @remote) == %{shoulder: 1.5}
+      assert Robot.configurations(@robot, @remote) == %{shoulder: 1.5}
     end
 
     test "list_parameters/3 routes through :rpc.call" do

@@ -99,6 +99,15 @@ defmodule Dev.TestRobot do
       handler(Dev.DiagnosticsHandler)
       allowed_states([:idle])
     end
+
+    # Planar-base demo (~3s circle) — drives the multi-DoF `base_motion`
+    # joint via `Transform2D` poses: the read-only row in the joints panel
+    # tracks the pose, Events shows the compact `(x, y, θ°)` form, and the
+    # whole arm drives a loop in the 3D view.
+    command :drive do
+      handler(Dev.DriveHandler)
+      allowed_states([:idle])
+    end
   end
 
   parameters do
@@ -128,116 +137,110 @@ defmodule Dev.TestRobot do
   end
 
   topology do
-    link :base_link do
+    # A planar base under the arm: the WidowX rides a small mobile platform.
+    # `base_motion` demonstrates multi-DoF joints end-to-end — a read-only row
+    # in the joints panel, compact poses in the event stream, and a driving
+    # robot in the 3D view (see the `drive` command).
+    link :base_footprint do
       visual do
         origin do
-          z(~u(0.036 meter))
+          z(~u(0.004 meter))
         end
 
         cylinder do
-          radius(~u(0.04 meter))
-          height(~u(0.072 meter))
+          radius(~u(0.11 meter))
+          height(~u(0.008 meter))
         end
 
         material do
-          name(:base_grey)
+          name(:footprint_dark)
 
           color do
-            red(0.3)
-            green(0.3)
-            blue(0.3)
+            red(0.15)
+            green(0.15)
+            blue(0.18)
             alpha(1.0)
           end
         end
       end
 
-      joint :waist do
-        type(:revolute)
+      joint :base_motion do
+        type(:planar)
 
         origin do
-          z(~u(0.072 meter))
+          z(~u(0.008 meter))
         end
 
-        limit do
-          lower(~u(-180 degree))
-          upper(~u(180 degree))
-          effort(~u(8 newton_meter))
-          velocity(~u(180 degree_per_second))
+        # An empty axis block means a Z normal: the horizontal ground plane.
+        axis do
         end
 
-        link :shoulder_link do
+        link :base_link do
           visual do
             origin do
-              z(~u(0.019 meter))
+              z(~u(0.036 meter))
             end
 
-            box do
-              x(~u(0.05 meter))
-              y(~u(0.045 meter))
-              z(~u(0.038 meter))
+            cylinder do
+              radius(~u(0.04 meter))
+              height(~u(0.072 meter))
             end
 
             material do
-              name(:shoulder_black)
+              name(:base_grey)
 
               color do
-                red(0.1)
-                green(0.1)
-                blue(0.1)
+                red(0.3)
+                green(0.3)
+                blue(0.3)
                 alpha(1.0)
               end
             end
           end
 
-          joint :shoulder do
+          joint :waist do
             type(:revolute)
 
             origin do
-              z(~u(0.03865 meter))
-            end
-
-            axis do
-              roll(~u(90 degree))
+              z(~u(0.072 meter))
             end
 
             limit do
-              lower(~u(-108 degree))
-              upper(~u(113 degree))
-              effort(~u(18 newton_meter))
+              lower(~u(-180 degree))
+              upper(~u(180 degree))
+              effort(~u(8 newton_meter))
               velocity(~u(180 degree_per_second))
             end
 
-            link :upper_arm_link do
+            link :shoulder_link do
               visual do
                 origin do
-                  x(~u(0.025 meter))
-                  z(~u(0.1 meter))
+                  z(~u(0.019 meter))
                 end
 
                 box do
-                  x(~u(0.035 meter))
-                  y(~u(0.035 meter))
-                  z(~u(0.2 meter))
+                  x(~u(0.05 meter))
+                  y(~u(0.045 meter))
+                  z(~u(0.038 meter))
                 end
 
                 material do
-                  name(:upper_arm_silver)
+                  name(:shoulder_black)
 
                   color do
-                    red(0.7)
-                    green(0.7)
-                    blue(0.75)
+                    red(0.1)
+                    green(0.1)
+                    blue(0.1)
                     alpha(1.0)
                   end
                 end
               end
 
-              joint :elbow do
+              joint :shoulder do
                 type(:revolute)
 
                 origin do
-                  x(~u(0.05 meter))
-                  z(~u(0.2 meter))
+                  z(~u(0.03865 meter))
                 end
 
                 axis do
@@ -246,25 +249,26 @@ defmodule Dev.TestRobot do
 
                 limit do
                   lower(~u(-108 degree))
-                  upper(~u(93 degree))
-                  effort(~u(13 newton_meter))
+                  upper(~u(113 degree))
+                  effort(~u(18 newton_meter))
                   velocity(~u(180 degree_per_second))
                 end
 
-                link :forearm_link do
+                link :upper_arm_link do
                   visual do
                     origin do
-                      x(~u(0.1 meter))
+                      x(~u(0.025 meter))
+                      z(~u(0.1 meter))
                     end
 
                     box do
-                      x(~u(0.2 meter))
+                      x(~u(0.035 meter))
                       y(~u(0.035 meter))
-                      z(~u(0.035 meter))
+                      z(~u(0.2 meter))
                     end
 
                     material do
-                      name(:forearm_silver)
+                      name(:upper_arm_silver)
 
                       color do
                         red(0.7)
@@ -275,11 +279,12 @@ defmodule Dev.TestRobot do
                     end
                   end
 
-                  joint :wrist_angle do
+                  joint :elbow do
                     type(:revolute)
 
                     origin do
-                      x(~u(0.2 meter))
+                      x(~u(0.05 meter))
+                      z(~u(0.2 meter))
                     end
 
                     axis do
@@ -287,83 +292,83 @@ defmodule Dev.TestRobot do
                     end
 
                     limit do
-                      lower(~u(-100 degree))
-                      upper(~u(123 degree))
-                      effort(~u(5 newton_meter))
+                      lower(~u(-108 degree))
+                      upper(~u(93 degree))
+                      effort(~u(13 newton_meter))
                       velocity(~u(180 degree_per_second))
                     end
 
-                    link :wrist_link do
+                    link :forearm_link do
                       visual do
                         origin do
-                          x(~u(0.0325 meter))
+                          x(~u(0.1 meter))
                         end
 
                         box do
-                          x(~u(0.065 meter))
+                          x(~u(0.2 meter))
                           y(~u(0.035 meter))
                           z(~u(0.035 meter))
                         end
 
                         material do
-                          name(:wrist_black)
+                          name(:forearm_silver)
 
                           color do
-                            red(0.1)
-                            green(0.1)
-                            blue(0.1)
+                            red(0.7)
+                            green(0.7)
+                            blue(0.75)
                             alpha(1.0)
                           end
                         end
                       end
 
-                      joint :wrist_rotate do
+                      joint :wrist_angle do
                         type(:revolute)
 
                         origin do
-                          x(~u(0.065 meter))
+                          x(~u(0.2 meter))
                         end
 
                         axis do
-                          pitch(~u(90 degree))
+                          roll(~u(90 degree))
                         end
 
                         limit do
-                          lower(~u(-180 degree))
-                          upper(~u(180 degree))
-                          effort(~u(1 newton_meter))
+                          lower(~u(-100 degree))
+                          upper(~u(123 degree))
+                          effort(~u(5 newton_meter))
                           velocity(~u(180 degree_per_second))
                         end
 
-                        link :gripper_link do
+                        link :wrist_link do
                           visual do
                             origin do
-                              x(~u(0.02 meter))
+                              x(~u(0.0325 meter))
                             end
 
                             box do
-                              x(~u(0.04 meter))
-                              y(~u(0.05 meter))
-                              z(~u(0.025 meter))
+                              x(~u(0.065 meter))
+                              y(~u(0.035 meter))
+                              z(~u(0.035 meter))
                             end
 
                             material do
-                              name(:gripper_dark)
+                              name(:wrist_black)
 
                               color do
-                                red(0.2)
-                                green(0.2)
-                                blue(0.2)
+                                red(0.1)
+                                green(0.1)
+                                blue(0.1)
                                 alpha(1.0)
                               end
                             end
                           end
 
-                          joint :gripper do
-                            type(:prismatic)
+                          joint :wrist_rotate do
+                            type(:revolute)
 
                             origin do
-                              x(~u(0.0415 meter))
+                              x(~u(0.065 meter))
                             end
 
                             axis do
@@ -371,45 +376,89 @@ defmodule Dev.TestRobot do
                             end
 
                             limit do
-                              lower(~u(0.015 meter))
-                              upper(~u(0.037 meter))
-                              effort(~u(5 newton))
-                              velocity(~u(0.05 meter_per_second))
+                              lower(~u(-180 degree))
+                              upper(~u(180 degree))
+                              effort(~u(1 newton_meter))
+                              velocity(~u(180 degree_per_second))
                             end
 
-                            link :left_finger_link do
+                            link :gripper_link do
                               visual do
                                 origin do
                                   x(~u(0.02 meter))
-                                  y(~u(0.015 meter))
                                 end
 
                                 box do
                                   x(~u(0.04 meter))
-                                  y(~u(0.01 meter))
-                                  z(~u(0.02 meter))
+                                  y(~u(0.05 meter))
+                                  z(~u(0.025 meter))
                                 end
 
                                 material do
-                                  name(:finger_grey)
+                                  name(:gripper_dark)
 
                                   color do
-                                    red(0.4)
-                                    green(0.4)
-                                    blue(0.4)
+                                    red(0.2)
+                                    green(0.2)
+                                    blue(0.2)
                                     alpha(1.0)
                                   end
                                 end
                               end
 
-                              joint :ee_fixed do
-                                type(:fixed)
+                              joint :gripper do
+                                type(:prismatic)
 
                                 origin do
-                                  x(~u(0.0385 meter))
+                                  x(~u(0.0415 meter))
                                 end
 
-                                link(:ee_link)
+                                axis do
+                                  pitch(~u(90 degree))
+                                end
+
+                                limit do
+                                  lower(~u(0.015 meter))
+                                  upper(~u(0.037 meter))
+                                  effort(~u(5 newton))
+                                  velocity(~u(0.05 meter_per_second))
+                                end
+
+                                link :left_finger_link do
+                                  visual do
+                                    origin do
+                                      x(~u(0.02 meter))
+                                      y(~u(0.015 meter))
+                                    end
+
+                                    box do
+                                      x(~u(0.04 meter))
+                                      y(~u(0.01 meter))
+                                      z(~u(0.02 meter))
+                                    end
+
+                                    material do
+                                      name(:finger_grey)
+
+                                      color do
+                                        red(0.4)
+                                        green(0.4)
+                                        blue(0.4)
+                                        alpha(1.0)
+                                      end
+                                    end
+                                  end
+
+                                  joint :ee_fixed do
+                                    type(:fixed)
+
+                                    origin do
+                                      x(~u(0.0385 meter))
+                                    end
+
+                                    link(:ee_link)
+                                  end
+                                end
                               end
                             end
                           end

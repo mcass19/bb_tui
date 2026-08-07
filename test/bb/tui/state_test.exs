@@ -2,6 +2,7 @@ defmodule BB.TUI.StateTest do
   use ExUnit.Case, async: true
   doctest BB.TUI.State
 
+  alias BB.Math.Transform2D
   alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
 
@@ -105,10 +106,10 @@ defmodule BB.TUI.StateTest do
     end
   end
 
-  describe "update_positions/2" do
-    test "updates known joint positions" do
+  describe "update_configurations/2" do
+    test "updates known joint configurations" do
       state = Fixtures.sample_state()
-      state = State.update_positions(state, %{shoulder: 42.0})
+      state = State.update_configurations(state, %{shoulder: 42.0})
 
       assert state.joints.entries.shoulder.position == 42.0
       assert state.joints.entries.elbow.position == 45.0
@@ -116,10 +117,22 @@ defmodule BB.TUI.StateTest do
 
     test "ignores unknown joints" do
       state = Fixtures.sample_state()
-      state = State.update_positions(state, %{wrist: 10.0})
+      state = State.update_configurations(state, %{wrist: 10.0})
 
       assert state.joints.entries.shoulder.position == 0.0
       assert state.joints.entries.elbow.position == 45.0
+    end
+
+    test "stores a planar Transform2D configuration verbatim" do
+      entries = %{base: %{joint: %{}, position: Transform2D.identity()}}
+      state = %State{joints: %BB.TUI.State.Joints{entries: entries}}
+      state = State.update_configurations(state, %{base: Transform2D.new(0.1, 0.2, 0.0)})
+
+      assert state.joints.entries.base.position == %Transform2D{
+               x: 0.1,
+               y: 0.2,
+               theta: 0.0
+             }
     end
   end
 

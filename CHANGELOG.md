@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Follows the `positions` → `configurations` rename in `bb` core (breaking).** `bb` 0.27.0's multi-DoF joint work renamed `BB.Robot.Runtime`'s `positions/1` to `configurations/1` — a joint's configuration is only a float when it has one degree of freedom — so the TUI crashed with an `UndefinedFunctionError` during dashboard init against `bb` >= 0.27. `BB.TUI.Robot`'s `positions/2` is now `configurations/2` and routes to the new accessor both locally and over `:rpc`. The joints panel and the visualization drive single-DoF joints, so values remain floats and behaviour is otherwise unchanged. The `mix.exs` requirement moves from `~> 0.20` to `~> 0.27` to encode the new API. Mirrors `bb_liveview` v0.3.0's migration.
+
+- **Multi-DoF joints flow through the TUI (breaking).** Joint configurations are stored verbatim, shaped to the joint's type — a float for single-DoF joints, a `BB.Math.Transform2D` for planar, a `BB.Math.Transform` for floating — so `BB.TUI.State`'s `update_positions/2` is renamed `update_configurations/2` and dashboard init seeds missing joints with their type's identity. Planar and floating joints appear in the joints panel as read-only rows with a compact pose (`(x, y, θ°)` / translation `(x, y, z)`), target-adjust keys skip them, and event details render their transform entries compactly. Driving them is not possible by design: `BB.Actuator.set_position!/4` takes a single number, and bb has no command API for a transform target.
+
+- **`BB.TUI.Viz.RobotScene` delegates forward kinematics to bb core.** The scene is built from `BB.Robot.Kinematics.all_link_transforms/2` — one flat node per visual link carrying its base-frame transform — instead of a hand-rolled single-DoF FK walk, so planar and floating joints pose correctly in the 3D view and the local FK code is deleted. Requires `robot.topology` (every runtime-built `BB.Robot` has it).
+
 ## [0.3.1] - 2026-07-31
 
 ### Added
