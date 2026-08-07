@@ -100,6 +100,7 @@ defmodule BB.TUI.Test.Fixtures do
     %BB.Robot{
       name: :test_robot,
       root_link: :base,
+      topology: %BB.Robot.Topology{link_order: [:base, :upper, :fore]},
       actuators: %{},
       links: %{
         base: %BB.Robot.Link{

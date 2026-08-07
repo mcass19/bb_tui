@@ -3,16 +3,21 @@ defmodule BB.TUI.Viz.RobotSceneTest do
 
   import ExUnit.CaptureLog
 
+  alias BB.Math.Transform2D
   alias BB.TUI.Viz.RobotScene
   alias ExRatatui.ThreeD.{Object, Scene}
 
   # Minimal 2-link robot: base cylinder -> waist (revolute, +Z) -> arm box.
+  # The arm's visual origin is offset in x so waist rotation genuinely moves it.
   defp robot do
     %BB.Robot{
+      name: :test_robot,
       root_link: :base,
+      topology: %BB.Robot.Topology{link_order: [:base, :arm]},
       links: %{
         base: %BB.Robot.Link{
           name: :base,
+          parent_joint: nil,
           child_joints: [:waist],
           visual: %{
             origin: {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
@@ -22,9 +27,10 @@ defmodule BB.TUI.Viz.RobotSceneTest do
         },
         arm: %BB.Robot.Link{
           name: :arm,
+          parent_joint: :waist,
           child_joints: [],
           visual: %{
-            origin: {{0.0, 0.0, 0.1}, {0.0, 0.0, 0.0}},
+            origin: {{0.05, 0.0, 0.1}, {0.0, 0.0, 0.0}},
             geometry: {:box, %{x: 0.035, y: 0.035, z: 0.2}},
             material: %{name: :silver, color: %{red: 0.7, green: 0.7, blue: 0.75, alpha: 1.0}}
           }
@@ -69,12 +75,43 @@ defmodule BB.TUI.Viz.RobotSceneTest do
     assert_in_delta sz, 0.2, 1.0e-9
   end
 
-  test "rotating the waist moves the arm's world position" do
+  test "arm world pose matches bb forward kinematics" do
+    # waist 0: visual offset (0.05, 0, 0.1) + joint origin (0, 0, 0.072) = (0.05, 0, 0.172) → Y-up (0.05, 0.172, 0)
     s0 = RobotScene.build(robot(), %{waist: 0.0})
+    {x0, y0, z0} = Enum.find(s0.objects, &(&1.mesh.kind == :cube)).transform.position
+    assert_in_delta x0, 0.05, 1.0e-6
+    assert_in_delta y0, 0.172, 1.0e-6
+    assert_in_delta z0, 0.0, 1.0e-6
+
+    # waist π/2: offset rotates to (0, 0.05, 0.1) → world (0, 0.05, 0.172) → Y-up (0, 0.172, -0.05)
     s90 = RobotScene.build(robot(), %{waist: :math.pi() / 2})
-    arm0 = Enum.find(s0.objects, &(&1.mesh.kind == :cube)).transform.position
-    arm90 = Enum.find(s90.objects, &(&1.mesh.kind == :cube)).transform.position
-    refute arm0 == arm90
+    {x90, y90, z90} = Enum.find(s90.objects, &(&1.mesh.kind == :cube)).transform.position
+    assert_in_delta x90, 0.0, 1.0e-6
+    assert_in_delta y90, 0.172, 1.0e-6
+    assert_in_delta z90, -0.05, 1.0e-6
+  end
+
+  test "a planar joint places its child by the Transform2D configuration" do
+    r = robot()
+
+    r =
+      put_in(r.joints[:waist], %BB.Robot.Joint{
+        name: :waist,
+        type: :planar,
+        parent_link: :base,
+        child_link: :arm,
+        origin: %{position: {0.0, 0.0, 0.072}, orientation: {0.0, 0.0, 0.0}},
+        axis: nil,
+        limits: nil
+      })
+
+    # planar (0.1, 0.2, 90°) in the XY plane; visual offset rotates to (0, 0.05, 0.1)
+    # world (0.1, 0.25, 0.172) → Y-up (0.1, 0.172, -0.25)
+    scene = RobotScene.build(r, %{waist: Transform2D.new(0.1, 0.2, :math.pi() / 2)})
+    {x, y, z} = Enum.find(scene.objects, &(&1.mesh.kind == :cube)).transform.position
+    assert_in_delta x, 0.1, 1.0e-6
+    assert_in_delta y, 0.172, 1.0e-6
+    assert_in_delta z, -0.25, 1.0e-6
   end
 
   test "unknown geometry falls back to a cube and logs a warning" do
@@ -101,10 +138,13 @@ defmodule BB.TUI.Viz.RobotSceneTest do
 
   test "sphere geometry, prismatic motion, fixed/nil-axis joints, and nil visual are handled" do
     r = %BB.Robot{
+      name: :test_robot_extras,
       root_link: :a,
+      topology: %BB.Robot.Topology{link_order: [:a, :b, :c]},
       links: %{
         a: %BB.Robot.Link{
           name: :a,
+          parent_joint: nil,
           child_joints: [:slide],
           visual: %{
             origin: {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
@@ -112,9 +152,10 @@ defmodule BB.TUI.Viz.RobotSceneTest do
             material: nil
           }
         },
-        b: %BB.Robot.Link{name: :b, child_joints: [:fixed_j], visual: nil},
+        b: %BB.Robot.Link{name: :b, parent_joint: :slide, child_joints: [:fixed_j], visual: nil},
         c: %BB.Robot.Link{
           name: :c,
+          parent_joint: :fixed_j,
           child_joints: [],
           visual: %{
             origin: nil,
