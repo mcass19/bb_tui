@@ -174,6 +174,29 @@ defmodule BB.TUI.Panels.EventsTest do
     end
   end
 
+  describe "format_event_details/1 with trajectory waypoints" do
+    test "detail lines collapse each waypoint to position and time offset" do
+      event =
+        {~U[2026-01-15 18:23:12.000Z], [:actuator, :shoulder],
+         %{payload: %{waypoints: trajectory_waypoints()}}}
+
+      [waypoints_line] = Events.format_event_details(event)
+
+      assert waypoints_line =~ "[0.00@0ms, 0.30@200ms, 0.60@400ms]"
+      refute waypoints_line =~ "velocity"
+    end
+  end
+
+  # Shaped like `BB.Actuator.follow_trajectory/4`'s normalised output: a
+  # keyword list per waypoint, with the optional rates left unset.
+  defp trajectory_waypoints do
+    [
+      [position: 0.0, velocity: nil, acceleration: nil, time_from_start: 0],
+      [position: 0.3, velocity: nil, acceleration: nil, time_from_start: 200],
+      [position: 0.6, velocity: nil, acceleration: nil, time_from_start: 400]
+    ]
+  end
+
   describe "summarize/2" do
     test "summarizes sensor joint state events" do
       msg = %{payload: %{names: [:a, :b, :c], positions: [1.0, 2.0, 3.0]}}
@@ -193,6 +216,20 @@ defmodule BB.TUI.Panels.EventsTest do
     test "summarizes nested parameter paths" do
       msg = %{payload: %{new_value: 0.5}}
       assert Events.summarize([:param, :controller, :kp], msg) == "controller.kp = 0.5"
+    end
+
+    test "summarizes a repeating trajectory command" do
+      msg = %{payload: %{waypoints: trajectory_waypoints(), repeat: 5}}
+
+      assert Events.summarize([:actuator, :arm, :shoulder], msg) ==
+               "arm.shoulder \u{2190} trajectory 3 waypoints over 400ms \u{00D7}5"
+    end
+
+    test "summarizes a trajectory whose repeat count is absent" do
+      msg = %{payload: %{waypoints: trajectory_waypoints()}}
+
+      assert Events.summarize([:actuator, :shoulder], msg) ==
+               "shoulder \u{2190} trajectory 3 waypoints over 400ms"
     end
 
     test "falls back to inspect for unknown payloads" do

@@ -382,6 +382,14 @@ defmodule BB.TUI.Panels.Events do
     "(#{compact(Vec3.x(translation))}, #{compact(Vec3.y(translation))}, #{compact(Vec3.z(translation))})"
   end
 
+  # Trajectory waypoints arrive as keyword lists (see
+  # `BB.Message.Actuator.Command.Trajectory`), and inspecting each one fills
+  # the detail pane with `velocity: nil, acceleration: nil` noise. Position
+  # and its time offset are what a reader is after.
+  defp format_scalar([{:position, position} | rest]) when is_number(position) do
+    "#{compact(position)}@#{Keyword.get(rest, :time_from_start, 0)}ms"
+  end
+
   defp format_scalar(other), do: inspect(other)
 
   defp compact(value), do: :erlang.float_to_binary(value * 1.0, decimals: 2)
@@ -416,6 +424,14 @@ defmodule BB.TUI.Panels.Events do
 
       iex> BB.TUI.Panels.Events.summarize([:actuator, :waist], %{payload: %{position: 1.57}})
       "waist \u{2190} position 1.570"
+
+      iex> waypoints = [[position: 0.0, time_from_start: 0], [position: 0.6, time_from_start: 400]]
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :shoulder], %{payload: %{waypoints: waypoints, repeat: 1}})
+      "shoulder \u{2190} trajectory 2 waypoints over 400ms"
+
+      iex> waypoints = [[position: 0.0, time_from_start: 0], [position: 0.6, time_from_start: 400]]
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :shoulder], %{payload: %{waypoints: waypoints, repeat: :forever}})
+      "shoulder \u{2190} trajectory 2 waypoints over 400ms \u{00D7}\u{221E}"
 
       iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :started, data: %{goal: %{angle: 1.5}}}})
       "move started angle=1.5"
@@ -453,6 +469,14 @@ defmodule BB.TUI.Panels.Events do
     "#{joint} \u{2190} position #{:erlang.float_to_binary(position / 1, decimals: 3)}"
   end
 
+  def summarize([:actuator | rest], %{payload: %{waypoints: [_ | _] = waypoints} = payload}) do
+    joint = Enum.map_join(rest, ".", &to_string/1)
+    duration = waypoints |> List.last() |> Enum.into(%{}) |> Map.get(:time_from_start, 0)
+
+    "#{joint} \u{2190} trajectory #{length(waypoints)} waypoints over #{duration}ms" <>
+      format_repeat(Map.get(payload, :repeat))
+  end
+
   def summarize([:command, name, _execution_id], %{
         payload: %{status: :started, data: %{goal: goal}}
       }) do
@@ -487,4 +511,10 @@ defmodule BB.TUI.Panels.Events do
   def summarize(_path, message) do
     inspect(message, pretty: false, limit: 30)
   end
+
+  # A trajectory runs once unless it says otherwise, so the common case
+  # stays unadorned.
+  defp format_repeat(repeat) when repeat in [nil, 1], do: ""
+  defp format_repeat(:forever), do: " \u{00D7}\u{221E}"
+  defp format_repeat(count), do: " \u{00D7}#{count}"
 end
