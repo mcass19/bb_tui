@@ -4,7 +4,7 @@ defmodule BB.TUI.MixProject do
   @description "Terminal-based dashboard for Beam Bots robots"
   @source_url "https://github.com/mcass19/bb_tui"
   @changelog_url @source_url <> "/blob/main/CHANGELOG.md"
-  @version "0.3.1"
+  @version "0.4.0"
 
   def project do
     [

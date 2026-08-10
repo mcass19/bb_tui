@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-10
+
 ### Added
 
 - **Trajectory commands read properly in the event log.** A `BB.Message.Actuator.Command.Trajectory` published on `[:actuator | joint]` has `waypoints` rather than a `position`, so it missed the actuator summary clause and fell through to the generic `inspect` — a truncated blob of waypoint keyword lists. It now summarizes as `shoulder ← trajectory 4 waypoints over 2400ms` (with `×5` / `×∞` appended when the trajectory repeats), and the detail pane collapses each waypoint to `position@time` instead of listing the `velocity: nil, acceleration: nil` that `bb` 0.29 made optional. The dev robot gains a `trajectory` command that publishes a real trajectory per joint and then sweeps `shoulder` and `elbow` through its waypoints over ~2.4s, so the 3D view shows motion passing *through* the waypoints instead of snapping between targets.
@@ -76,7 +78,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mcass19/bb_tui/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mcass19/bb_tui/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mcass19/bb_tui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mcass19/bb_tui/compare/v0.1.0...v0.2.0
