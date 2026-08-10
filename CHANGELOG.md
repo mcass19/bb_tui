@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Trajectory commands read properly in the event log.** A `BB.Message.Actuator.Command.Trajectory` published on `[:actuator | joint]` has `waypoints` rather than a `position`, so it missed the actuator summary clause and fell through to the generic `inspect` — a truncated blob of waypoint keyword lists. It now summarizes as `shoulder ← trajectory 4 waypoints over 2400ms` (with `×5` / `×∞` appended when the trajectory repeats), and the detail pane collapses each waypoint to `position@time` instead of listing the `velocity: nil, acceleration: nil` that `bb` 0.29 made optional. The dev robot gains a `trajectory` command that publishes a real trajectory per joint and then sweeps `shoulder` and `elbow` through its waypoints over ~2.4s, so the 3D view shows motion passing *through* the waypoints instead of snapping between targets.
+
 ### Changed
 
 - **Follows the `positions` → `configurations` rename in `bb` core (breaking).** `bb` 0.27.0's multi-DoF joint work renamed `BB.Robot.Runtime`'s `positions/1` to `configurations/1` — a joint's configuration is only a float when it has one degree of freedom — so the TUI crashed with an `UndefinedFunctionError` during dashboard init against `bb` >= 0.27. `BB.TUI.Robot`'s `positions/2` is now `configurations/2` and routes to the new accessor both locally and over `:rpc`. The joints panel and the visualization drive single-DoF joints, so values remain floats and behaviour is otherwise unchanged. The `mix.exs` requirement moves from `~> 0.20` to `~> 0.28 and >= 0.28.1` to encode the new API — the floor is 0.28.1 rather than 0.27.0 because `bb` 0.27.0 and 0.28.0 close a compile-time cycle (`BB.Message.Option` pattern-matches the geometry structs whose modules import it back) that deadlocks Elixir 1.19's parallel compiler; `bb` broke that cycle in 0.28.1, so the `~> 1.19` floor and the two-cell CI matrix stay as they are. Mirrors `bb_liveview` v0.3.0's migration.

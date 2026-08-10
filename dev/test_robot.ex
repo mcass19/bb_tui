@@ -108,6 +108,15 @@ defmodule Dev.TestRobot do
       handler(Dev.DriveHandler)
       allowed_states([:idle])
     end
+
+    # Trajectory demo (~2.4s sweep) — publishes a real `Command.Trajectory`
+    # per joint on `[:actuator | joint]`, so Events shows the waypoint
+    # summary, then moves `shoulder` and `elbow` through those waypoints
+    # instead of snapping between targets.
+    command :trajectory do
+      handler(Dev.TrajectoryHandler)
+      allowed_states([:idle])
+    end
   end
 
   parameters do

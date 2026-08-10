@@ -128,10 +128,11 @@ mix bb.tui --robot Dev.TestRobot
 - Commands with all argument shapes — `home` (no args), `move` (enum + float), `log` (string + integer), `wobble` (always returns `{:error, :wobble_failed}`), `calibrate` (sleeps ~2s so the throbber is visible), and `stream` (emits a high-rate `JointState` burst to show debounce + render coalescing).
 - Telemetry demos — `power` (drains a simulated battery so the status-bar readout shifts green → yellow → red) and `diagnostics` (publishes a `[:safety, :error]` hardware-error report and an `[:estimator]` pose so both surface in the event log).
 - A multi-DoF demo — the arm rides a planar `base_motion` joint, and `drive` sends the base around a ~3s circle of `Transform2D` poses: the joints panel shows the read-only `pla` row tracking the pose, the event stream renders it compactly as `(x, y, θ°)`, and the 3D view shows the whole arm driving the loop.
+- A trajectory demo — `trajectory` publishes a `BB.Message.Actuator.Command.Trajectory` per joint and then sweeps `shoulder` and `elbow` through those waypoints over ~2.4s: the event log summarizes each command as `shoulder ← trajectory 4 waypoints over 2400ms` and lists the waypoints as `position@time`, while the arm moves through them instead of snapping between targets.
 - Parameter groups covering every primitive type — float, integer, boolean, atom — most with `:min` / `:max` so 1%-of-range stepping applies.
 - A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab.
 
-The WidowX-200 ships a full URDF, so the Visualization tab is live in dev too — press `]` to switch to it, then move joints from the Joint Control panel, run `stream` to watch the 3D arm repose in real time, or run `drive` to watch it tour the ground plane.
+The WidowX-200 ships a full URDF, so the Visualization tab is live in dev too — press `]` to switch to it, then move joints from the Joint Control panel, run `stream` to watch the 3D arm repose in real time, run `trajectory` to watch it sweep smoothly through a set of waypoints, or run `drive` to watch it tour the ground plane.
 
 Exercising the SSH and Erlang-distribution transports against the simulated robot is covered in the [Transports guide](guides/transports.md#testing-transports-locally).
 
