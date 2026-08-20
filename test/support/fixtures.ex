@@ -222,7 +222,7 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Safety, :arm, fn _robot -> :ok end)
     Mimic.stub(BB.Safety, :disarm, fn _robot -> :ok end)
     Mimic.stub(BB.Safety, :force_disarm, fn _robot -> :ok end)
-    Mimic.stub(BB.Actuator, :set_position!, fn _robot, _actuator, _pos -> :ok end)
+    Mimic.stub(BB.Actuator, :set_position, fn _robot, _actuator, _pos, _opts -> :ok end)
     Mimic.stub(BB.Robot, :joints_in_order, fn _robot -> sample_joint_list() end)
     Mimic.stub(BB.Robot.Joint, :movable?, fn _joint -> true end)
     Mimic.stub(BB.Robot.Runtime, :get_robot, fn _robot -> sample_robot_struct() end)

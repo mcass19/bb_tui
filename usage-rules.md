@@ -38,7 +38,7 @@ start and extend the dashboard.
 5. **Multi-DoF joints are display-only.** Planar and floating joints (bb 0.27+)
    render as read-only rows — a compact pose in the joints panel, `(x, y, θ°)`
    in event details — and target-adjust keys skip them. This is by design:
-   `BB.Actuator.set_position!/4` takes a single number, so there is no command
+   `BB.Actuator.set_position/4` takes a single number, so there is no command
    path for a transform target. The 3D view poses them correctly via
    `BB.Robot.Kinematics`.
 

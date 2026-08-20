@@ -61,7 +61,7 @@ defmodule BB.TUI.MixProject do
   defp deps do
     [
       {:ex_ratatui, "~> 0.11"},
-      {:bb, bb_dep("~> 0.28 and >= 0.28.1")},
+      {:bb, bb_dep("~> 0.30")},
 
       # Test
       {:mimic, "~> 2.2", only: :test},
