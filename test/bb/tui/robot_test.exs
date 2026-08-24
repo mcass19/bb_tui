@@ -366,11 +366,22 @@ defmodule BB.TUI.RobotTest do
       Mimic.expect(BB.Actuator, :set_position, fn BB.TUI.TestRobot,
                                                   :servo_1,
                                                   0.5,
-                                                  [delivery: :direct] ->
+                                                  [timeout: 250] ->
         :ok
       end)
 
       assert Robot.set_actuator(@robot, :servo_1, 0.5, nil) == :ok
+    end
+
+    test "set_actuator/4 returns the actuator's refusal" do
+      Mimic.expect(BB.Actuator, :set_position, fn BB.TUI.TestRobot,
+                                                  :servo_1,
+                                                  0.5,
+                                                  [timeout: 250] ->
+        {:error, :disarmed}
+      end)
+
+      assert Robot.set_actuator(@robot, :servo_1, 0.5, nil) == {:error, :disarmed}
     end
 
     test "publish/4 delegates locally when node is nil" do
@@ -547,7 +558,7 @@ defmodule BB.TUI.RobotTest do
       Mimic.expect(BB.TUI.Rpc, :call, fn @remote,
                                          BB.Actuator,
                                          :set_position,
-                                         [BB.TUI.TestRobot, :servo_1, 0.5, [delivery: :direct]] ->
+                                         [BB.TUI.TestRobot, :servo_1, 0.5, [timeout: 250]] ->
         :ok
       end)
 

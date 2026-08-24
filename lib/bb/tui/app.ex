@@ -86,13 +86,15 @@ defmodule BB.TUI.App do
   ## Side-effect convention
 
   Fast, fire-and-forget calls (`Robot.arm/2`, `Robot.disarm/2`,
-  `Robot.set_actuator/4`, `Robot.set_parameter/4`,
-  `Robot.publish/4`, `Robot.force_disarm/2`) are invoked inline from
-  `update/2` rather than wrapped in a `Command.async/2`. They are
-  effectively constant-time PubSub publishes; the boilerplate of
-  routing through a no-op result mapper would dwarf the call. Only
-  `Robot.execute_command/4`, which monitors a spawned command process
-  and waits for its `:DOWN`, goes through `Command.async/2`.
+  `Robot.set_parameter/4`, `Robot.publish/4`, `Robot.force_disarm/2`)
+  are invoked inline from `update/2` rather than wrapped in a
+  `Command.async/2`. They are effectively constant-time PubSub
+  publishes; the boilerplate of routing through a no-op result mapper
+  would dwarf the call. `Robot.execute_command/4`, which monitors a
+  spawned command process and waits for its `:DOWN`, goes through
+  `Command.async/2` — and so does `Robot.set_actuator/4`, whose
+  `:pubsub` delivery blocks on the actuator's answer; its refusals
+  come back as `{:actuator_result, _, _}` and land in the event log.
 
   ## Cancelling a running command
 
@@ -791,6 +793,19 @@ defmodule BB.TUI.App do
     {:noreply, State.set_command_result(state, result)}
   end
 
+  # Jog commands succeed silently — under key autorepeat there is one of
+  # these per repeat, so skip the render. The joint's displayed position
+  # moves on sensor feedback, not on acceptance.
+  def update({:info, {:actuator_result, _actuator, :ok}}, state) do
+    {:noreply, state, render?: false}
+  end
+
+  # A refusal (or the async runner's trapped exit from a dead actuator)
+  # lands in the event log; the target keeps the asked-for value.
+  def update({:info, {:actuator_result, actuator, {:error, reason}}}, state) do
+    {:noreply, State.append_event(state, [:actuator, actuator], %{payload: %{error: reason}})}
+  end
+
   def update({:info, :throbber_tick}, state) do
     {:noreply, State.tick_throbber(state)}
   end
@@ -912,13 +927,23 @@ defmodule BB.TUI.App do
         state = State.set_joint_target(state, name, new_pos)
 
         if actuator do
-          Robot.set_actuator(state.robot, actuator, new_pos, state.node)
-          {:noreply, state}
+          {:noreply, state, commands: [set_actuator_command(state, actuator, new_pos)]}
         else
           publish_simulated_position(state.robot, name, new_pos, state.node)
           {:noreply, State.set_joint_position(state, name, new_pos)}
         end
     end
+  end
+
+  # Off the event loop because `set_position/4`'s `:pubsub` delivery is a
+  # `GenServer.call`: inline it would stall the terminal-owning process on
+  # every jog keypress and exit it if the actuator is dead. The async runner
+  # traps that exit and delivers it as `{:error, {:exit, reason}}`.
+  defp set_actuator_command(%State{robot: robot, node: node}, actuator, position) do
+    Command.async(
+      fn -> Robot.set_actuator(robot, actuator, position, node) end,
+      fn result -> {:actuator_result, actuator, result} end
+    )
   end
 
   defp publish_simulated_position(robot, joint_name, position, node) do

@@ -232,6 +232,20 @@ defmodule BB.TUI.Panels.EventsTest do
                "shoulder \u{2190} trajectory 3 waypoints over 400ms"
     end
 
+    test "summarizes an actuator refusal via Exception.message when the reason is one" do
+      msg = %{payload: %{error: %ArgumentError{message: "robot is disarmed"}}}
+
+      assert Events.summarize([:actuator, :shoulder_motor], msg) ==
+               "shoulder_motor \u{2718} robot is disarmed"
+    end
+
+    test "summarizes an actuator refusal via inspect for plain reasons" do
+      msg = %{payload: %{error: {:exit, :noproc}}}
+
+      assert Events.summarize([:actuator, :shoulder_motor], msg) ==
+               "shoulder_motor \u{2718} {:exit, :noproc}"
+    end
+
     test "falls back to inspect for unknown payloads" do
       msg = %{payload: :something}
       result = Events.summarize([:unknown], msg)

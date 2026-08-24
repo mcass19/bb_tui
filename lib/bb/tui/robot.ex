@@ -308,22 +308,30 @@ defmodule BB.TUI.Robot do
   def force_disarm(robot, nil), do: BB.Safety.force_disarm(robot)
   def force_disarm(robot, node), do: rpc(node, BB.Safety, :force_disarm, [robot])
 
+  # A jog is a stream of targets of which only the latest matters, so waiting
+  # `set_position/4`'s default five seconds for one of them would let tasks
+  # pile up under key autorepeat against a wedged actuator. Matches
+  # `BB.LiveView.Components.JointControl`.
+  @jog_timeout_ms 250
+
   @doc """
   Commands an actuator to a position.
 
-  Sent with `delivery: :direct`, which casts and returns `:ok` at once. The
-  default `:pubsub` delivery reports a refusal, but it does so from a
-  `GenServer.call` — and this is called inline from `BB.TUI.App.update/2` on a
-  keypress, so the round trip would stall the process that owns the terminal
-  and its timeout would exit it.
+  Uses `set_position/4`'s default `:pubsub` delivery, so the command is
+  published for observers (it lands in the event log) and the actuator's
+  answer comes back as `:ok` or `{:error, reason}`. That answer arrives via
+  a `GenServer.call`, which blocks and exits if the actuator is dead or
+  wedged — so `BB.TUI.App` runs this through `ExRatatui.Command.async/2`
+  rather than inline, and the runtime's async runner turns such an exit into
+  `{:error, {:exit, reason}}`.
   """
   @spec set_actuator(module(), atom(), number(), maybe_node()) :: term()
   def set_actuator(robot, actuator, position, nil) do
-    BB.Actuator.set_position(robot, actuator, position, delivery: :direct)
+    BB.Actuator.set_position(robot, actuator, position, timeout: @jog_timeout_ms)
   end
 
   def set_actuator(robot, actuator, position, node) do
-    rpc(node, BB.Actuator, :set_position, [robot, actuator, position, [delivery: :direct]])
+    rpc(node, BB.Actuator, :set_position, [robot, actuator, position, [timeout: @jog_timeout_ms]])
   end
 
   @doc "Publishes a PubSub message under the robot's topic."

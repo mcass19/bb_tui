@@ -669,6 +669,29 @@ defmodule BB.TUI.AppTest do
       assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
     end
 
+    test "{:actuator_result, _, :ok} is a no-op that skips the render" do
+      state = Fixtures.sample_state(%{active_panel: :joints})
+
+      assert {:noreply, new_state, opts} =
+               App.update({:info, {:actuator_result, :shoulder_motor, :ok}}, state)
+
+      assert new_state == state
+      assert opts[:render?] == false
+    end
+
+    test "{:actuator_result, _, {:error, reason}} appends a refusal to the event log" do
+      state = Fixtures.sample_state(%{active_panel: :joints})
+
+      assert {:noreply, new_state} =
+               App.update(
+                 {:info, {:actuator_result, :shoulder_motor, {:error, :disarmed}}},
+                 state
+               )
+
+      assert [{_ts, [:actuator, :shoulder_motor], %{payload: %{error: :disarmed}}} | _] =
+               new_state.events.list
+    end
+
     test "{:command_started, {:error, reason}} surfaces as the command result" do
       state = Fixtures.sample_state(%{active_panel: :commands})
 
@@ -1219,12 +1242,12 @@ defmodule BB.TUI.AppTest do
     end
 
     # Joints panel keys — real actuator joints
-    test "l key calls BB.Actuator.set_position for joint with actuator" do
+    test "l key issues an async BB.Actuator.set_position command for joint with actuator" do
       Fixtures.stub_bb_modules(safety_state: :armed)
 
       Mimic.expect(BB.Actuator, :set_position, fn _robot, :shoulder_motor, pos, opts ->
         assert pos > 0.0
-        assert opts == [delivery: :direct]
+        assert opts == [timeout: 250]
         :ok
       end)
 
@@ -1251,9 +1274,16 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state, opts} = App.update({:event, event}, state)
       # Position NOT updated locally for real actuators — waits for sensor feedback
       assert new_state.joints.entries.shoulder.position == 0.0
+
+      # The call runs off the event loop; its result maps to {:actuator_result, _, _}
+      assert [%ExRatatui.Command{kind: :async, fun: fun, mapper: mapper}] = opts[:commands]
+      assert fun.() == :ok
+
+      assert mapper.({:error, :disarmed}) ==
+               {:actuator_result, :shoulder_motor, {:error, :disarmed}}
     end
 
     test "l key publishes simulated state when robot has actuators map but no match for joint" do

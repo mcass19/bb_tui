@@ -463,6 +463,11 @@ defmodule BB.TUI.Panels.Events do
     "#{from} \u{2192} #{to}"
   end
 
+  def summarize([:actuator | rest], %{payload: %{error: reason}}) do
+    joint = Enum.map_join(rest, ".", &to_string/1)
+    "#{joint} \u{2718} #{error_text(reason)}"
+  end
+
   def summarize([:actuator | rest], %{payload: %{position: position}})
       when is_number(position) do
     joint = Enum.map_join(rest, ".", &to_string/1)
@@ -511,6 +516,9 @@ defmodule BB.TUI.Panels.Events do
   def summarize(_path, message) do
     inspect(message, pretty: false, limit: 30)
   end
+
+  defp error_text(%{__exception__: true} = exception), do: Exception.message(exception)
+  defp error_text(reason), do: inspect(reason, pretty: false, limit: 30)
 
   # A trajectory runs once unless it says otherwise, so the common case
   # stays unadorned.
