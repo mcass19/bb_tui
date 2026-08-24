@@ -308,14 +308,22 @@ defmodule BB.TUI.Robot do
   def force_disarm(robot, nil), do: BB.Safety.force_disarm(robot)
   def force_disarm(robot, node), do: rpc(node, BB.Safety, :force_disarm, [robot])
 
-  @doc "Commands an actuator to a position."
+  @doc """
+  Commands an actuator to a position.
+
+  Sent with `delivery: :direct`, which casts and returns `:ok` at once. The
+  default `:pubsub` delivery reports a refusal, but it does so from a
+  `GenServer.call` — and this is called inline from `BB.TUI.App.update/2` on a
+  keypress, so the round trip would stall the process that owns the terminal
+  and its timeout would exit it.
+  """
   @spec set_actuator(module(), atom(), number(), maybe_node()) :: term()
   def set_actuator(robot, actuator, position, nil) do
-    BB.Actuator.set_position!(robot, actuator, position)
+    BB.Actuator.set_position(robot, actuator, position, delivery: :direct)
   end
 
   def set_actuator(robot, actuator, position, node) do
-    rpc(node, BB.Actuator, :set_position!, [robot, actuator, position])
+    rpc(node, BB.Actuator, :set_position, [robot, actuator, position, [delivery: :direct]])
   end
 
   @doc "Publishes a PubSub message under the robot's topic."

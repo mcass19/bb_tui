@@ -363,7 +363,13 @@ defmodule BB.TUI.RobotTest do
     end
 
     test "set_actuator/4 delegates locally when node is nil" do
-      Mimic.expect(BB.Actuator, :set_position!, fn BB.TUI.TestRobot, :servo_1, 0.5 -> :ok end)
+      Mimic.expect(BB.Actuator, :set_position, fn BB.TUI.TestRobot,
+                                                  :servo_1,
+                                                  0.5,
+                                                  [delivery: :direct] ->
+        :ok
+      end)
+
       assert Robot.set_actuator(@robot, :servo_1, 0.5, nil) == :ok
     end
 
@@ -540,8 +546,8 @@ defmodule BB.TUI.RobotTest do
     test "set_actuator/4 routes through :rpc.call" do
       Mimic.expect(BB.TUI.Rpc, :call, fn @remote,
                                          BB.Actuator,
-                                         :set_position!,
-                                         [BB.TUI.TestRobot, :servo_1, 0.5] ->
+                                         :set_position,
+                                         [BB.TUI.TestRobot, :servo_1, 0.5, [delivery: :direct]] ->
         :ok
       end)
 

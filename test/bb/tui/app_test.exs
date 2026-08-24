@@ -1219,11 +1219,12 @@ defmodule BB.TUI.AppTest do
     end
 
     # Joints panel keys — real actuator joints
-    test "l key calls BB.Actuator.set_position! for joint with actuator" do
+    test "l key calls BB.Actuator.set_position for joint with actuator" do
       Fixtures.stub_bb_modules(safety_state: :armed)
 
-      Mimic.expect(BB.Actuator, :set_position!, fn _robot, :shoulder_motor, pos ->
+      Mimic.expect(BB.Actuator, :set_position, fn _robot, :shoulder_motor, pos, opts ->
         assert pos > 0.0
+        assert opts == [delivery: :direct]
         :ok
       end)
 

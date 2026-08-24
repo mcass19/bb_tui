@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Follows the removal of `BB.Actuator.set_position!/4` in `bb` core (breaking).** `bb` made `set_position/4` synchronous and dropped both `set_position!/4` and `set_position_sync/5`; the `!` cast is now `set_position(robot, target, position, delivery: :direct)`. `BB.TUI.Robot.set_actuator/4` sends that, locally and over `:rpc`, so behaviour is unchanged — a cast, no publication, `:ok` regardless of whether the actuator accepted it. The synchronous default was considered and rejected for this caller: `set_actuator/4` is invoked inline from `BB.TUI.App.update/2` on a keypress, and a `GenServer.call` there would stall the process that owns the terminal for the round trip and exit it on timeout. Surfacing refusals would need the call moved off the event loop and somewhere in the UI to put the error, which is worth doing separately. The `mix.exs` requirement moves from `~> 0.28 and >= 0.28.1` to `~> 0.30` to encode this: `set_position/4` also exists in `bb` 0.28/0.29, as a publish that ignores options it doesn't recognise, so against an older `bb` this code compiles clean and quietly publishes where it means to cast. An ignored option fails silently at runtime where a removed function fails loudly at compile time, which makes the floor load-bearing rather than housekeeping.
+
 ## [0.4.0] - 2026-08-10
 
 ### Added
