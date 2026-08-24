@@ -117,6 +117,7 @@ defmodule BB.TUI.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
       extras: [
         "README.md": [title: "Overview"],
         "guides/transports.md": [title: "Transports"],
