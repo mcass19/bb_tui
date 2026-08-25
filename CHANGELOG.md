@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-25
+
 ### Added
 
 - **Actuator refusals from jog keys now surface in the event log.** `BB.TUI.Robot.set_actuator/4` uses `set_position/4`'s default `:pubsub` delivery instead of `delivery: :direct`, so the actuator's answer comes back — and because that answer arrives via a `GenServer.call`, the call moves off the event loop into an `ExRatatui.Command.async/2` whose result maps to `{:actuator_result, actuator, result}`. An `:ok` is dropped without a render (there is one per key autorepeat); a `{:error, reason}` — including the `{:exit, _}` the async runner traps when an actuator is dead or wedged, which previously had nowhere to go — is appended to the event log as `joint ✗ reason`, debounced per actuator like any other event. The call waits 250ms rather than `set_position/4`'s default five seconds — a jog is a stream of targets of which only the latest matters, and the long wait would let tasks pile up under key autorepeat against a wedged actuator (matching `BB.LiveView.Components.JointControl`). The joint's target keeps the asked-for value; position still moves only on sensor feedback. As a side effect of `:pubsub` delivery, jog commands themselves now appear in the event log, since the command is published for observers and the TUI already subscribes to `[:actuator]`.
@@ -86,7 +88,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mcass19/bb_tui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mcass19/bb_tui/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mcass19/bb_tui/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mcass19/bb_tui/compare/v0.2.0...v0.3.0
