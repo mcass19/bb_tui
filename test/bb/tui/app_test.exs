@@ -1572,7 +1572,7 @@ defmodule BB.TUI.AppTest do
       end)
 
       params = [{[:kp], 0.5}]
-      meta = %{[:kp] => %{type: {:float, [min: 0.0, max: 1.0]}}}
+      meta = %{[:kp] => %{type: :float, min: 0.0, max: 1.0}}
 
       state =
         Fixtures.sample_state(%{
@@ -1597,7 +1597,7 @@ defmodule BB.TUI.AppTest do
       end)
 
       params = [{[:kp], 0.5}]
-      meta = %{[:kp] => %{type: {:float, [min: 0.0, max: 1.0]}}}
+      meta = %{[:kp] => %{type: :float, min: 0.0, max: 1.0}}
 
       state =
         Fixtures.sample_state(%{
@@ -1621,7 +1621,7 @@ defmodule BB.TUI.AppTest do
       end)
 
       params = [{[:kp], 1.0}]
-      meta = %{[:kp] => %{type: {:float, [min: 0.0, max: 1.0]}}}
+      meta = %{[:kp] => %{type: :float, min: 0.0, max: 1.0}}
 
       state =
         Fixtures.sample_state(%{
@@ -1642,7 +1642,7 @@ defmodule BB.TUI.AppTest do
       Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 0 -> :ok end)
 
       params = [{[:count], 0}]
-      meta = %{[:count] => %{type: {:integer, [min: 0, max: 1_000]}}}
+      meta = %{[:count] => %{type: :integer, min: 0, max: 1_000}}
 
       state =
         Fixtures.sample_state(%{
@@ -1664,7 +1664,7 @@ defmodule BB.TUI.AppTest do
       Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 110 -> :ok end)
 
       params = [{[:count], 100}]
-      meta = %{[:count] => %{type: {:integer, [min: 0, max: 1_000]}}}
+      meta = %{[:count] => %{type: :integer, min: 0, max: 1_000}}
 
       state =
         Fixtures.sample_state(%{
@@ -1894,7 +1894,7 @@ defmodule BB.TUI.AppTest do
       Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 6 -> :ok end)
 
       params = [{[:count], 5}]
-      meta = %{[:count] => %{type: {:integer, [min: 0, max: 10]}}}
+      meta = %{[:count] => %{type: :integer, min: 0, max: 10}}
 
       state =
         Fixtures.sample_state(%{

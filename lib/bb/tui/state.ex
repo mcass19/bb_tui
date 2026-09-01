@@ -560,20 +560,21 @@ defmodule BB.TUI.State do
   Updates parameters from a parameter list.
 
   `BB.Parameter.list/2` returns `{path, metadata}` tuples where metadata
-  is a map carrying `:value` plus schema-derived fields like `:type`,
-  `:doc`, and `:default`. The plain value is mirrored into
-  `state.parameters.list` so navigation code keeps working with simple
-  `{path, value}` tuples, while the rest of the metadata is stashed in
+  is a map carrying `:value` plus schema-derived fields: the declared
+  `:type`, `:min`/`:max` bounds (`nil` when unbounded), `:doc`, and
+  `:default`. The plain value is mirrored into `state.parameters.list`
+  so navigation code keeps working with simple `{path, value}` tuples,
+  while the rest of the metadata is stashed in
   `state.parameters.metadata` keyed by path. Plain-value inputs (no
   metadata map) leave the metadata side-channel untouched for that path.
 
   ## Examples
 
-      iex> next = BB.TUI.State.update_parameters(%BB.TUI.State{}, [{[:speed], %{value: 100, type: :integer, doc: "rpm"}}])
+      iex> next = BB.TUI.State.update_parameters(%BB.TUI.State{}, [{[:speed], %{value: 100, type: :integer, min: 0, doc: "rpm"}}])
       iex> next.parameters.list
       [{[:speed], 100}]
       iex> next.parameters.metadata
-      %{[:speed] => %{type: :integer, doc: "rpm", default: nil}}
+      %{[:speed] => %{type: :integer, min: 0, max: nil, doc: "rpm", default: nil}}
 
       iex> BB.TUI.State.update_parameters(%BB.TUI.State{}, [{[:speed], 42}]).parameters.list
       [{[:speed], 42}]
@@ -595,6 +596,8 @@ defmodule BB.TUI.State do
   defp extract_metadata(meta) do
     %{
       type: Map.get(meta, :type),
+      min: Map.get(meta, :min),
+      max: Map.get(meta, :max),
       doc: Map.get(meta, :doc),
       default: Map.get(meta, :default)
     }
@@ -1656,28 +1659,24 @@ defmodule BB.TUI.State do
 
   @doc """
   Returns `{min, max}` bounds for the parameter at `path` when the
-  Spark-style metadata declares them, otherwise `nil`.
+  metadata declares them, otherwise `nil`.
 
-  Looks at `state.parameters.metadata[path].type` for the standard
-  `{head, opts}` shape used by `Spark.Options` and extracts the
-  `:min` / `:max` keyword values. Either bound may be absent (returned
-  as `nil`); both absent collapses to `nil` (no bounds).
+  `BB.Parameter.list/2` (bb 0.30+) reports bounds as top-level `:min` /
+  `:max` metadata keys alongside the declared type. Either bound may be
+  absent (returned as `nil`); both absent collapses to `nil` (no
+  bounds).
 
   ## Examples
 
-      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: {:integer, [min: 0, max: 100]}}}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: :integer, min: 0, max: 100}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:speed])
       {0, 100}
 
-      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:gain] => %{type: {:float, [min: 0.0]}}}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:gain] => %{type: :float, min: 0.0, max: nil}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:gain])
       {0.0, nil}
 
-      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: :integer}}}}
-      iex> BB.TUI.State.parameter_bounds(state, [:speed])
-      nil
-
-      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: {:integer, [doc: "rpm"]}}}}}
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:speed] => %{type: :integer, min: nil, max: nil}}}}
       iex> BB.TUI.State.parameter_bounds(state, [:speed])
       nil
 
@@ -1688,14 +1687,8 @@ defmodule BB.TUI.State do
   @spec parameter_bounds(t(), list()) :: {number() | nil, number() | nil} | nil
   def parameter_bounds(%__MODULE__{parameters: %{metadata: meta}}, path) do
     case meta[path] do
-      %{type: {head, opts}} when is_atom(head) and is_list(opts) ->
-        case {Keyword.get(opts, :min), Keyword.get(opts, :max)} do
-          {nil, nil} -> nil
-          bounds -> bounds
-        end
-
-      _ ->
-        nil
+      %{min: min, max: max} when min != nil or max != nil -> {min, max}
+      _ -> nil
     end
   end
 
