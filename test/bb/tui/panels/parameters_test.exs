@@ -281,10 +281,41 @@ defmodule BB.TUI.Panels.ParametersTest do
     end
   end
 
+  describe "unit-typed parameters" do
+    test "unit values render magnitude, unit name, and adjust hint" do
+      params = [{[:offset], Localize.Unit.new!(0.5, "meter")}]
+
+      state =
+        Fixtures.sample_state(%{
+          parameters: params,
+          parameter_metadata: %{[:offset] => %{type: {:unit, :meter}}}
+        })
+
+      widget = Parameters.render(state, false)
+
+      assert [row] = widget.rows
+      assert Enum.at(row, 1) == "0.500 meter [h/l]"
+      assert Enum.at(row, 2) == "unit:meter"
+    end
+
+    test "integer magnitudes render without decimals" do
+      assert Parameters.format_value(Localize.Unit.new!(90, "degree")) == "90 degree"
+    end
+
+    test "compound unit names render as-is" do
+      assert Parameters.format_value(Localize.Unit.new!(1.5, "meter-per-second")) ==
+               "1.500 meter-per-second"
+    end
+  end
+
   describe "edit_hint/1" do
     test "returns [h/l] for numbers" do
       assert Parameters.edit_hint(42) == " [h/l]"
       assert Parameters.edit_hint(3.14) == " [h/l]"
+    end
+
+    test "returns [h/l] for unit values" do
+      assert Parameters.edit_hint(Localize.Unit.new!(0.5, "meter")) == " [h/l]"
     end
 
     test "returns [enter] for booleans" do

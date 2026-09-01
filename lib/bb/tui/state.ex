@@ -1664,7 +1664,9 @@ defmodule BB.TUI.State do
   `BB.Parameter.list/2` (bb 0.30+) reports bounds as top-level `:min` /
   `:max` metadata keys alongside the declared type. Either bound may be
   absent (returned as `nil`); both absent collapses to `nil` (no
-  bounds).
+  bounds). A unit-typed parameter's bounds are `Localize.Unit` structs
+  and are returned as-is — `unit_bounds_in/2` turns them into plain
+  magnitudes.
 
   ## Examples
 
@@ -1684,10 +1686,55 @@ defmodule BB.TUI.State do
       iex> BB.TUI.State.parameter_bounds(state, [:unknown])
       nil
   """
-  @spec parameter_bounds(t(), list()) :: {number() | nil, number() | nil} | nil
+  @spec parameter_bounds(t(), list()) ::
+          {number() | Localize.Unit.t() | nil, number() | Localize.Unit.t() | nil} | nil
   def parameter_bounds(%__MODULE__{parameters: %{metadata: meta}}, path) do
     case meta[path] do
       %{min: min, max: max} when min != nil or max != nil -> {min, max}
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Converts unit-typed parameter bounds into plain magnitudes expressed
+  in `unit_name`, ready for `clamp_to_bounds/2` and step sizing.
+
+  Unit-typed bounds keep the unit they were declared in — a `max` of
+  100 centimeter may bound a `{:unit, :meter}` parameter — so each
+  bound is converted into the value's own unit before its magnitude is
+  used. A bound that fails to convert, or converts to something
+  non-numeric, opens that side rather than guessing; bb still validates
+  the write server-side.
+
+  ## Examples
+
+      iex> BB.TUI.State.unit_bounds_in(nil, "meter")
+      nil
+
+      iex> bounds = {Localize.Unit.new!(50, "centimeter"), Localize.Unit.new!(2, "meter")}
+      iex> {min, max} = BB.TUI.State.unit_bounds_in(bounds, "meter")
+      iex> {Float.round(min * 1.0, 3), Float.round(max * 1.0, 3)}
+      {0.5, 2.0}
+
+      iex> {min, nil} = BB.TUI.State.unit_bounds_in({Localize.Unit.new!(1, "meter"), nil}, "meter")
+      iex> min == 1
+      true
+  """
+  @spec unit_bounds_in(
+          {Localize.Unit.t() | nil, Localize.Unit.t() | nil} | nil,
+          String.t()
+        ) :: {number() | nil, number() | nil} | nil
+  def unit_bounds_in(nil, _unit_name), do: nil
+
+  def unit_bounds_in({min, max}, unit_name) do
+    {unit_magnitude(min, unit_name), unit_magnitude(max, unit_name)}
+  end
+
+  defp unit_magnitude(nil, _unit_name), do: nil
+
+  defp unit_magnitude(%Localize.Unit{} = bound, unit_name) do
+    case Localize.Unit.convert(bound, unit_name) do
+      {:ok, %Localize.Unit{value: magnitude}} when is_number(magnitude) -> magnitude
       _ -> nil
     end
   end

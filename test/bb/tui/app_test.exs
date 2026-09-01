@@ -1679,6 +1679,100 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, _new_state} = App.update({:event, event}, state)
     end
 
+    test "l/right steps a unit parameter by 1% of its converted range" do
+      Fixtures.stub_bb_modules()
+
+      # Range 0..1 meter → step = 0.01 meter per keypress.
+      Mimic.expect(BB.Parameter, :set, fn _robot,
+                                          [:offset],
+                                          %Localize.Unit{name: "meter", value: val} ->
+        assert_in_delta val, 0.51, 0.0001
+        :ok
+      end)
+
+      params = [{[:offset], Localize.Unit.new!(0.5, "meter")}]
+
+      meta = %{
+        [:offset] => %{
+          type: {:unit, :meter},
+          min: Localize.Unit.new!(0, "meter"),
+          max: Localize.Unit.new!(1, "meter")
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "L clamps a unit parameter at a bound declared in another unit" do
+      Fixtures.stub_bb_modules()
+
+      # max is 100 centimeter = 1.0 meter; 0.99 + 0.1 = 1.09 clamps to 1.0.
+      Mimic.expect(BB.Parameter, :set, fn _robot,
+                                          [:offset],
+                                          %Localize.Unit{name: "meter", value: val} ->
+        assert_in_delta val, 1.0, 0.0001
+        :ok
+      end)
+
+      params = [{[:offset], Localize.Unit.new!(0.99, "meter")}]
+
+      meta = %{
+        [:offset] => %{
+          type: {:unit, :meter},
+          min: Localize.Unit.new!(0, "meter"),
+          max: Localize.Unit.new!(100, "centimeter")
+        }
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "L", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "unit parameter without bounds steps by the default and stays a unit" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot,
+                                          [:offset],
+                                          %Localize.Unit{name: "meter", value: val} ->
+        assert_in_delta val, 0.4, 0.0001
+        :ok
+      end)
+
+      params = [{[:offset], Localize.Unit.new!(0.5, "meter")}]
+      meta = %{[:offset] => %{type: {:unit, :meter}, min: nil, max: nil}}
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
     test "t key on local tab is a no-op when no bridges are discovered" do
       state =
         Fixtures.sample_state(%{
