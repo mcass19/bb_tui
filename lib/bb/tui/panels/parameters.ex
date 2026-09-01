@@ -18,6 +18,7 @@ defmodule BB.TUI.Panels.Parameters do
   alias ExRatatui.Text.Line
   alias ExRatatui.Text.Span
   alias ExRatatui.Widgets.Block
+  alias ExRatatui.Widgets.Block.Title
   alias ExRatatui.Widgets.Table
 
   @doc """
@@ -56,12 +57,33 @@ defmodule BB.TUI.Panels.Parameters do
       highlight_symbol: "\u{25B6} ",
       block: %Block{
         title: title_line(state.parameters.tabs, state.parameters.tab_selected, count),
+        titles: doc_titles(state, tab, focused?),
         borders: [:all],
         border_type: :rounded,
         border_style: Theme.border_style(focused?)
       }
     }
   end
+
+  # The selected parameter's doc renders as a dim bottom border title —
+  # the table is too narrow for a fourth column. Selection is only
+  # visible while the panel is focused, so the doc follows suit, and
+  # bridge parameters carry no schema doc.
+  defp doc_titles(state, :local, true) do
+    with {path, _value} <- State.selected_param(state),
+         %{doc: doc} when is_binary(doc) <- state.parameters.metadata[path] do
+      [
+        %Title{
+          content: %Span{content: " #{doc} ", style: %Style{fg: Theme.dim_text()}},
+          position: :bottom
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp doc_titles(_state, _tab, _focused?), do: []
 
   defp rows_and_count(state, :local) do
     case state.parameters.list do
