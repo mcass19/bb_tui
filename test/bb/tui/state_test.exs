@@ -184,6 +184,103 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "inline parameter editing" do
+    test "start_param_edit/1 opens a buffer prefilled with a string value" do
+      state =
+        Fixtures.sample_state(%{
+          parameters: [{[:label], "arm-a"}],
+          param_selected: 0
+        })
+
+      state = State.start_param_edit(state)
+
+      assert state.parameters.editing == %{path: [:label], buffer: "arm-a"}
+    end
+
+    test "start_param_edit/1 prefixes an atom value with a colon" do
+      state =
+        Fixtures.sample_state(%{
+          parameters: [{[:mode], :fast}],
+          param_selected: 0
+        })
+
+      assert State.start_param_edit(state).parameters.editing == %{
+               path: [:mode],
+               buffer: ":fast"
+             }
+    end
+
+    test "start_param_edit/1 refuses non-text values" do
+      for value <- [42, 3.14, true, nil] do
+        state =
+          Fixtures.sample_state(%{
+            parameters: [{[:x], value}],
+            param_selected: 0
+          })
+
+        assert State.start_param_edit(state).parameters.editing == nil
+      end
+    end
+
+    test "start_param_edit/1 refuses values constrained to a fixed set" do
+      state =
+        Fixtures.sample_state(%{
+          parameters: [{[:mode], :fast}],
+          parameter_metadata: %{[:mode] => %{type: {:in, [:fast, :slow]}}},
+          param_selected: 0
+        })
+
+      assert State.start_param_edit(state).parameters.editing == nil
+    end
+
+    test "append and backspace edit the buffer; cancel clears it" do
+      state =
+        Fixtures.sample_state(%{
+          parameters: [{[:label], "ab"}],
+          param_selected: 0
+        })
+
+      state = State.start_param_edit(state)
+      state = State.append_to_param_buffer(state, "c")
+      assert state.parameters.editing.buffer == "abc"
+
+      state = State.backspace_param_buffer(state)
+      state = State.backspace_param_buffer(state)
+      assert state.parameters.editing.buffer == "a"
+
+      assert State.cancel_param_edit(state).parameters.editing == nil
+    end
+
+    test "parse_param_input/1 reads a leading colon as an atom" do
+      assert State.parse_param_input(":fast") == :fast
+      assert State.parse_param_input("plain text") == "plain text"
+    end
+  end
+
+  describe "parameter_in_values/2 and cycle_value/3" do
+    test "returns the allowed set for an {:in, values} parameter" do
+      state =
+        Fixtures.sample_state(%{
+          parameter_metadata: %{[:mode] => %{type: {:in, [:fast, :slow]}}}
+        })
+
+      assert State.parameter_in_values(state, [:mode]) == [:fast, :slow]
+      assert State.parameter_in_values(state, [:other]) == nil
+    end
+
+    test "cycle_value/3 wraps in both directions" do
+      values = [:a, :b, :c]
+
+      assert State.cycle_value(values, :a, :next) == :b
+      assert State.cycle_value(values, :c, :next) == :a
+      assert State.cycle_value(values, :a, :prev) == :c
+    end
+
+    test "cycle_value/3 lands on the first value when the current one is unknown" do
+      assert State.cycle_value([:a, :b], :zzz, :next) == :a
+    end
+  end
+
   describe "unit_bounds_in/2" do
     test "converts unit bounds into magnitudes of the target unit" do
       bounds = {Localize.Unit.new!(0, "meter"), Localize.Unit.new!(1, "kilometer")}

@@ -69,13 +69,40 @@ defmodule BB.TUI.Panels.ParametersTest do
       assert Enum.at(row, 1) == "true [enter]"
     end
 
-    test "formats atom values without edit hint" do
-      params = [{[:mode], :fast}]
+    test "formats atom and string values with an edit hint" do
+      params = [{[:mode], :fast}, {[:name], "arm-a"}]
       state = Fixtures.sample_state(%{parameters: params})
       widget = Parameters.render(state, false)
 
-      [row] = widget.rows
-      assert Enum.at(row, 1) == ":fast"
+      [mode_row, name_row] = widget.rows
+      assert Enum.at(mode_row, 1) == ":fast [enter]"
+      assert Enum.at(name_row, 1) == "\"arm-a\" [enter]"
+    end
+
+    test "values constrained to a fixed set get the cycle hint" do
+      params = [{[:mode], :fast}]
+
+      state =
+        Fixtures.sample_state(%{
+          parameters: params,
+          parameter_metadata: %{[:mode] => %{type: {:in, [:fast, :slow]}}}
+        })
+
+      [row] = Parameters.render(state, false).rows
+      assert Enum.at(row, 1) == ":fast [h/l]"
+    end
+
+    test "the row being edited shows the buffer with a cursor instead of the value" do
+      params = [{[:name], "arm-a"}]
+      state = Fixtures.sample_state(%{parameters: params})
+
+      state = %{
+        state
+        | parameters: %{state.parameters | editing: %{path: [:name], buffer: "arm-b"}}
+      }
+
+      [row] = Parameters.render(state, true).rows
+      assert Enum.at(row, 1) == "arm-b▌"
     end
 
     test "formats integer values with edit hint" do

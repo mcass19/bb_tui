@@ -81,11 +81,13 @@ defmodule BB.TUI.Panels.Help do
   - `j` / `↓` — Select next parameter
   - `k` / `↑` — Select previous parameter
   - `l` / `→` — Increase value (1% of range, or +1 / +0.1 when unbounded)
-  - `h` / `←` — Decrease value (1% of range, or -1 / -0.1 when unbounded)
+  - `h` / `←` — Decrease value (1% of range, or -1 / -0.1 when unbounded); cycles a fixed-set parameter
   - `L` — 10× step
   - `H` — 10× step (down)
-  - `⏎` — Toggle boolean parameter
+  - `⏎` — Toggle boolean parameter, or edit a string / atom parameter inline
   - `t` — Cycle to the next bridge tab
+
+  Unit-typed values step in their declared unit. While editing inline, typed characters go to the buffer, `Backspace` deletes, `⏎` commits (a leading `:` reads as an atom), and `Esc` cancels.
 
   Bridge-tab edits route through `BB.Parameter.set_remote`.
 

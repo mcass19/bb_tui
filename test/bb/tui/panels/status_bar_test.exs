@@ -133,6 +133,21 @@ defmodule BB.TUI.Panels.StatusBarTest do
       refute txt =~ " tab "
     end
 
+    test "shows commit / cancel hints while a parameter is being edited" do
+      state = Fixtures.sample_state(%{active_panel: :parameters})
+
+      state = %{
+        state
+        | parameters: %{state.parameters | editing: %{path: [:name], buffer: "arm"}}
+      }
+
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "commit"
+      assert txt =~ "cancel"
+      refute txt =~ "adjust"
+    end
+
     test "shows t / tab pill on parameters panel when bridge tabs are present" do
       state =
         Fixtures.sample_state(%{

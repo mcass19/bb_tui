@@ -253,6 +253,15 @@ defmodule BB.TUI.Panels.StatusBar do
 
   defp panel_keys(_, _), do: []
 
+  defp parameters_keys(%State{parameters: %{editing: %{}}}) do
+    [
+      Theme.key_pill("⏎"),
+      Theme.dim_span(" commit "),
+      Theme.key_pill("esc"),
+      Theme.dim_span(" cancel ")
+    ]
+  end
+
   defp parameters_keys(%State{parameters: %{tabs: tabs}}) do
     base = [
       Theme.key_pill("j/k"),
@@ -260,7 +269,7 @@ defmodule BB.TUI.Panels.StatusBar do
       Theme.key_pill("h/l"),
       Theme.dim_span(" adjust "),
       Theme.key_pill("⏎"),
-      Theme.dim_span(" toggle ")
+      Theme.dim_span(" toggle/edit ")
     ]
 
     if length(tabs) > 1 do
