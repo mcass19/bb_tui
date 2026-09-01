@@ -281,6 +281,88 @@ defmodule BB.TUI.Panels.ParametersTest do
     end
   end
 
+  describe "parameter doc footer" do
+    test "focused panel shows the selected parameter's doc as a dim bottom title" do
+      params = [{[:speed], 100}]
+      meta = %{[:speed] => %{type: :integer, doc: "Motor speed in rpm"}}
+
+      state =
+        Fixtures.sample_state(%{
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      widget = Parameters.render(state, true)
+
+      assert [%ExRatatui.Widgets.Block.Title{content: content, position: :bottom}] =
+               widget.block.titles
+
+      assert %ExRatatui.Text.Span{content: " Motor speed in rpm "} = content
+    end
+
+    test "doc follows the selection through the sorted row order" do
+      params = [{[:z_gain], 1}, {[:a_gain], 2}]
+
+      meta = %{
+        [:a_gain] => %{type: :integer, doc: "First by path"},
+        [:z_gain] => %{type: :integer, doc: "Last by path"}
+      }
+
+      state =
+        Fixtures.sample_state(%{
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 1
+        })
+
+      widget = Parameters.render(state, true)
+
+      assert [%ExRatatui.Widgets.Block.Title{content: %{content: " Last by path "}}] =
+               widget.block.titles
+    end
+
+    test "a parameter without a doc shows no bottom title" do
+      params = [{[:speed], 100}]
+      meta = %{[:speed] => %{type: :integer, doc: nil}}
+
+      state =
+        Fixtures.sample_state(%{
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      assert Parameters.render(state, true).block.titles == []
+    end
+
+    test "unfocused panel shows no doc" do
+      params = [{[:speed], 100}]
+      meta = %{[:speed] => %{type: :integer, doc: "Motor speed in rpm"}}
+
+      state =
+        Fixtures.sample_state(%{
+          parameters: params,
+          parameter_metadata: meta,
+          param_selected: 0
+        })
+
+      assert Parameters.render(state, false).block.titles == []
+    end
+
+    test "bridge tabs show no doc" do
+      state =
+        Fixtures.sample_state(%{
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: [%{id: "PITCH_P", value: 0.1}]},
+          param_selected: 0
+        })
+
+      assert Parameters.render(state, true).block.titles == []
+    end
+  end
+
   describe "unit-typed parameters" do
     test "unit values render magnitude, unit name, and adjust hint" do
       params = [{[:offset], Localize.Unit.new!(0.5, "meter")}]
