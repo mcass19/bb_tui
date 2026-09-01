@@ -23,7 +23,8 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.Fixtures,
           BB.TUI.Test.EchoRenderer,
           BB.TUI.Test.SummaryOnlyRenderer,
-          BB.TUI.Test.NilSummaryRenderer
+          BB.TUI.Test.NilSummaryRenderer,
+          BB.TUI.Test.Endpoint
         ]
       ],
       dialyzer: [
@@ -65,6 +66,15 @@ defmodule BB.TUI.MixProject do
 
       # Test
       {:mimic, "~> 2.2", only: :test},
+      {:lazy_html, "~> 0.1", only: :test},
+
+      # Browser transport (BB.TUI.Live) — optional: consumers who want the
+      # dashboard in a browser add phoenix_ex_ratatui themselves (phoenix and
+      # phoenix_live_view arrive with it); everyone else pulls nothing extra.
+      # Optional rather than dev-only so the hex requirement constrains the
+      # version and mix compiles the dep before us when a consumer opts in.
+      {:phoenix_ex_ratatui, "~> 0.2", optional: true},
+      {:bandit, "~> 1.8", only: :dev},
 
       # Dev
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},

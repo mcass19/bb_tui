@@ -79,6 +79,24 @@ config :nerves_ssh,
   ]
 ```
 
+In the browser, as a Phoenix LiveView — requires the optional
+`{:phoenix_ex_ratatui, "~> 0.2"}` dependency (without it `BB.TUI.Live` is not
+compiled), plus its JS hook registered once in `app.js`:
+
+```elixir
+defmodule MyAppWeb.RobotLive do
+  use BB.TUI.Live, robot: MyApp.Robot
+end
+
+# router.ex
+live "/robot", MyAppWeb.RobotLive
+```
+
+The `use` options are the same mount keyword list as the other entry points;
+override `tui_mount_opts/1` to derive them per session from the socket. Each
+browser tab is an isolated dashboard session over the shared robot, like
+concurrent SSH clients.
+
 The igniter installer wires up the mix task and dev entry points:
 
 ```bash

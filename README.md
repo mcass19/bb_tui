@@ -20,7 +20,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **High-rate-safe** — the event log debounces repeated sensor messages and renders coalesce to ~30fps, so fast telemetry never floods the log or stalls the UI
 - **Status bar, help overlay, and theming** — robot name / safety / runtime indicators, a battery / power readout when the robot reports it (colored by remaining charge), a scrollable keybinding reference, and a consistent semantic color palette
 - **Keyboard-driven navigation** — `[`/`]` to switch between the Control Panel and Visualization tabs, Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
-- **Three transports** — local terminal, SSH (multiple isolated operator sessions), and Erlang distribution (attach a thin renderer to a TUI running on the robot node)
+- **Four transports** — local terminal, SSH (multiple isolated operator sessions), Erlang distribution (attach a thin renderer to a TUI running on the robot node), and the browser (`use BB.TUI.Live` in a Phoenix LiveView, via the optional `phoenix_ex_ratatui` dependency)
 - **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime`
 - **Extensible rendering** — register `BB.TUI.Renderer` modules per PubSub path prefix (`:renderers`) to render a consumer's own payloads in the event log and status bar, without bb_tui depending on their structs
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
