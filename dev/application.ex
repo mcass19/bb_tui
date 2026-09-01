@@ -21,6 +21,8 @@ defmodule Dev.Application do
         id: BB.Supervisor,
         start: {BB.Supervisor, :start_link, [Dev.TestRobot, [simulation: :kinematic]]}
       },
+      # After the robot: registers the fixed-set `gait.pattern` parameter.
+      {Dev.GaitSelector, robot: Dev.TestRobot},
       {ExRatatui.Distributed.Listener, mod: BB.TUI.App, app_opts: [robot: Dev.TestRobot]}
     ]
 
