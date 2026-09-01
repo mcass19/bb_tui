@@ -1013,6 +1013,16 @@ defmodule BB.TUI.App do
         Robot.set_parameter(state.robot, path, new_value, state.node)
         {:noreply, state}
 
+      # A unit-typed value arrives in its declared unit (bb 0.31), but its
+      # bounds keep the unit they were declared in, so they are converted
+      # into the value's unit before stepping the magnitude.
+      {path, %Localize.Unit{value: magnitude} = value} when is_number(magnitude) ->
+        bounds = State.unit_bounds_in(State.parameter_bounds(state, path), value.name)
+        step = float_step(bounds) * multiplier
+        new_magnitude = State.clamp_to_bounds(apply_step(magnitude, direction, step), bounds)
+        Robot.set_parameter(state.robot, path, %{value | value: new_magnitude}, state.node)
+        {:noreply, state}
+
       _ ->
         {:noreply, state}
     end

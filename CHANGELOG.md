@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Unit-typed parameters are readable and adjustable.** `bb` 0.31.0 converts a unit-typed parameter into its declared unit on every write, so a `{:unit, :meter}` parameter's value is reliably a `Localize.Unit` in a known unit — which the TUI previously rendered through `inspect` (`Localize.Unit.new!(0.5, "meter")` in a 30%-wide table cell) and silently refused to adjust, because the `h`/`l` handlers only matched plain numbers. The Value column now renders the magnitude the way a bare number would, followed by the canonical unit name (`0.500 meter`), the Type column renders `unit:meter` (matching `bb_liveview`'s convention), and `h`/`l`/`H`/`L` step the magnitude with the same 1%/10%-of-range scaling numeric parameters get. Bounds need one extra move: the DSL deliberately keeps a bound in the unit it was declared in, so a `max` of 100 centimeter can bound a meter parameter — `BB.TUI.State.unit_bounds_in/2` converts each bound into the value's own unit before step sizing and clamping, and opens a side it cannot convert rather than guessing (bb still validates the write server-side).
+
 ### Fixed
 
 - **Parameter bounds work again against `bb` 0.30+.** `bb` 0.30.0 changed what `BB.Parameter.list/2` reports: the generated validator tuple (`{:integer, [min: 0, max: 100]}`) became the declared type (`:integer`) with `min`/`max` as separate metadata keys. `BB.TUI.State.parameter_bounds/2` still dug bounds out of the old tuple shape, which no longer occurs, so every bounded parameter lost its range-scaled `h`/`l` step (falling back to 1 / 0.1) and its clamping — and since `bb` 0.30 also started rejecting out-of-range writes, stepping into a bound produced a silently refused set instead of a clamp. Bounds now come from the `min`/`max` metadata keys, which `BB.TUI.State.update_parameters/2` previously discarded.

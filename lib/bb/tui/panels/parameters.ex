@@ -135,9 +135,11 @@ defmodule BB.TUI.Panels.Parameters do
   Formats a parameter's Spark-declared type for the Type column.
 
   Returns `"—"` when no schema metadata is present. Atom types render as
-  `":float"`; option-tagged types like `{:integer, [min: 0, max: 100]}`
-  render as their head atom — the bounds belong in the (future) edit
-  popup, not in a one-line table cell.
+  `":float"`; a unit type renders as `"unit:meter"` (matching
+  `bb_liveview`'s convention); option-tagged types like
+  `{:integer, [min: 0, max: 100]}` render as their head atom — the
+  bounds belong in the (future) edit popup, not in a one-line table
+  cell.
 
   ## Examples
 
@@ -149,6 +151,9 @@ defmodule BB.TUI.Panels.Parameters do
 
       iex> BB.TUI.Panels.Parameters.format_type(%{type: :float})
       ":float"
+
+      iex> BB.TUI.Panels.Parameters.format_type(%{type: {:unit, :meter_per_second}})
+      "unit:meter_per_second"
 
       iex> BB.TUI.Panels.Parameters.format_type(%{type: {:integer, [min: 0, max: 100]}})
       ":integer"
@@ -163,6 +168,7 @@ defmodule BB.TUI.Panels.Parameters do
   def format_type(nil), do: "—"
   def format_type(%{type: nil}), do: "—"
   def format_type(%{type: type}) when is_atom(type), do: inspect(type)
+  def format_type(%{type: {:unit, unit}}) when is_atom(unit), do: "unit:#{unit}"
   def format_type(%{type: {head, opts}}) when is_atom(head) and is_list(opts), do: inspect(head)
   def format_type(%{type: other}), do: inspect(other)
   def format_type(_), do: "—"
@@ -181,10 +187,14 @@ defmodule BB.TUI.Panels.Parameters do
       iex> BB.TUI.Panels.Parameters.edit_hint(true)
       " [enter]"
 
+      iex> BB.TUI.Panels.Parameters.edit_hint(Localize.Unit.new!(0.5, "meter"))
+      " [h/l]"
+
       iex> BB.TUI.Panels.Parameters.edit_hint(:fast)
       ""
   """
   @spec edit_hint(term()) :: String.t()
+  def edit_hint(%Localize.Unit{value: mag}) when is_number(mag), do: " [h/l]"
   def edit_hint(val) when is_number(val), do: " [h/l]"
   def edit_hint(val) when is_boolean(val), do: " [enter]"
   def edit_hint(_val), do: ""
@@ -304,6 +314,11 @@ defmodule BB.TUI.Panels.Parameters do
   @doc """
   Formats a parameter value for display.
 
+  A unit value renders its magnitude the way a bare number would,
+  followed by the canonical unit name — locale-free, like
+  `BB.Unit.describe/1`, but with the magnitude's precision tamed for a
+  table cell.
+
   ## Examples
 
       iex> BB.TUI.Panels.Parameters.format_value(42)
@@ -312,6 +327,9 @@ defmodule BB.TUI.Panels.Parameters do
       iex> BB.TUI.Panels.Parameters.format_value(3.14159)
       "3.142"
 
+      iex> BB.TUI.Panels.Parameters.format_value(Localize.Unit.new!(0.5, "meter"))
+      "0.500 meter"
+
       iex> BB.TUI.Panels.Parameters.format_value(true)
       "true"
 
@@ -319,6 +337,10 @@ defmodule BB.TUI.Panels.Parameters do
       ":fast"
   """
   @spec format_value(term()) :: String.t()
+  def format_value(%Localize.Unit{value: mag, name: name}) when is_number(mag) do
+    "#{format_value(mag)} #{name}"
+  end
+
   def format_value(val) when is_float(val) do
     :erlang.float_to_binary(val, decimals: 3)
   end

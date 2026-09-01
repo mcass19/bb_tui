@@ -184,6 +184,30 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "unit_bounds_in/2" do
+    test "converts unit bounds into magnitudes of the target unit" do
+      bounds = {Localize.Unit.new!(0, "meter"), Localize.Unit.new!(1, "kilometer")}
+
+      assert {min, max} = State.unit_bounds_in(bounds, "meter")
+      assert min == 0
+      assert max == 1000.0
+    end
+
+    test "nil bounds and nil sides pass through" do
+      assert State.unit_bounds_in(nil, "meter") == nil
+
+      assert {min, nil} = State.unit_bounds_in({Localize.Unit.new!(2, "meter"), nil}, "meter")
+      assert min == 2
+    end
+
+    test "an inconvertible bound opens that side" do
+      bounds = {Localize.Unit.new!(0, "second"), Localize.Unit.new!(1, "meter")}
+
+      assert {nil, max} = State.unit_bounds_in(bounds, "meter")
+      assert max == 1
+    end
+  end
+
   describe "event_debounced?/4" do
     test "returns false when the key has never been seen" do
       refute State.event_debounced?(%{}, {[:sensor], :map}, 1_000, 1_000)
