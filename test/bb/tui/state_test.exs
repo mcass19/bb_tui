@@ -149,7 +149,7 @@ defmodule BB.TUI.StateTest do
       state = Fixtures.sample_state()
 
       params = [
-        {[:speed], %{value: 100, type: {:integer, [min: 0, max: 500]}, doc: "rpm", default: 0}},
+        {[:speed], %{value: 100, type: :integer, min: 0, max: 500, doc: "rpm", default: 0}},
         {[:mode], %{value: :fast, type: :atom}}
       ]
 
@@ -158,8 +158,8 @@ defmodule BB.TUI.StateTest do
       assert state.parameters.list == [{[:speed], 100}, {[:mode], :fast}]
 
       assert state.parameters.metadata == %{
-               [:speed] => %{type: {:integer, [min: 0, max: 500]}, doc: "rpm", default: 0},
-               [:mode] => %{type: :atom, doc: nil, default: nil}
+               [:speed] => %{type: :integer, min: 0, max: 500, doc: "rpm", default: 0},
+               [:mode] => %{type: :atom, min: nil, max: nil, doc: nil, default: nil}
              }
     end
 
