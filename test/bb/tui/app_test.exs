@@ -386,6 +386,14 @@ defmodule BB.TUI.AppTest do
       assert new_state.ui.active_panel == :safety
     end
 
+    test "shift+tab as tab with a shift modifier also cycles to the previous panel" do
+      state = Fixtures.sample_state(%{active_panel: :commands})
+      event = %ExRatatui.Event.Key{code: "tab", modifiers: ["shift"], kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.ui.active_panel == :safety
+    end
+
     test "number keys 1..5 jump directly to the matching panel" do
       state = Fixtures.sample_state(%{active_panel: :safety})
 
@@ -838,6 +846,14 @@ defmodule BB.TUI.AppTest do
         assert {:noreply, new_state} = App.update({:event, event}, state)
         assert new_state.commands.focused_arg == 0
       end
+    end
+
+    test "shift+tab as tab with a shift modifier focuses the previous arg in edit mode" do
+      state = edit_mode_state(%{command_focused_arg: 1})
+      event = %ExRatatui.Event.Key{code: "tab", modifiers: ["shift"], kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.commands.focused_arg == 0
     end
 
     test "typing a char appends to the focused arg" do

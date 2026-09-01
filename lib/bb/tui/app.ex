@@ -427,6 +427,16 @@ defmodule BB.TUI.App do
     {:noreply, State.cycle_render_mode(state)}
   end
 
+  # Terminal transports report shift+tab as crossterm's "back_tab";
+  # browser transports (phoenix_ex_ratatui) report it as "tab" with a
+  # "shift" modifier. Normalize before any plain "tab" clause can match.
+  def update(
+        {:event, %Event.Key{code: "tab", modifiers: ["shift"], kind: "press"} = key},
+        state
+      ) do
+    update({:event, %{key | code: "back_tab", modifiers: []}}, state)
+  end
+
   def update(
         {:event, %Event.Key{code: "tab", kind: "press"}},
         %{ui: %{active_panel: :commands}, commands: %{edit_mode?: true}} = state

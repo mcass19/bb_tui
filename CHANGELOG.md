@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Shift+tab works from browser transports.** Terminal transports report shift+tab as crossterm's `back_tab` code, which is all the panel-cycling and argument-focus clauses matched; `phoenix_ex_ratatui` reports the same chord as `tab` with a `"shift"` modifier, so in a browser it fell through to the plain-tab clauses and cycled *forward*. The modifier form now normalizes to `back_tab` before any tab clause can match.
+
 - **Parameter bounds work again against `bb` 0.30+.** `bb` 0.30.0 changed what `BB.Parameter.list/2` reports: the generated validator tuple (`{:integer, [min: 0, max: 100]}`) became the declared type (`:integer`) with `min`/`max` as separate metadata keys. `BB.TUI.State.parameter_bounds/2` still dug bounds out of the old tuple shape, which no longer occurs, so every bounded parameter lost its range-scaled `h`/`l` step (falling back to 1 / 0.1) and its clamping — and since `bb` 0.30 also started rejecting out-of-range writes, stepping into a bound produced a silently refused set instead of a clamp. Bounds now come from the `min`/`max` metadata keys, which `BB.TUI.State.update_parameters/2` previously discarded.
 
 ## [0.5.0] - 2026-08-25
