@@ -120,26 +120,89 @@ defmodule Dev.TestRobot do
   end
 
   parameters do
+    # One of every editable shape the parameters panel knows: bounded
+    # floats/integers (h/l steps 1% of range), booleans (enter toggles),
+    # a free atom and a string (enter opens the inline editor), and two
+    # unit-typed parameters — `cruise_speed` in its own unit,
+    # `trim` with bounds declared in a different unit than the value to
+    # exercise cross-unit clamping. Every param carries a `doc` so the
+    # panel's footer always has something to show. The fixed-set
+    # (`{:in, values}`) shape can't be declared here — see
+    # `Dev.GaitSelector`.
     group :motion do
-      param(:max_speed, type: :float, default: 1.0, min: 0.0, max: 5.0)
-      param(:acceleration, type: :float, default: 0.5, min: 0.0, max: 2.0)
-      param(:mode, type: :atom, default: :auto)
+      param(:max_speed,
+        type: :float,
+        default: 1.0,
+        min: 0.0,
+        max: 5.0,
+        doc: "Top linear speed the planner may command"
+      )
+
+      param(:acceleration,
+        type: :float,
+        default: 0.5,
+        min: 0.0,
+        max: 2.0,
+        doc: "Ramp rate toward max_speed"
+      )
+
+      param(:mode, type: :atom, default: :auto, doc: "Free-form planner tag; enter edits it")
+
+      param(:cruise_speed,
+        type: {:unit, :meter_per_second},
+        default: ~u(0.5 meter_per_second),
+        min: ~u(0 meter_per_second),
+        max: ~u(2 meter_per_second),
+        doc: "Steady-state speed — a unit-typed parameter"
+      )
     end
 
     group :controller do
-      param(:kp, type: :float, default: 1.0, min: 0.0, max: 10.0)
-      param(:ki, type: :float, default: 0.1, min: 0.0, max: 5.0)
-      param(:kd, type: :float, default: 0.05, min: 0.0, max: 2.0)
+      param(:kp, type: :float, default: 1.0, min: 0.0, max: 10.0, doc: "Proportional gain")
+      param(:ki, type: :float, default: 0.1, min: 0.0, max: 5.0, doc: "Integral gain")
+      param(:kd, type: :float, default: 0.05, min: 0.0, max: 2.0, doc: "Derivative gain")
+
+      param(:trim,
+        type: {:unit, :degree},
+        default: ~u(0 degree),
+        min: ~u(-0.35 radian),
+        max: ~u(0.35 radian),
+        doc: "Joint trim in degrees; the bounds are declared in radians"
+      )
     end
 
     group :safety do
-      param(:collision_distance, type: :float, default: 0.3, min: 0.05, max: 1.0)
-      param(:enabled, type: :boolean, default: true)
+      param(:collision_distance,
+        type: :float,
+        default: 0.3,
+        min: 0.05,
+        max: 1.0,
+        doc: "Stop when an obstacle is nearer than this"
+      )
+
+      param(:enabled, type: :boolean, default: true, doc: "Master switch for the collision guard")
     end
 
     group :grip do
-      param(:force, type: :integer, default: 50, min: 0, max: 100)
-      param(:grip_speed, type: :integer, default: 75, min: 1, max: 100)
+      param(:force,
+        type: :integer,
+        default: 50,
+        min: 0,
+        max: 100,
+        doc: "Grip force as a percentage of maximum"
+      )
+
+      param(:grip_speed,
+        type: :integer,
+        default: 75,
+        min: 1,
+        max: 100,
+        doc: "Finger closing speed as a percentage"
+      )
+    end
+
+    group :identity do
+      param(:label, type: :string, default: "widow-x", doc: "Display name; enter edits it inline")
     end
 
     bridge(:mavlink, Dev.MockBridge, simulation: :start)
