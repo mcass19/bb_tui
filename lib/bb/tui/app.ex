@@ -313,6 +313,44 @@ defmodule BB.TUI.App do
     {:noreply, State.dismiss_event_detail(state)}
   end
 
+  # ── Update — parameters inline edit (modal while open) ───────
+  # These sit ahead of the global keys on purpose: a letter typed into
+  # the buffer must append, not quit, arm, or switch panels.
+
+  def update(
+        {:event, %Event.Key{code: "esc", kind: "press"}},
+        %{parameters: %{editing: %{}}} = state
+      ) do
+    {:noreply, State.cancel_param_edit(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
+        %{parameters: %{editing: %{path: path, buffer: buffer}}} = state
+      ) do
+    Robot.set_parameter(state.robot, path, State.parse_param_input(buffer), state.node)
+    {:noreply, State.cancel_param_edit(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "backspace", kind: "press"}},
+        %{parameters: %{editing: %{}}} = state
+      ) do
+    {:noreply, State.backspace_param_buffer(state)}
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{parameters: %{editing: %{}}} = state
+      )
+      when byte_size(code) == 1 do
+    {:noreply, State.append_to_param_buffer(state, code)}
+  end
+
+  def update({:event, %Event.Key{kind: "press"}}, %{parameters: %{editing: %{}}} = state) do
+    {:noreply, state}
+  end
+
   # ── Update — global keys ─────────────────────────────────────
 
   def update({:event, %Event.Key{code: "q", kind: "press"}}, state) do
@@ -1023,6 +1061,24 @@ defmodule BB.TUI.App do
         Robot.set_parameter(state.robot, path, %{value | value: new_magnitude}, state.node)
         {:noreply, state}
 
+      {path, value} ->
+        cycle_in_values(state, path, value, direction)
+
+      nil ->
+        {:noreply, state}
+    end
+  end
+
+  # A parameter declared with an {:in, values} type cycles through its
+  # allowed set on h/l, whatever the values' type; the multiplier keys
+  # deliberately still move one value at a time.
+  defp cycle_in_values(state, path, value, direction) do
+    case State.parameter_in_values(state, path) do
+      [_ | _] = values ->
+        step = if direction == :increase, do: :next, else: :prev
+        Robot.set_parameter(state.robot, path, State.cycle_value(values, value, step), state.node)
+        {:noreply, state}
+
       _ ->
         {:noreply, state}
     end
@@ -1081,7 +1137,7 @@ defmodule BB.TUI.App do
         {:noreply, state}
 
       _ ->
-        {:noreply, state}
+        {:noreply, State.start_param_edit(state)}
     end
   end
 

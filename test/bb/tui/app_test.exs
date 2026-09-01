@@ -1773,6 +1773,116 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, _new_state} = App.update({:event, event}, state)
     end
 
+    test "l cycles an {:in, values} parameter to the next allowed value" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:mode], :slow -> :ok end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: [{[:mode], :fast}],
+          parameter_metadata: %{[:mode] => %{type: {:in, [:fast, :slow]}}},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "l", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "h cycles an {:in, values} parameter backwards with wrap-around" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:mode], :slow -> :ok end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: [{[:mode], :fast}],
+          parameter_metadata: %{[:mode] => %{type: {:in, [:fast, :slow]}}},
+          param_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "h", kind: "press"}
+
+      assert {:noreply, _new_state} = App.update({:event, event}, state)
+    end
+
+    test "enter on a string parameter opens the editor instead of writing" do
+      Mimic.reject(&BB.Parameter.set/3)
+
+      state = editing_state("arm-a")
+
+      assert state.parameters.editing == %{path: [:label], buffer: "arm-a"}
+    end
+
+    test "global keys type into the buffer instead of acting" do
+      Mimic.reject(&BB.Parameter.set/3)
+
+      state = editing_state("")
+
+      state =
+        Enum.reduce(["q", "a", "d", "t"], state, fn code, acc ->
+          event = %ExRatatui.Event.Key{code: code, kind: "press"}
+          assert {:noreply, next} = App.update({:event, event}, acc)
+          next
+        end)
+
+      assert state.parameters.editing.buffer == "qadt"
+    end
+
+    test "backspace deletes and esc cancels without writing" do
+      Mimic.reject(&BB.Parameter.set/3)
+
+      state = editing_state("ab")
+
+      backspace = %ExRatatui.Event.Key{code: "backspace", kind: "press"}
+      {:noreply, state} = App.update({:event, backspace}, state)
+      assert state.parameters.editing.buffer == "a"
+
+      esc = %ExRatatui.Event.Key{code: "esc", kind: "press"}
+      {:noreply, state} = App.update({:event, esc}, state)
+      assert state.parameters.editing == nil
+    end
+
+    test "navigation keys are swallowed while editing" do
+      Mimic.reject(&BB.Parameter.set/3)
+
+      state = editing_state("ab")
+
+      up = %ExRatatui.Event.Key{code: "up", kind: "press"}
+      assert {:noreply, state} = App.update({:event, up}, state)
+      assert state.parameters.editing.buffer == "ab"
+      assert state.parameters.selected == 0
+    end
+
+    test "enter commits the edited string" do
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:label], "arm-b" -> :ok end)
+
+      state = editing_state("arm-")
+
+      state =
+        Enum.reduce(["b", "enter"], state, fn code, acc ->
+          event = %ExRatatui.Event.Key{code: code, kind: "press"}
+          {:noreply, next} = App.update({:event, event}, acc)
+          next
+        end)
+
+      assert state.parameters.editing == nil
+    end
+
+    test "enter commits an atom for a colon-prefixed buffer" do
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:label], :fast -> :ok end)
+
+      state = editing_state(:fast)
+      assert state.parameters.editing.buffer == ":fast"
+
+      enter = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+      assert {:noreply, state} = App.update({:event, enter}, state)
+      assert state.parameters.editing == nil
+    end
+
     test "t key on local tab is a no-op when no bridges are discovered" do
       state =
         Fixtures.sample_state(%{
@@ -2375,5 +2485,23 @@ defmodule BB.TUI.AppTest do
       assert :throbber in ids
       assert :sensor_flush in ids
     end
+  end
+
+  # Puts a single [:label] parameter on the local tab and presses enter on
+  # it, returning the state as the inline-editing tests expect to find it.
+  defp editing_state(value, meta \\ %{}) do
+    Fixtures.stub_bb_modules()
+
+    state =
+      Fixtures.sample_state(%{
+        active_panel: :parameters,
+        parameters: [{[:label], value}],
+        parameter_metadata: meta,
+        param_selected: 0
+      })
+
+    enter = %ExRatatui.Event.Key{code: "enter", kind: "press"}
+    {:noreply, state} = App.update({:event, enter}, state)
+    state
   end
 end

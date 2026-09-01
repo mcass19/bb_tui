@@ -97,7 +97,7 @@ defmodule BB.TUI.Panels.Parameters do
           Enum.map(sorted, fn {path, value} ->
             [
               format_path(path),
-              format_value(value) <> edit_hint(value),
+              value_cell(path, value, state.parameters),
               format_type(state.parameters.metadata[path])
             ]
           end)
@@ -123,6 +123,50 @@ defmodule BB.TUI.Panels.Parameters do
         {rows, length(sorted)}
     end
   end
+
+  # The row being edited shows the typed buffer with a cursor mark in
+  # place of the stored value; every other row shows the value plus its
+  # edit hint.
+  defp value_cell(path, _value, %{editing: %{path: path, buffer: buffer}}) do
+    buffer <> "▌"
+  end
+
+  defp value_cell(path, value, %{metadata: meta}) do
+    format_value(value) <> local_edit_hint(value, meta[path])
+  end
+
+  @doc """
+  Returns the edit hint for a local parameter, which unlike
+  `edit_hint/1` can consult the parameter's schema metadata: a value
+  constrained to a fixed set cycles with `h`/`l` regardless of its
+  type, and free strings and atoms open the inline editor with enter.
+
+  ## Examples
+
+      iex> BB.TUI.Panels.Parameters.local_edit_hint(:fast, %{type: {:in, [:fast, :slow]}})
+      " [h/l]"
+
+      iex> BB.TUI.Panels.Parameters.local_edit_hint(:fast, nil)
+      " [enter]"
+
+      iex> BB.TUI.Panels.Parameters.local_edit_hint("arm-a", nil)
+      " [enter]"
+
+      iex> BB.TUI.Panels.Parameters.local_edit_hint(42, nil)
+      " [h/l]"
+
+      iex> BB.TUI.Panels.Parameters.local_edit_hint(nil, nil)
+      ""
+  """
+  @spec local_edit_hint(term(), map() | nil) :: String.t()
+  def local_edit_hint(_value, %{type: {:in, values}}) when is_list(values), do: " [h/l]"
+  def local_edit_hint(value, _meta) when is_binary(value), do: " [enter]"
+
+  def local_edit_hint(value, _meta)
+      when is_atom(value) and not is_boolean(value) and not is_nil(value),
+      do: " [enter]"
+
+  def local_edit_hint(value, _meta), do: edit_hint(value)
 
   defp remote_row(param) do
     [

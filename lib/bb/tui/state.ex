@@ -1740,6 +1740,172 @@ defmodule BB.TUI.State do
   end
 
   @doc """
+  Begins inline editing of the selected local parameter.
+
+  Only string and plain atom values are text-editable — numbers step
+  with `h`/`l`, booleans toggle with enter, and a value constrained to a
+  fixed set (`parameter_in_values/2`) cycles with `h`/`l` instead;
+  those leave the state unchanged. The buffer is prefilled with the
+  current value, an atom keeping its leading colon so a committed
+  buffer round-trips through `parse_param_input/1`.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:mode], :fast}]}}
+      iex> BB.TUI.State.start_param_edit(state).parameters.editing
+      %{path: [:mode], buffer: ":fast"}
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:name], "arm-a"}]}}
+      iex> BB.TUI.State.start_param_edit(state).parameters.editing
+      %{path: [:name], buffer: "arm-a"}
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{list: [{[:speed], 42}]}}
+      iex> BB.TUI.State.start_param_edit(state).parameters.editing
+      nil
+  """
+  @spec start_param_edit(t()) :: t()
+  def start_param_edit(%__MODULE__{parameters: params} = state) do
+    case selected_param(state) do
+      {path, value}
+      when is_binary(value) or
+             (is_atom(value) and not is_boolean(value) and not is_nil(value)) ->
+        if parameter_in_values(state, path) do
+          state
+        else
+          %{state | parameters: %{params | editing: %{path: path, buffer: edit_buffer(value)}}}
+        end
+
+      _ ->
+        state
+    end
+  end
+
+  defp edit_buffer(value) when is_binary(value), do: value
+  defp edit_buffer(value) when is_atom(value), do: ":" <> Atom.to_string(value)
+
+  @doc """
+  Discards the inline parameter edit, if one is open.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{editing: %{path: [:a], buffer: "x"}}}
+      iex> BB.TUI.State.cancel_param_edit(state).parameters.editing
+      nil
+  """
+  @spec cancel_param_edit(t()) :: t()
+  def cancel_param_edit(%__MODULE__{parameters: params} = state) do
+    %{state | parameters: %{params | editing: nil}}
+  end
+
+  @doc """
+  Appends a typed character to the open parameter edit buffer.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{editing: %{path: [:a], buffer: "ar"}}}
+      iex> BB.TUI.State.append_to_param_buffer(state, "m").parameters.editing.buffer
+      "arm"
+  """
+  @spec append_to_param_buffer(t(), String.t()) :: t()
+  def append_to_param_buffer(
+        %__MODULE__{parameters: %{editing: %{buffer: buffer} = editing} = params} = state,
+        char
+      ) do
+    %{state | parameters: %{params | editing: %{editing | buffer: buffer <> char}}}
+  end
+
+  @doc """
+  Deletes the last character of the open parameter edit buffer.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{editing: %{path: [:a], buffer: "arm"}}}
+      iex> BB.TUI.State.backspace_param_buffer(state).parameters.editing.buffer
+      "ar"
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{editing: %{path: [:a], buffer: ""}}}
+      iex> BB.TUI.State.backspace_param_buffer(state).parameters.editing.buffer
+      ""
+  """
+  @spec backspace_param_buffer(t()) :: t()
+  def backspace_param_buffer(
+        %__MODULE__{parameters: %{editing: %{buffer: buffer} = editing} = params} = state
+      ) do
+    %{
+      state
+      | parameters: %{params | editing: %{editing | buffer: String.slice(buffer, 0..-2//1)}}
+    }
+  end
+
+  @doc """
+  Parses a committed parameter edit buffer into the value to write.
+
+  A leading colon reads as an atom — the same shape the buffer is
+  prefilled with — and anything else stays a string. bb validates the
+  value against the parameter's schema on write, so a wrong type comes
+  back as a refused set rather than a crash.
+
+  ## Examples
+
+      iex> BB.TUI.State.parse_param_input(":fast")
+      :fast
+
+      iex> BB.TUI.State.parse_param_input("arm-a")
+      "arm-a"
+  """
+  @spec parse_param_input(String.t()) :: atom() | String.t()
+  def parse_param_input(":" <> rest), do: String.to_atom(rest)
+  def parse_param_input(buffer), do: buffer
+
+  @doc """
+  Returns the allowed values for a parameter declared with an
+  `{:in, values}` type, or `nil` when the parameter is unconstrained.
+
+  ## Examples
+
+      iex> state = %BB.TUI.State{parameters: %BB.TUI.State.Parameters{metadata: %{[:mode] => %{type: {:in, [:fast, :slow]}}}}}
+      iex> BB.TUI.State.parameter_in_values(state, [:mode])
+      [:fast, :slow]
+
+      iex> BB.TUI.State.parameter_in_values(%BB.TUI.State{}, [:mode])
+      nil
+  """
+  @spec parameter_in_values(t(), list()) :: [term()] | nil
+  def parameter_in_values(%__MODULE__{parameters: %{metadata: meta}}, path) do
+    case meta[path] do
+      %{type: {:in, values}} when is_list(values) -> values
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Steps through a fixed value set with wrap-around, landing on the
+  first value when the current one is not in the set.
+
+  ## Examples
+
+      iex> BB.TUI.State.cycle_value([:a, :b, :c], :c, :next)
+      :a
+
+      iex> BB.TUI.State.cycle_value([:a, :b, :c], :a, :prev)
+      :c
+
+      iex> BB.TUI.State.cycle_value([:a, :b], :zzz, :next)
+      :a
+  """
+  @spec cycle_value([term()], term(), :next | :prev) :: term()
+  def cycle_value(values, current, direction) do
+    case Enum.find_index(values, &(&1 == current)) do
+      nil ->
+        hd(values)
+
+      idx ->
+        offset = if direction == :next, do: 1, else: -1
+        Enum.at(values, Integer.mod(idx + offset, length(values)))
+    end
+  end
+
+  @doc """
   Clamps a numeric value into `{min, max}` bounds. Either bound may be
   `nil` to leave that side open. A `nil` bounds tuple returns `value`
   unchanged.
