@@ -96,6 +96,25 @@ Under the hood, `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isola
 
 The 3D Visualization tab works over SSH, but how crisply it renders depends on the *client* terminal. `Viewport3D` negotiates the sharpest pixel protocol the connecting terminal advertises (kitty / sixel / iTerm2) and falls back to half-block, braille, or ASCII when none is available — so a Ghostty/WezTerm/Kitty client sees pixel graphics, while a plainer client degrades gracefully to a braille mesh instead of failing. The `m` key cycles render modes if the auto-detected one isn't ideal for a given link. This negotiation happens per session, so two operators on the same robot can each get the best mode their own terminal supports.
 
+## Browser
+
+With the optional `{:phoenix_ex_ratatui, "~> 0.2"}` dependency present, `BB.TUI.Live` turns the dashboard into a Phoenix LiveView — without it the module is simply not compiled, and nothing else in `bb_tui` changes.
+
+```elixir
+defmodule MyAppWeb.RobotLive do
+  use BB.TUI.Live, robot: MyApp.Robot
+end
+
+# router.ex
+live "/robot", MyAppWeb.RobotLive
+```
+
+The `use` options are the same mount keyword list every other entry point takes — `:robot` plus `:node`, `:subscribe_paths`, `:renderers`. When the options depend on the session (picking a robot per user, say), override `tui_mount_opts/1`, which receives the connected socket. On the JS side, `phoenix_ex_ratatui`'s hook is registered once in `app.js` — see the [phoenix_ex_ratatui docs](https://hexdocs.pm/phoenix_ex_ratatui) for the two lines involved.
+
+Each browser tab runs its own isolated dashboard session over the shared robot, exactly like concurrent SSH clients, so several operators each keep their own cursor and panel focus. The 3D visualization renders in braille in the browser (the pixel protocols are terminal features), and shift+tab arrives as a modifier rather than a key of its own — normalized transparently.
+
+The dev application serves a complete, npm-free reference wiring at `http://localhost:4040` whenever `iex -S mix` runs in this repository — endpoint, router, root layout, and LiveView live under `dev/web/`.
+
 ## Erlang distribution
 
 When the robot runs on a different BEAM node, the dashboard can render on the robot's terminal, on a local terminal that pulls all data from the robot node, or as a thin renderer attached to a TUI already running on the robot node.

@@ -13,4 +13,6 @@ Mimic.copy(BB.Command)
 Mimic.copy(BB.TUI.Rpc)
 Mimic.copy(BB.TUI.App)
 
+{:ok, _} = BB.TUI.Test.Endpoint.start_link()
+
 ExUnit.start()
