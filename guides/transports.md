@@ -1,6 +1,6 @@
 # Transports
 
-`BB.TUI.App`'s `mount` / `render` / `handle_event` / `handle_info` callbacks are transport-agnostic — the same dashboard code serves a local terminal, an SSH client, or a thin renderer attached over Erlang distribution. This guide covers the remote transports and how to drive each one locally.
+`BB.TUI.App`'s `mount` / `render` / `handle_event` / `handle_info` callbacks are transport-agnostic — the same dashboard code serves a local terminal, an SSH client, a browser tab, or a thin renderer attached over Erlang distribution. This guide covers the remote transports and how to drive each one locally.
 
 ## Local
 
@@ -113,7 +113,7 @@ The `use` options are the same mount keyword list every other entry point takes 
 
 Each browser tab runs its own isolated dashboard session over the shared robot, exactly like concurrent SSH clients, so several operators each keep their own cursor and panel focus. The 3D visualization renders in braille in the browser (the pixel protocols are terminal features), and shift+tab arrives as a modifier rather than a key of its own — normalized transparently.
 
-The dev application serves a complete, npm-free reference wiring at `http://localhost:4040` whenever `iex -S mix` runs in this repository — endpoint, router, root layout, and LiveView live under `dev/web/`.
+The dev application serves a complete, npm-free reference wiring at `http://localhost:4040` — endpoint, router, root layout, and LiveView live under `dev/web/`; see [Testing transports locally](#testing-transports-locally).
 
 ## Erlang distribution
 
@@ -198,7 +198,7 @@ ExRatatui.Runtime.inject_event(pid, %ExRatatui.Event.Key{code: "tab", kind: "pre
 
 ## Testing transports locally
 
-The dev application ships a simulated robot, so both remote transports can be exercised without hardware.
+The dev application ships a simulated robot, so every remote transport can be exercised without hardware.
 
 ### SSH
 
@@ -215,6 +215,18 @@ ssh admin@localhost -p 2222
 ```
 
 Multiple SSH sessions can run simultaneously — each gets its own independent dashboard. A host key warning on reconnect (after recompiling) clears with `ssh-keygen -R "[localhost]:2222"`.
+
+### Browser
+
+The dev application (`dev/application.ex`) supervises `Dev.Web.Endpoint`, a Bandit-backed Phoenix endpoint on `http://localhost:4040` whose single route mounts `Dev.Web.RobotLive` — `use BB.TUI.Live, robot: Dev.TestRobot`. It comes up with any dev boot of the application:
+
+```sh
+iex -S mix
+```
+
+Then open `http://localhost:4040`. Several tabs can be open at once, each with its own dashboard session; the terminal dashboard (`mix bb.tui --robot Dev.TestRobot`) can run against the same robot at the same time.
+
+The wiring under `dev/web/` is deliberately npm-free — the page loads phoenix and phoenix_live_view as the prebuilt UMD bundles in `deps/`, and phoenix_ex_ratatui's hook as the prebuilt ES module it ships — so it doubles as a minimal reference for the pieces a real Phoenix app needs: the static plugs in `Dev.Web.Endpoint`, the `LiveSocket` setup and the full-height sizing contract in `Dev.Web.Layouts`, and the `live` route in `dev/web/router.ex`.
 
 ### Erlang distribution
 

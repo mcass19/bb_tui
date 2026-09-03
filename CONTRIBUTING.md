@@ -33,7 +33,9 @@ The project ships a simulated WidowX-200 robot arm that starts automatically in 
 mix bb.tui --robot Dev.TestRobot
 ```
 
-`Dev.TestRobot` exercises every panel feature end-to-end — commands with all argument shapes, parameter groups for every primitive type, a `:mavlink` bridge tab, and a `stream` command that emits a high-rate sensor burst.
+`Dev.TestRobot` exercises every panel feature end-to-end — commands with all argument shapes, parameters of every shape the panel edits (numeric, boolean, string, atom, unit-typed, and fixed-set), a `:mavlink` bridge tab, and a `stream` command that emits a high-rate sensor burst.
+
+The dev application also serves the same robot in the browser through `BB.TUI.Live` at `http://localhost:4040` whenever it boots (`iex -S mix`); the endpoint, router, and layout live under `dev/web/` and need no npm. The [Transports guide](guides/transports.md#testing-transports-locally) covers driving the SSH, browser, and distribution transports locally.
 
 ## Running Tests
 

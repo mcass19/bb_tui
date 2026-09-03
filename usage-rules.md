@@ -21,16 +21,17 @@ start and extend the dashboard.
 
 1. **The dashboard is an entry point, not a DSL component.** It is *not* a
    `BB.Sensor`/`BB.Actuator`/`BB.Controller` and it does *not* belong in the
-   robot's `topology`. Start it from IEx, a mix task, a supervision tree, or an
-   SSH daemon.
+   robot's `topology`. Start it from IEx, a mix task, a supervision tree, an
+   SSH daemon, or a Phoenix router.
 2. **It observes a robot that is already running.** On start it subscribes to
    the robot's PubSub and reads live state over the local node or `:rpc`. The
    robot's supervision tree must be started separately — the dashboard neither
    starts nor supervises the robot.
 3. **Pick the entry point by lifecycle, not by transport.** `run/2` blocks and
    owns the terminal until `q`; `start/2` returns a supervised pid; `start_ssh/2`
-   runs a daemon; `subsystem/1` registers under `nerves_ssh`. Reaching for
-   `run/2` inside a supervision tree is the usual mistake.
+   runs a daemon; `subsystem/1` registers under `nerves_ssh`; `use BB.TUI.Live`
+   defines a LiveView the router mounts per browser tab. Reaching for `run/2`
+   inside a supervision tree is the usual mistake.
 4. **Rendering is a pure projection of state.** Panels read `BB.TUI.State` and
    return widgets; every transition lives in `BB.TUI.State` and every effect is
    dispatched from `BB.TUI.App.update/2`. Extensions should follow the same
@@ -105,7 +106,9 @@ mix igniter.install bb_tui --robot MyApp.Robot
 
 ## Options
 
-`run/2`, `start/2` and `start_ssh/2` share the same keyword list.
+`run/2`, `start/2` and `start_ssh/2` share the same keyword list. `use BB.TUI.Live`
+(and an overridden `tui_mount_opts/1`) takes the same list minus `:transport` and
+`:test_mode`, which the LiveView transport owns.
 
 | Option | Default | Meaning |
 |---|---|---|
