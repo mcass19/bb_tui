@@ -63,8 +63,10 @@ defmodule BB.TUI.MixProject do
     [
       {:bb, bb_dep("~> 0.31")},
       {:ex_ratatui, "~> 0.13"},
-      # Browser transport (BB.TUI.Live)
+
+      # Optional
       {:phoenix_ex_ratatui, "~> 0.2", optional: true},
+      {:igniter, "~> 0.8", optional: true},
 
       # Test
       {:mimic, "~> 2.2", only: :test},
@@ -76,7 +78,6 @@ defmodule BB.TUI.MixProject do
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
-      {:igniter, "~> 0.8", only: [:dev, :test], runtime: false},
       {:usage_rules, "~> 1.2", only: [:dev], runtime: false}
     ]
   end

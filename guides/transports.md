@@ -100,6 +100,15 @@ The 3D Visualization tab works over SSH, but how crisply it renders depends on t
 
 With the optional `{:phoenix_ex_ratatui, "~> 0.2"}` dependency present, `BB.TUI.Live` turns the dashboard into a Phoenix LiveView — without it the module is simply not compiled, and nothing else in `bb_tui` changes.
 
+The installer does the whole wiring in a Phoenix project — the dependency, the LiveView module, the route, and the JS hook:
+
+```sh
+mix igniter.install bb_tui --web
+mix igniter.install bb_tui --web --path /dashboard
+```
+
+By hand, it is a module and a route:
+
 ```elixir
 defmodule MyAppWeb.RobotLive do
   use BB.TUI.Live, robot: MyApp.Robot

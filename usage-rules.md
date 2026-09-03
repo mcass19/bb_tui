@@ -98,10 +98,13 @@ override `tui_mount_opts/1` to derive them per session from the socket. Each
 browser tab is an isolated dashboard session over the shared robot, like
 concurrent SSH clients.
 
-The igniter installer wires up the mix task and dev entry points:
+The igniter installer wires up the mix task and dev entry points; `--web` also
+adds the dependency, the LiveView, the route, and the JS hook in a Phoenix
+project:
 
 ```bash
 mix igniter.install bb_tui --robot MyApp.Robot
+mix igniter.install bb_tui --robot MyApp.Robot --web
 ```
 
 ## Options
