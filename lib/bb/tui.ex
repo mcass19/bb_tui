@@ -59,6 +59,21 @@ defmodule BB.TUI do
 
   See `ExRatatui.SSH.Daemon` for the full list of SSH options.
 
+  ## Browser transport
+
+  With the optional `phoenix_ex_ratatui` dependency present, the dashboard
+  can be served as a Phoenix LiveView — each browser tab gets its own
+  isolated session over the shared robot, just like SSH clients:
+
+      defmodule MyAppWeb.RobotLive do
+        use BB.TUI.Live, robot: MyApp.Robot
+      end
+
+      # router.ex
+      live "/robot", MyAppWeb.RobotLive
+
+  See `BB.TUI.Live` for the `use` options and the JS hook setup.
+
   ## Distributed transport (attach from a connected node)
 
   As an alternative to the `:node` option — which keeps mount/render local

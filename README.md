@@ -15,7 +15,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Joint control panel** — position table with type (revolute/prismatic/continuous), units (degrees/mm), visual range bars, target tracking, simulated joint markers, and direct position adjustment via keyboard (1% and 10% steps)
 - **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload. Surfaces hardware-error detail (`[:safety, :error]`) and estimator output (`[:estimator]`) alongside state, sensor, parameter, and command events
 - **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state. Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
-- **Parameters panel** — live parameter table grouped by path with real-time updates, plus bridge tabs for editing remote parameters
+- **Parameters panel** — live parameter table grouped by path with real-time updates and the selected parameter's `doc` on the panel border. Numeric and unit-typed values step by 1% / 10% of their declared range with `h`/`l`/`H`/`L`, booleans toggle on Enter, string and atom values open an inline editor, and `{:in, [...]}` fixed-set parameters cycle through their allowed values. Bridge tabs expose remote parameters for numeric stepping and boolean toggling
 - **3D visualization tab** — renders the live robot in the terminal from its URDF topology and joint positions, with an orbitable/zoomable camera. Built on `ExRatatui`'s `Viewport3D`: crisp pixel graphics on capable terminals (Ghostty/WezTerm/Kitty) with automatic braille fallback over SSH; the arm reposes in real time as sensor data arrives
 - **High-rate-safe** — the event log debounces repeated sensor messages and renders coalesce to ~30fps, so fast telemetry never floods the log or stalls the UI
 - **Status bar, help overlay, and theming** — robot name / safety / runtime indicators, a battery / power readout when the robot reports it (colored by remaining charge), a scrollable keybinding reference, and a consistent semantic color palette
@@ -63,7 +63,7 @@ The install shape can be tuned with flags:
 - `--ssh` — append a supervised `{BB.TUI, …}` child wired for an SSH daemon, so the dashboard is reachable as soon as the app boots. Accepts `--port`, `--user`, `--password`. Idempotent; change the generated credentials before deploying.
 - `--nerves` — register `BB.TUI.subsystem(<Robot>)` under `config :nerves_ssh, :subsystems` so the dashboard rides on an existing `nerves_ssh` daemon.
 
-Local dashboards are not supervised — a child that claims the terminal on boot would fight an IEx session for stdin/stdout — so the local entry points are `mix bb.tui` and `BB.TUI.run/1`. See `mix help bb_tui.install` for the full option reference, and the [Transports guide](guides/transports.md) for SSH and distribution setups.
+Local dashboards are not supervised — a child that claims the terminal on boot would fight an IEx session for stdin/stdout — so the local entry points are `mix bb.tui` and `BB.TUI.run/1`. See `mix help bb_tui.install` for the full option reference, and the [Transports guide](guides/transports.md) for SSH, browser, and distribution setups.
 
 To skip Igniter, add the dep directly:
 
@@ -98,7 +98,18 @@ children = [
 ]
 ```
 
-Serving the dashboard over SSH or attaching to a robot on another BEAM node is covered in the [Transports guide](guides/transports.md). The full key reference lives in the [Keybindings guide](guides/keybindings.md) (and in the in-app `?` overlay).
+In the browser, with the optional `{:phoenix_ex_ratatui, "~> 0.2"}` dependency added next to `bb_tui`:
+
+```elixir
+defmodule MyAppWeb.RobotLive do
+  use BB.TUI.Live, robot: MyApp.Robot
+end
+
+# router.ex
+live "/robot", MyAppWeb.RobotLive
+```
+
+Serving the dashboard over SSH or in the browser, or attaching to a robot on another BEAM node, is covered in the [Transports guide](guides/transports.md). The full key reference lives in the [Keybindings guide](guides/keybindings.md) (and in the in-app `?` overlay).
 
 ## How It Works
 
@@ -129,19 +140,20 @@ mix bb.tui --robot Dev.TestRobot
 - Telemetry demos — `power` (drains a simulated battery so the status-bar readout shifts green → yellow → red) and `diagnostics` (publishes a `[:safety, :error]` hardware-error report and an `[:estimator]` pose so both surface in the event log).
 - A multi-DoF demo — the arm rides a planar `base_motion` joint, and `drive` sends the base around a ~3s circle of `Transform2D` poses: the joints panel shows the read-only `pla` row tracking the pose, the event stream renders it compactly as `(x, y, θ°)`, and the 3D view shows the whole arm driving the loop.
 - A trajectory demo — `trajectory` publishes a `BB.Message.Actuator.Command.Trajectory` per joint and then sweeps `shoulder` and `elbow` through those waypoints over ~2.4s: the event log summarizes each command as `shoulder ← trajectory 4 waypoints over 2400ms` and lists the waypoints as `position@time`, while the arm moves through them instead of snapping between targets.
-- Parameter groups covering every primitive type — float, integer, boolean, atom — most with `:min` / `:max` so 1%-of-range stepping applies.
+- Parameter groups covering every shape the panel knows — float, integer, boolean, atom, string, unit-typed (`motion.cruise_speed` in m/s, `controller.trim` in degrees with bounds declared in radians), and a fixed-set `gait.pattern` (`{:in, [:walk, :trot, :crawl]}`, registered by `Dev.GaitSelector`) — most with `:min` / `:max` so 1%-of-range stepping applies, and every one carrying a `doc` for the panel border.
 - A `:mavlink` bridge (`Dev.MockBridge`) with a fixed remote-parameter list and in-memory writes — press `t` in the Parameters panel to cycle to the Bridge tab.
+- A browser dashboard — the dev application also serves `Dev.TestRobot` through `BB.TUI.Live` at `http://localhost:4040` (`dev/web/`, npm-free), so the same robot can be driven from a terminal and a browser tab at once.
 
 The WidowX-200 ships a full URDF, so the Visualization tab is live in dev too — press `]` to switch to it, then move joints from the Joint Control panel, run `stream` to watch the 3D arm repose in real time, run `trajectory` to watch it sweep smoothly through a set of waypoints, or run `drive` to watch it tour the ground plane.
 
-Exercising the SSH and Erlang-distribution transports against the simulated robot is covered in the [Transports guide](guides/transports.md#testing-transports-locally).
+Exercising the SSH, browser, and Erlang-distribution transports against the simulated robot is covered in the [Transports guide](guides/transports.md#testing-transports-locally).
 
 ## Guides
 
 | Guide | Description |
 |---|---|
-| [Transports](guides/transports.md) | Serve the dashboard over SSH or attach over Erlang distribution, inspect a running session, and test both locally |
-| [Keybindings](guides/keybindings.md) | Full per-panel key reference, including command argument editing and parameter stepping |
+| [Transports](guides/transports.md) | Serve the dashboard over SSH or in the browser, attach over Erlang distribution, inspect a running session, and test each transport locally |
+| [Keybindings](guides/keybindings.md) | Full per-panel key reference, including command argument editing, parameter stepping, and inline parameter editing |
 | [Telemetry](guides/telemetry.md) | `:telemetry` events for mount, input, dispatch, and frames — logging and `Telemetry.Metrics` |
 
 ## Contributing

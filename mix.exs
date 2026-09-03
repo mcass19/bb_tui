@@ -61,22 +61,17 @@ defmodule BB.TUI.MixProject do
 
   defp deps do
     [
-      {:ex_ratatui, "~> 0.11"},
       {:bb, bb_dep("~> 0.31")},
+      {:ex_ratatui, "~> 0.13"},
+      # Browser transport (BB.TUI.Live)
+      {:phoenix_ex_ratatui, "~> 0.2", optional: true},
 
       # Test
       {:mimic, "~> 2.2", only: :test},
       {:lazy_html, "~> 0.1", only: :test},
 
-      # Browser transport (BB.TUI.Live) — optional: consumers who want the
-      # dashboard in a browser add phoenix_ex_ratatui themselves (phoenix and
-      # phoenix_live_view arrive with it); everyone else pulls nothing extra.
-      # Optional rather than dev-only so the hex requirement constrains the
-      # version and mix compiles the dep before us when a consumer opts in.
-      {:phoenix_ex_ratatui, "~> 0.2", optional: true},
-      {:bandit, "~> 1.8", only: :dev},
-
       # Dev
+      {:bandit, "~> 1.8", only: :dev},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
@@ -118,7 +113,9 @@ defmodule BB.TUI.MixProject do
         "ratatui",
         "ssh",
         "distributed",
-        "nerves"
+        "nerves",
+        "phoenix",
+        "liveview"
       ]
     ]
   end
@@ -143,6 +140,7 @@ defmodule BB.TUI.MixProject do
         Core: [
           BB.TUI,
           BB.TUI.App,
+          BB.TUI.Live,
           BB.TUI.Renderer
         ],
         State: [
@@ -194,7 +192,13 @@ defmodule BB.TUI.MixProject do
           Dev.CalibrateHandler,
           Dev.WobbleHandler,
           Dev.DiagnosticsHandler,
-          Dev.PowerHandler
+          Dev.PowerHandler,
+          Dev.DriveHandler,
+          Dev.TrajectoryHandler,
+          Dev.GaitSelector,
+          Dev.Web.Endpoint,
+          Dev.Web.Layouts,
+          Dev.Web.RobotLive
         ]
       ]
     ]

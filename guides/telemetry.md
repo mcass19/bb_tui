@@ -1,6 +1,6 @@
 # Telemetry
 
-Every BB.TUI session rides on ExRatatui's `:telemetry` instrumentation. The runtime wraps `mount`, every input event, every PubSub/info dispatch, and every frame in spans with `:start` / `:stop` / `:exception` events; transport connect/disconnect and session open/close fire as single events. All metadata carries `:mod` (`BB.TUI.App` for any TUI session) and `:transport` (`:local`, `:ssh`, `:distributed`, or `:cell_session`).
+Every BB.TUI session rides on ExRatatui's `:telemetry` instrumentation. The runtime wraps `mount`, every input event, every PubSub/info dispatch, and every frame in spans with `:start` / `:stop` / `:exception` events; transport connect/disconnect and session open/close fire as single events. All metadata carries `:mod` (`BB.TUI.App` for any TUI session) and `:transport` (`:local`, `:ssh`, `:distributed`, or `:cell_session` — the tag a `BB.TUI.Live` browser session reports, since it renders through `ExRatatui.CellSession`). Browser sessions additionally emit `phoenix_ex_ratatui`'s own `[:phoenix_ex_ratatui, ...]` events for the LiveView side of the connection; see `PhoenixExRatatui.Telemetry`.
 
 ## Development logger
 
