@@ -62,6 +62,7 @@ The install shape can be tuned with flags:
 - `--auto-bb` — scaffold a `BB` robot via `bb.install` when none is present (skips the interactive prompt).
 - `--ssh` — append a supervised `{BB.TUI, …}` child wired for an SSH daemon, so the dashboard is reachable as soon as the app boots. Accepts `--port`, `--user`, `--password`. Idempotent; change the generated credentials before deploying.
 - `--nerves` — register `BB.TUI.subsystem(<Robot>)` under `config :nerves_ssh, :subsystems` so the dashboard rides on an existing `nerves_ssh` daemon.
+- `--web` — serve the dashboard in the browser: adds the optional `phoenix_ex_ratatui` dependency, generates a `use BB.TUI.Live` LiveView under the web namespace, mounts it inside the router's `:browser` scope (`/robot` by default, or `--path`), and registers the JS hook in `assets/js/app.js`. Needs a Phoenix router; idempotent.
 
 Local dashboards are not supervised — a child that claims the terminal on boot would fight an IEx session for stdin/stdout — so the local entry points are `mix bb.tui` and `BB.TUI.run/1`. See `mix help bb_tui.install` for the full option reference, and the [Transports guide](guides/transports.md) for SSH, browser, and distribution setups.
 
