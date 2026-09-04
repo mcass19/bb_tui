@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-04
+
 ### Added
 
 - **The browser is a fourth transport.** With the optional `{:phoenix_ex_ratatui, "~> 0.2"}` dependency present, the new `BB.TUI.Live` compiles: `use BB.TUI.Live, robot: MyApp.Robot` defines a Phoenix LiveView that serves the full dashboard — reducer runtime, subscriptions, throttling and all — through phoenix_ex_ratatui's CellSession transport, routable like any LiveView. The `use` options are the same mount keyword list as every other entry point, and `tui_mount_opts/1` is overridable for per-session options. Each browser tab is an isolated dashboard session over the shared robot, matching the SSH multi-client model. Without the dependency nothing changes — the module isn't compiled and no Phoenix code is pulled in. The dev application serves an npm-free reference wiring at `http://localhost:4040` (`dev/web/`): prebuilt UMD bundles for phoenix and phoenix_live_view straight from `deps/`, the hook as the ES module it ships, no esbuild.
@@ -110,7 +112,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mcass19/bb_tui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mcass19/bb_tui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mcass19/bb_tui/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mcass19/bb_tui/compare/v0.3.0...v0.3.1
