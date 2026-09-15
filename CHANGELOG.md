@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The Visualization tab renders as a real bitmap in the browser.** With `phoenix_ex_ratatui` 0.3 the hook reports the measured cell size with its resize event, the transport opens the `CellSession` with that font size, and ex_ratatui 0.14 renders `Viewport3D` in `:auto` (the default) or any explicit pixel mode as a pixel region — a PNG painted over the grid — instead of the braille fallback the browser used to get. The `m` cycle is unchanged: the cell-blit modes (`:half_block`, `:braille`, `:ascii`) still render as cells, so the comparison is one key away. Nothing changes on the terminal, SSH, or distribution transports.
+
+### Changed
+
+- **The optional `phoenix_ex_ratatui` dependency is now `~> 0.3`.** The installer's `--web`, the `BB.TUI.Live` docs, and the README all pin 0.3, which is where pixel regions arrive; 0.2 still works but keeps the Visualization tab in braille. Consumer apps must rebuild their JS bundle after updating the dependency: an older hook reports no cell size, so the transport falls back to cells silently.
+
 ## [0.6.0] - 2026-09-04
 
 ### Added

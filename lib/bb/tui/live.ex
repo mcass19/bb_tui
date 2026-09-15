@@ -8,7 +8,7 @@ if Code.ensure_loaded?(PhoenixExRatatui.LiveView) do
     next to `bb_tui`:
 
         {:bb_tui, "~> #{Mix.Project.config()[:version] |> String.split(".") |> Enum.take(2) |> Enum.join(".")}"},
-        {:phoenix_ex_ratatui, "~> 0.2"}
+        {:phoenix_ex_ratatui, "~> 0.3"}
 
     Define a LiveView and route to it like any other:
 
@@ -38,6 +38,15 @@ if Code.ensure_loaded?(PhoenixExRatatui.LiveView) do
     needs `phoenix_ex_ratatui`'s hook registered once in `app.js` — see
     the [phoenix_ex_ratatui docs](https://hexdocs.pm/phoenix_ex_ratatui)
     and the `dev/web` demo endpoint in this repository for the wiring.
+
+    The Visualization tab renders the robot as a real bitmap in the browser:
+    the hook reports the measured cell size with its resize event, the
+    transport opens the `CellSession` with that font size, and `Viewport3D`
+    in `:auto` (the default) or any explicit pixel mode ships as a pixel
+    region painted over the grid. The cell-blit modes (`:half_block`,
+    `:braille`, `:ascii`) still render as cells. A JS bundle built against
+    phoenix_ex_ratatui 0.2 reports no cell size, and the tab silently falls
+    back to `:braille` — rebuild the assets after updating the dependency.
     """
 
     defmacro __using__(opts) do

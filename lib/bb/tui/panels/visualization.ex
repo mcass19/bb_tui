@@ -20,8 +20,9 @@ defmodule BB.TUI.Panels.Visualization do
     mode = State.viz_render_mode(state)
 
     # `render_mode` (cycled with `m`) is `:auto` by default — crisp pixel graphics
-    # (Kitty/Sixel) on capable terminals, braille fallback elsewhere. The active
-    # mode is shown dim in the title so it is clear what is on screen.
+    # (Kitty/Sixel) on capable terminals and as a pixel region in the browser,
+    # braille fallback elsewhere. The active mode is shown dim in the title so it
+    # is clear what is on screen.
     widget = %Viewport3D{
       scene: scene,
       camera: State.viz_camera(state),

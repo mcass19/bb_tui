@@ -241,7 +241,7 @@ defmodule Mix.Tasks.BbTui.InstallTest do
       phx_project_with_robot()
       |> Igniter.compose_task("bb_tui.install", ["--web"])
       |> assert_has_patch("mix.exs", """
-      + |      {:phoenix_ex_ratatui, "~> 0.2"}
+      + |      {:phoenix_ex_ratatui, "~> 0.3"}
       """)
     end
 

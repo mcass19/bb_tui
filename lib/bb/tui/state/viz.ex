@@ -7,8 +7,9 @@ defmodule BB.TUI.State.Viz do
 
   `render_mode` is the `ExRatatui.Widgets.Viewport3D` mode. `:auto` (the default)
   renders crisp pixel graphics on terminals that speak a graphics protocol
-  (Kitty — Ghostty/WezTerm/Kitty; Sixel — WezTerm) and falls back to `:braille`
-  over `CellSession`/SSH and unsupported terminals. The explicit pixel protocols
+  (Kitty — Ghostty/WezTerm/Kitty; Sixel — WezTerm) and in the browser, where the
+  `phoenix_ex_ratatui` transport ships the scene as a pixel region, and falls
+  back to `:braille` over SSH and unsupported terminals. The explicit pixel protocols
   (`:kitty`, `:sixel`, `:iterm2`) and cell-blit modes (`:half_block`, `:braille`,
   `:ascii`) can also be selected by cycling with `m`.
   """
