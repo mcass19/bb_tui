@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-15
+
 ### Added
 
 - **The Visualization tab renders as a real bitmap in the browser.** With `phoenix_ex_ratatui` 0.3 the hook reports the measured cell size with its resize event, the transport opens the `CellSession` with that font size, and ex_ratatui 0.14 renders `Viewport3D` in `:auto` (the default) or any explicit pixel mode as a pixel region — a PNG painted over the grid — instead of the braille fallback the browser used to get. The `m` cycle is unchanged: the cell-blit modes (`:half_block`, `:braille`, `:ascii`) still render as cells, so the comparison is one key away. Nothing changes on the terminal, SSH, or distribution transports.
@@ -120,7 +122,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mcass19/bb_tui/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mcass19/bb_tui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mcass19/bb_tui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mcass19/bb_tui/compare/v0.3.1...v0.4.0
