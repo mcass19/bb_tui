@@ -98,7 +98,7 @@ The 3D Visualization tab works over SSH, but how crisply it renders depends on t
 
 ## Browser
 
-With the optional `{:phoenix_ex_ratatui, "~> 0.2"}` dependency present, `BB.TUI.Live` turns the dashboard into a Phoenix LiveView — without it the module is simply not compiled, and nothing else in `bb_tui` changes.
+With the optional `{:phoenix_ex_ratatui, "~> 0.3"}` dependency present, `BB.TUI.Live` turns the dashboard into a Phoenix LiveView — without it the module is simply not compiled, and nothing else in `bb_tui` changes.
 
 The installer does the whole wiring in a Phoenix project — the dependency, the LiveView module, the route, and the JS hook:
 
@@ -120,7 +120,9 @@ live "/robot", MyAppWeb.RobotLive
 
 The `use` options are the same mount keyword list every other entry point takes — `:robot` plus `:node`, `:subscribe_paths`, `:renderers`. When the options depend on the session (picking a robot per user, say), override `tui_mount_opts/1`, which receives the connected socket. On the JS side, `phoenix_ex_ratatui`'s hook is registered once in `app.js` — see the [phoenix_ex_ratatui docs](https://hexdocs.pm/phoenix_ex_ratatui) for the two lines involved.
 
-Each browser tab runs its own isolated dashboard session over the shared robot, exactly like concurrent SSH clients, so several operators each keep their own cursor and panel focus. The 3D visualization renders in braille in the browser (the pixel protocols are terminal features), and shift+tab arrives as a modifier rather than a key of its own — normalized transparently.
+Each browser tab runs its own isolated dashboard session over the shared robot, exactly like concurrent SSH clients, so several operators each keep their own cursor and panel focus. Shift+tab arrives as a modifier rather than a key of its own — normalized transparently.
+
+The 3D visualization renders as a real bitmap in the browser. The hook measures the cell size of the grid and reports it with every resize, the transport opens the session with that font size, and `Viewport3D` in `:auto` (the default) or any explicit pixel mode ships as a pixel region — a PNG the hook paints over the grid, at the same crispness a Kitty terminal gets. The `m` cycle still switches to the cell-blit modes (`:half_block`, `:braille`, `:ascii`) for comparison. This needs the hook from phoenix_ex_ratatui 0.3 in the JS bundle: a bundle built against 0.2 reports no cell size and the tab silently falls back to braille, so rebuild the assets after updating the dependency.
 
 The dev application serves a complete, npm-free reference wiring at `http://localhost:4040` — endpoint, router, root layout, and LiveView live under `dev/web/`; see [Testing transports locally](#testing-transports-locally).
 

@@ -81,7 +81,7 @@ config :nerves_ssh,
 ```
 
 In the browser, as a Phoenix LiveView — requires the optional
-`{:phoenix_ex_ratatui, "~> 0.2"}` dependency (without it `BB.TUI.Live` is not
+`{:phoenix_ex_ratatui, "~> 0.3"}` dependency (without it `BB.TUI.Live` is not
 compiled), plus its JS hook registered once in `app.js`:
 
 ```elixir

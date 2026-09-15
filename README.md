@@ -99,7 +99,7 @@ children = [
 ]
 ```
 
-In the browser, with the optional `{:phoenix_ex_ratatui, "~> 0.2"}` dependency added next to `bb_tui`:
+In the browser, with the optional `{:phoenix_ex_ratatui, "~> 0.3"}` dependency added next to `bb_tui`:
 
 ```elixir
 defmodule MyAppWeb.RobotLive do

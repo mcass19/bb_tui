@@ -72,7 +72,7 @@ if Code.ensure_loaded?(Igniter) do
     alias Igniter.Libs.Phoenix
     alias Igniter.Project.{Application, Config, Deps, Formatter, Module}
 
-    @phoenix_ex_ratatui_dep {:phoenix_ex_ratatui, "~> 0.2"}
+    @phoenix_ex_ratatui_dep {:phoenix_ex_ratatui, "~> 0.3"}
     @hook "PhoenixExRatatuiHook"
     @hook_import ~s|import { PhoenixExRatatuiHook } from "phoenix_ex_ratatui"\n|
     @app_js "assets/js/app.js"
