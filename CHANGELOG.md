@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-05
+
 ### Changed
 
 - **The `ex_ratatui` dependency is now `~> 0.17`.** A dashboard that falls behind its robot's messages no longer piles up: renders merge while its mailbox is busy, a backlog drains in milliseconds instead of seconds, a closed SSH session stops it right away, and a `Logger` warning reports the backlog. The sensor flush tick stays, since it caps a stream the dashboard keeps up with at ~30 fps.
@@ -130,7 +132,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/mcass19/bb_tui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mcass19/bb_tui/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mcass19/bb_tui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mcass19/bb_tui/compare/v0.4.0...v0.5.0
