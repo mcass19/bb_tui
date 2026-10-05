@@ -88,6 +88,8 @@ ssh -t nerves.local -s Elixir.BB.TUI.App
 
 The `-t` flag is required — it forces PTY allocation, which the TUI needs for interactive input.
 
+On OTP 29.0.6 and 29.1 the device's `ssh` application refuses a subsystem after a PTY request, so this fails with "PTY allocation request failed". OTP 29.1.1 fixes it; ex_ratatui's [SSH guide](https://hexdocs.pm/ex_ratatui/ssh_transport.html#known-issue-otp-29-0-6-and-29-1) has a client-side workaround for devices that can't upgrade yet.
+
 `runtime.exs` is the right home for this: Mix evaluates compile-time configs before it builds deps for the target, so `ExRatatui.SSH` isn't on the code path yet, whereas `runtime.exs` runs at device boot after all beam files are loaded. The `Application.spec(:nerves_ssh)` guard keeps host builds silent.
 
 Under the hood, `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isolated `ExRatatui.SSH` channel process per client; each channel owns an in-memory `ExRatatui.Session` (backed by a Rust VTE parser) and a linked server running `BB.TUI.App`. See `ExRatatui.SSH.Daemon` for the full list of SSH options (authentication, host keys, idle timeout, max sessions).

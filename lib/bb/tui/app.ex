@@ -68,6 +68,11 @@ defmodule BB.TUI.App do
   Both intervals live in the `BB.TUI.State.Throttle` substruct, so tests
   can shrink or disable them (a debounce window of `0` disables it).
 
+  ex_ratatui also merges renders while the runtime's mailbox is busy,
+  which covers bursts and backlogs. The flush tick still matters for a
+  sensor stream the dashboard keeps up with: there the mailbox is empty
+  between messages and the runtime would draw one frame per message.
+
   ## Async commands
 
   Pressing Enter on a Ready command executes it when the command has

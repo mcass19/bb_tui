@@ -366,7 +366,8 @@ if Code.ensure_loaded?(Igniter) do
               ssh -t <device.local> -s Elixir.BB.TUI.App
 
           The -t flag is required — the dashboard needs PTY allocation
-          for interactive input.
+          for interactive input. Devices on OTP 29.0.6 or 29.1 refuse it
+          ("PTY allocation request failed"); OTP 29.1.1 fixes that.
           """
 
         ssh? ->

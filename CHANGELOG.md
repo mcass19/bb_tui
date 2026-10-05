@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `ex_ratatui` dependency is now `~> 0.17`.** A dashboard that falls behind its robot's messages no longer piles up: renders merge while its mailbox is busy, a backlog drains in milliseconds instead of seconds, a closed SSH session stops it right away, and a `Logger` warning reports the backlog. The sensor flush tick stays, since it caps a stream the dashboard keeps up with at ~30 fps.
+
+### Fixed
+
+- The installer's `--nerves` notice, the `BB.TUI.subsystem/1` docs, and the transports guide note that `ssh -t <device> -s Elixir.BB.TUI.App` fails with "PTY allocation request failed" against a device on OTP 29.0.6 or 29.1, and that OTP 29.1.1 fixes it.
+
 ## [0.7.0] - 2026-09-15
 
 ### Added

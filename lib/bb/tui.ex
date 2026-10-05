@@ -383,7 +383,9 @@ defmodule BB.TUI do
       ssh -t nerves.local -s Elixir.BB.TUI.App
 
   The `-t` flag is required — it forces PTY allocation, which the TUI
-  needs for interactive input.
+  needs for interactive input. Devices on OTP 29.0.6 or 29.1 refuse it
+  ("PTY allocation request failed"); OTP 29.1.1 fixes that, and the
+  [transports guide](transports.md) has the details.
 
   ## Examples
 

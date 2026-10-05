@@ -151,6 +151,7 @@ defmodule Mix.Tasks.BbTui.InstallTest do
       """)
 
       assert_has_notice(igniter, &String.contains?(&1, "ssh -t <device.local>"))
+      assert_has_notice(igniter, &String.contains?(&1, "OTP 29.1.1"))
     end
 
     test "appends to an existing :nerves_ssh subsystems list" do
