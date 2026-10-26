@@ -7,6 +7,7 @@ defmodule BB.TUI.AppTest do
   alias BB.Math.Transform2D
   alias BB.TUI.App
   alias BB.TUI.Panels.Events
+  alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
 
@@ -741,7 +742,7 @@ defmodule BB.TUI.AppTest do
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
       assert {:noreply, new_state, opts} = App.update({:event, event}, state)
-      assert new_state.commands.executing == :running
+      assert new_state.commands.executing == :home
       assert new_state.commands.result == nil
 
       # Phase one only starts the command; the await is issued once the
@@ -749,18 +750,71 @@ defmodule BB.TUI.AppTest do
       assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
     end
 
-    test "{:command_started, {:ok, pid}} records the pid and issues the await" do
+    test "{:command_started, {:ok, pid}} refreshes the running list and issues the await" do
       cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+      entry = running_entry(:home)
+      Fixtures.stub_bb_modules(running_commands: [entry])
 
       state =
         Fixtures.sample_state(%{active_panel: :commands})
-        |> then(&%{&1 | commands: %{&1.commands | executing: :running}})
+        |> then(&%{&1 | commands: %{&1.commands | executing: :home}})
 
       assert {:noreply, new_state, opts} =
                App.update({:info, {:command_started, {:ok, cmd_pid}}}, state)
 
-      assert new_state.commands.executing_pid == cmd_pid
+      assert new_state.commands.running == [entry]
       assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
+    end
+
+    test "{:command_result, _} records the result and refreshes the running list" do
+      Fixtures.stub_bb_modules(running_commands: [])
+
+      state =
+        Fixtures.sample_state(%{active_panel: :commands})
+        |> then(&%{&1 | commands: %{&1.commands | executing: :home}})
+        |> State.put_running_commands([running_entry(:home)])
+
+      assert {:noreply, new_state} = App.update({:info, {:command_result, {:ok, :done}}}, state)
+      assert new_state.commands.result == {:ok, :done}
+      assert new_state.commands.running == []
+    end
+
+    test "a command event refreshes the running list and still lands in the event log" do
+      entry = running_entry(:calibrate)
+      Fixtures.stub_bb_modules(running_commands: [entry])
+      state = Fixtures.sample_state(%{active_panel: :commands})
+      path = [:command, :calibrate, entry.execution_id]
+      msg = %{payload: %{status: :started, data: %{goal: %{}}}}
+
+      assert {:noreply, new_state} = App.update({:info, {:bb, path, msg}}, state)
+      assert new_state.commands.running == [entry]
+      assert [{_ts, ^path, ^msg} | _] = new_state.events.list
+    end
+
+    test "a command-path message without a payload is still logged" do
+      Fixtures.stub_bb_modules(running_commands: [])
+      state = Fixtures.sample_state(%{active_panel: :commands})
+      path = [:command, :calibrate, make_ref()]
+
+      assert {:noreply, new_state} = App.update({:info, {:bb, path, :raw}}, state)
+      assert [{_ts, ^path, :raw} | _] = new_state.events.list
+    end
+
+    # bb publishes the outcome from inside the command's terminate/2, while it
+    # is still registered, so the listing taken on that event can include it.
+    test "a terminal command event leaves its own execution out of the refresh" do
+      finished = running_entry(:calibrate)
+      other = running_entry(:log)
+      Fixtures.stub_bb_modules(running_commands: [finished, other])
+      state = Fixtures.sample_state(%{active_panel: :commands})
+
+      for status <- [:succeeded, :failed, :cancelled] do
+        path = [:command, :calibrate, finished.execution_id]
+        msg = %{payload: %{status: status, data: %{result: :ok, reason: :boom}}}
+
+        assert {:noreply, new_state} = App.update({:info, {:bb, path, msg}}, state)
+        assert new_state.commands.running == [other]
+      end
     end
 
     test "{:actuator_result, _, :ok} is a no-op that skips the render" do
@@ -796,25 +850,64 @@ defmodule BB.TUI.AppTest do
       assert new_state.commands.executing == nil
     end
 
-    test "c cancels the running command" do
-      cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+    test "c cancels the selected command's newest execution, whoever started it" do
+      older = running_entry(:home, ~U[2026-01-01 00:00:01Z])
+      newer = running_entry(:home, ~U[2026-01-01 00:00:02Z])
+      newer_id = newer.execution_id
 
       state =
-        Fixtures.sample_state(%{active_panel: :commands})
-        |> then(&%{&1 | commands: %{&1.commands | executing: :running, executing_pid: cmd_pid}})
+        Fixtures.sample_state(%{
+          active_panel: :commands,
+          commands: [%{name: :home, allowed_states: [:idle]}],
+          command_selected: 0
+        })
+        |> State.put_running_commands([older, newer])
 
-      Mimic.expect(BB.Command, :cancel, fn ^cmd_pid -> :ok end)
+      Mimic.expect(BB.Command, :cancel, fn BB.TUI.TestRobot, ^newer_id -> :ok end)
 
       event = %ExRatatui.Event.Key{code: "c", kind: "press"}
 
-      assert {:noreply, unchanged} = App.update({:event, event}, state)
-      assert unchanged.commands.executing_pid == cmd_pid
+      # Off the event loop: a busy command only gets to the stop request once
+      # its current callback returns, and GenServer.stop waits for it.
+      assert {:noreply, ^state, commands: [%ExRatatui.Command{kind: :async} = cmd]} =
+               App.update({:event, event}, state)
+
+      assert cmd.fun.() == :ok
+      assert cmd.mapper.(:ok) == :command_cancel_sent
+    end
+
+    test "the cancel's own answer is dropped without a render" do
+      state = Fixtures.sample_state(%{active_panel: :commands})
+
+      assert {:noreply, ^state, render?: false} = App.update({:info, :command_cancel_sent}, state)
+    end
+
+    test "c types into the argument editor even while the command runs elsewhere" do
+      commands = [
+        %{
+          name: :move,
+          allowed_states: [:idle],
+          arguments: [%{name: :angle, type: "string", required: true, default: nil, doc: nil}]
+        }
+      ]
+
+      state =
+        Fixtures.sample_state(%{active_panel: :commands, commands: commands, command_selected: 0})
+        |> State.put_running_commands([running_entry(:move)])
+        |> State.enter_command_edit_mode()
+
+      Mimic.reject(&BB.Command.cancel/2)
+
+      event = %ExRatatui.Event.Key{code: "c", kind: "press"}
+
+      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert new_state.commands.form_values.move.angle =~ "c"
     end
 
     test "c is inert in the commands panel when nothing is running" do
       state = Fixtures.sample_state(%{active_panel: :commands})
 
-      Mimic.reject(&BB.Command.cancel/1)
+      Mimic.reject(&BB.Command.cancel/2)
 
       event = %ExRatatui.Event.Key{code: "c", kind: "press"}
 
@@ -1049,7 +1142,7 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, new_state, opts} = App.update({:event, event}, state)
       assert new_state.commands.edit_mode? == false
-      assert new_state.commands.executing == :running
+      assert new_state.commands.executing == :move
       assert [%ExRatatui.Command{kind: :async}] = opts[:commands]
     end
 
@@ -2609,5 +2702,15 @@ defmodule BB.TUI.AppTest do
 
   defp press(state, code) do
     App.update({:event, %ExRatatui.Event.Key{code: code, kind: "press"}}, state)
+  end
+
+  defp running_entry(name, started_at \\ DateTime.utc_now()) do
+    %{
+      name: name,
+      execution_id: make_ref(),
+      pid: self(),
+      category: :default,
+      started_at: started_at
+    }
   end
 end

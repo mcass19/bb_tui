@@ -370,32 +370,58 @@ defmodule BB.TUI.Robot do
   end
 
   @doc """
-  Cancels a running command, resolving whatever is awaiting it. Best-effort.
+  Lists every command running on the robot, whoever started it.
 
-  `BB.Command.cancel/1` is `GenServer.stop(pid, {:shutdown, :cancelled})`, which
-  exits when the command terminates for any *other* reason. A handler that stops
-  cleanly on cancellation exits `:normal`, so the stop call raises even though
-  the cancel did exactly what was asked. bb only catches `{:noproc, _}`, so that
-  exit escapes — and since this is dispatched inline from `BB.TUI.App`, an
-  escaping exit would take the whole dashboard down with it.
-
-  The authoritative outcome is the pending await resolving into
-  `{:command_result, _}`, so failures here are swallowed rather than surfaced.
-  The remote clause calls `Rpc` directly instead of the raising `rpc/4` wrapper
-  for the same reason: a remote exit comes back as `{:badrpc, {:EXIT, _}}`, which
-  is a value to ignore, not a reason to kill the UI.
+  Returns `BB.Command.list/1`'s entries — `:name`, `:execution_id`, `:pid`,
+  `:category`, `:started_at` — or `[]` when the robot's registry is not up
+  or the remote node can't be reached: a listing is advisory, and the next
+  command event refreshes it.
   """
-  @spec cancel_command(pid(), maybe_node()) :: :ok
-  def cancel_command(pid, node) do
-    do_cancel(pid, node)
+  @spec running_commands(module(), maybe_node()) :: [map()]
+  def running_commands(robot, nil) do
+    BB.Command.list(robot)
+  rescue
+    ArgumentError -> []
+  end
+
+  def running_commands(robot, node) do
+    case Rpc.call(node, BB.Command, :list, [robot]) do
+      result when is_list(result) -> result
+      _ -> []
+    end
+  end
+
+  @doc """
+  Cancels a running command by its execution id, resolving whatever is
+  awaiting it. Best-effort.
+
+  `BB.Command.cancel/2` stops the command with `GenServer.stop(pid,
+  {:shutdown, :cancelled})`, which blocks until the command terminates — a
+  handler busy inside a callback only gets to the request once that callback
+  returns, which is why `BB.TUI.App` runs this through
+  `ExRatatui.Command.async/2` — and exits when it terminates for any *other*
+  reason: a handler that stops cleanly on cancellation exits `:normal`, so the
+  stop call raises even though the cancel did exactly what was asked. bb only
+  catches `{:noproc, _}`.
+
+  Whatever happened is reported by the command's own `[:command | _]` events,
+  so failures here — the command having finished already included — are
+  swallowed rather than surfaced. The remote clause calls `Rpc` directly
+  instead of the raising `rpc/4` wrapper for the same reason: a remote exit
+  comes back as `{:badrpc, {:EXIT, _}}`, which is a value to ignore.
+  """
+  @spec cancel_command(module(), reference(), maybe_node()) :: :ok
+  def cancel_command(robot, execution_id, node) do
+    do_cancel(robot, execution_id, node)
     :ok
   catch
     :exit, _reason -> :ok
   end
 
-  defp do_cancel(pid, nil), do: BB.Command.cancel(pid)
+  defp do_cancel(robot, execution_id, nil), do: BB.Command.cancel(robot, execution_id)
 
-  defp do_cancel(pid, node), do: Rpc.call(node, BB.Command, :cancel, [pid])
+  defp do_cancel(robot, execution_id, node),
+    do: Rpc.call(node, BB.Command, :cancel, [robot, execution_id])
 
   # ── Internal ───────────────────────────────────────────────
 

@@ -613,6 +613,11 @@ defmodule BB.TUI.State do
   within `throttle.debounce_ms` (default 1s) is dropped so a fast sensor
   cannot flood the log; distinct paths or payload types always pass through.
   A debounce window of `0` disables this.
+
+  `[:state_machine]` and `[:command | _]` events are never debounced. They are
+  low-rate and each one matters, yet a command's `started` event and its
+  outcome share a path and payload type, as do consecutive state transitions
+  — debouncing them hid the outcome of any command shorter than the window.
   """
   @spec append_event(t(), list(), term()) :: t()
   def append_event(%__MODULE__{events: %{paused?: true}} = state, _path, _message), do: state
@@ -625,7 +630,8 @@ defmodule BB.TUI.State do
     key = event_debounce_key(path, message)
     now = System.monotonic_time(:millisecond)
 
-    if event_debounced?(throttle.last_seen, key, now, throttle.debounce_ms) do
+    if debounced_path?(path) and
+         event_debounced?(throttle.last_seen, key, now, throttle.debounce_ms) do
       state
     else
       event = {event_timestamp(message), path, message}
@@ -637,6 +643,9 @@ defmodule BB.TUI.State do
       }
     end
   end
+
+  defp debounced_path?([root | _]) when root in [:state_machine, :command], do: false
+  defp debounced_path?(_path), do: true
 
   @doc false
   # Pure debounce predicate, split out so the time-dependent window logic can
@@ -1158,68 +1167,97 @@ defmodule BB.TUI.State do
 
   ## Examples
 
-      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{result: nil, executing: self()}}
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{result: nil, executing: :home}}
       iex> new_state = BB.TUI.State.set_command_result(state, {:ok, :done})
       iex> {new_state.commands.result, new_state.commands.executing}
       {{:ok, :done}, nil}
-
-  The running process is released along with the marker:
-
-      iex> commands = %BB.TUI.State.Commands{executing: :running, executing_pid: self()}
-      iex> state = %BB.TUI.State{commands: commands}
-      iex> BB.TUI.State.set_command_result(state, {:error, :cancelled}).commands.executing_pid
-      nil
   """
   @spec set_command_result(t(), {:ok, term()} | {:error, term()}) :: t()
   def set_command_result(%__MODULE__{commands: commands} = state, result) do
-    %{state | commands: %{commands | result: result, executing: nil, executing_pid: nil}}
+    %{state | commands: %{commands | result: result, executing: nil}}
   end
 
   @doc """
-  Marks a command as currently executing.
+  Marks a command as executing from this dashboard, clearing the last result.
 
   ## Examples
 
       iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{executing: nil, result: {:ok, :old}}}
-      iex> pid = self()
-      iex> new_state = BB.TUI.State.start_command(state, pid)
+      iex> new_state = BB.TUI.State.start_command(state, :home)
       iex> {new_state.commands.executing, new_state.commands.result}
-      {pid, nil}
-
-  Any process left over from a previous run is cleared:
-
-      iex> commands = %BB.TUI.State.Commands{executing_pid: self()}
-      iex> state = %BB.TUI.State{commands: commands}
-      iex> BB.TUI.State.start_command(state, :running).commands.executing_pid
-      nil
+      {:home, nil}
   """
   @spec start_command(t(), term()) :: t()
   def start_command(%__MODULE__{commands: commands} = state, marker) do
-    %{state | commands: %{commands | executing: marker, result: nil, executing_pid: nil}}
+    %{state | commands: %{commands | executing: marker, result: nil}}
   end
 
   @doc """
-  Records the process of the command that just started, so it can be cancelled.
+  Replaces the running-command list with a fresh `BB.Command.list/1` listing.
 
-  Ignored when nothing is executing — a late `{:command_started, _}` for a run
-  that already resolved must not resurrect a cancellable process.
+  Pass the `execution_id` of a command that has just finished as `finished` to
+  leave it out: bb publishes a command's outcome from inside its `terminate/2`,
+  while the process is still alive and registered, so a listing taken on that
+  event can still include it.
 
   ## Examples
 
-      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{executing: :running}}
-      iex> pid = self()
-      iex> BB.TUI.State.set_command_pid(state, pid).commands.executing_pid
-      pid
+      iex> later = %{name: :home, execution_id: :b, started_at: ~U[2026-01-01 00:00:02Z]}
+      iex> earlier = %{name: :calibrate, execution_id: :a, started_at: ~U[2026-01-01 00:00:01Z]}
+      iex> state = BB.TUI.State.put_running_commands(%BB.TUI.State{}, [later, earlier])
+      iex> Enum.map(state.commands.running, & &1.name)
+      [:calibrate, :home]
+      iex> state = BB.TUI.State.put_running_commands(state, [later, earlier], :b)
+      iex> Enum.map(state.commands.running, & &1.name)
+      [:calibrate]
+  """
+  @spec put_running_commands(t(), [Commands.running()], term()) :: t()
+  def put_running_commands(%__MODULE__{commands: commands} = state, entries, finished \\ nil) do
+    running =
+      entries
+      |> Enum.reject(&(&1.execution_id == finished))
+      |> Enum.sort_by(& &1.started_at, DateTime)
 
-      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{executing: nil}}
-      iex> BB.TUI.State.set_command_pid(state, self()).commands.executing_pid
+    %{state | commands: %{commands | running: running}}
+  end
+
+  @doc """
+  Returns the running executions of the command called `name`, newest first.
+
+  ## Examples
+
+      iex> running = [
+      ...>   %{name: :home, execution_id: :a, started_at: ~U[2026-01-01 00:00:01Z]},
+      ...>   %{name: :log, execution_id: :b, started_at: ~U[2026-01-01 00:00:02Z]},
+      ...>   %{name: :home, execution_id: :c, started_at: ~U[2026-01-01 00:00:03Z]}
+      ...> ]
+      iex> state = %BB.TUI.State{commands: %BB.TUI.State.Commands{running: running}}
+      iex> state |> BB.TUI.State.running_executions(:home) |> Enum.map(& &1.execution_id)
+      [:c, :a]
+  """
+  @spec running_executions(t(), atom()) :: [Commands.running()]
+  def running_executions(%__MODULE__{commands: %{running: running}}, name) do
+    running |> Enum.filter(&(&1.name == name)) |> Enum.reverse()
+  end
+
+  @doc """
+  Returns the newest running execution of the selected command, or `nil`.
+
+  ## Examples
+
+      iex> running = [%{name: :home, execution_id: :a, started_at: ~U[2026-01-01 00:00:01Z]}]
+      iex> commands = %BB.TUI.State.Commands{available: [%{name: :home}, %{name: :log}], running: running}
+      iex> BB.TUI.State.selected_running_execution(%BB.TUI.State{commands: commands}).execution_id
+      :a
+      iex> BB.TUI.State.selected_running_execution(%BB.TUI.State{commands: %{commands | selected: 1}})
       nil
   """
-  @spec set_command_pid(t(), pid()) :: t()
-  def set_command_pid(%__MODULE__{commands: %{executing: nil}} = state, _pid), do: state
-
-  def set_command_pid(%__MODULE__{commands: commands} = state, pid) when is_pid(pid) do
-    %{state | commands: %{commands | executing_pid: pid}}
+  @spec selected_running_execution(t()) :: Commands.running() | nil
+  def selected_running_execution(%__MODULE__{} = state) do
+    case selected_command(state) do
+      %{name: name} -> state |> running_executions(name) |> List.first()
+      _ -> nil
+    end
   end
 
   # ── Joint control ──────────────────────────────────────────

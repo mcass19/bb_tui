@@ -7,15 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The commands panel shows and cancels every running command, whoever started it.** The dashboard used to know only the command it had started itself, so a command kicked off by automation, another SSH session or a browser tab was invisible, and `c` could not stop it. The panel now reads the robot's running commands from `BB.Command.list/1` (bb 0.31.1), refreshed on each `[:command | _]` event and when the dashboard's own command starts or finishes. A running command's row shows `⏳ Running` in place of its Ready / Blocked badge, `×N` when it has several executions, and `c` on it cancels the newest by execution id through `BB.Command.cancel/2`; the status bar offers `c` only while the selected command runs. A cancellation reads `cancelled` in the event log rather than a red failure. Mirrors `bb_liveview` 0.3.4. The dev robot's `calibrate` now waits on a timer instead of sleeping in its handler, so it can be cancelled mid-run.
+
 ### Changed
 
 - **The `bb` dependency is now `~> 0.33`** and **`ex_ratatui` is now `~> 0.18`.** bb 0.31.1–0.33 add the running-command registry and the structured actuator errors the entries below build on. ex_ratatui 0.18 ships a native NIF for OTP 29, resizes pixel images with a bicubic filter (sharper text in the browser's Visualization tab), and keeps `Viewport3D` correctly sized after a terminal font change.
 
 - **A late jog reads as a warning, not a refusal.** With a 250ms jog timeout, a slow actuator answers with bb's `CommandPending`: the command is still queued and will most likely be applied. The event log used to mark it `✘` like a real refusal; it now shows `⚠` in yellow, picked from the error's `BB.Error.Severity`. Refusals stay `✘` and turn red, as do failed commands and `[:safety, :error]` hardware reports, so problems stand out in a busy log.
 
+- **`BB.TUI.Robot.cancel_command/2` is now `cancel_command/3`, taking the robot and an execution id instead of a pid (breaking).** `BB.TUI.State.Commands` drops `executing_pid` for `running`, `BB.TUI.State.set_command_pid/2` is gone, and `executing` now holds the started command's name. `BB.TUI.Robot.running_commands/2` lists the robot's running commands, locally or over `:rpc`.
+
 - **Each actuator has at most one jog in flight.** Every key autorepeat used to send its own `set_position`, and an actuator applies every command it receives in order, so one that fell behind kept working through stale targets after the key was released. Targets that arrive while a jog is in flight are now parked, latest wins, and sent once it is answered; a parked target is dropped if the robot has been disarmed meanwhile.
 
 ### Fixed
+
+- **Cancelling no longer freezes the dashboard.** `BB.Command.cancel` is a `GenServer.stop/3`, which waits for the command to terminate, and a handler busy inside a callback only reaches the stop request once that callback returns. The cancel ran inline in the process that owns the terminal, so `c` on a command sleeping in its handler froze the whole dashboard until the handler finished (~1.8s with the dev robot's `calibrate`). It now runs off the event loop.
+
+- **Short commands' outcomes reach the event log.** The log drops a repeat of the same path and payload type within a second so fast sensors cannot flood it, but a command's `started` event and its outcome share both, as do consecutive `[:state_machine]` transitions. Any command that finished, failed or was cancelled within a second of starting lost its outcome row, and quick transitions such as `idle → executing` vanished. Command and state machine events are no longer debounced.
 
 - **Command errors are readable.** bb reports a failed or refused command as a `BB.Error` struct, which the Commands panel's result line and the event log's `failed` summary rendered through `inspect` (`✖ %BB.Error.State.NotArmed{...}`). Both now show the error's message, and the event detail pane renders exception fields the same way.
 

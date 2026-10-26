@@ -14,7 +14,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Safety controls** — arm / disarm / force disarm with confirmation popup
 - **Joint control panel** — position table with type (revolute/prismatic/continuous), units (degrees/mm), visual range bars, target tracking, simulated joint markers, and direct position adjustment via keyboard (1% and 10% steps)
 - **Event stream** — scrollable, color-coded event list with formatted timestamps and message summaries; pause/resume, clear, and Enter to open a detail popup showing full payload. Surfaces hardware-error detail (`[:safety, :error]`) and estimator output (`[:estimator]`) alongside state, sensor, parameter, and command events
-- **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state. Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
+- **Commands panel** — lists available robot commands with Ready/Blocked indicators based on runtime state, and a Running badge on any command running on the robot, whoever started it (`c` cancels it). Argument-less commands execute on Enter; commands with declared arguments open an inline edit mode (Tab to cycle fields, type-to-edit, Enter to run, Esc to cancel). Argument types — boolean, integer, float, atom, enum (`{:in, [...]}`), string — are parsed before dispatch
 - **Parameters panel** — live parameter table grouped by path with real-time updates and the selected parameter's `doc` on the panel border. Numeric and unit-typed values step by 1% / 10% of their declared range with `h`/`l`/`H`/`L`, booleans toggle on Enter, string and atom values open an inline editor, and `{:in, [...]}` fixed-set parameters cycle through their allowed values. Bridge tabs expose remote parameters for numeric stepping and boolean toggling
 - **3D visualization tab** — renders the live robot in the terminal from its URDF topology and joint positions, with an orbitable/zoomable camera. Built on `ExRatatui`'s `Viewport3D`: crisp pixel graphics on capable terminals (Ghostty/WezTerm/Kitty) with automatic braille fallback over SSH; the arm reposes in real time as sensor data arrives
 - **High-rate-safe** — the event log debounces repeated sensor messages and renders coalesce to ~30fps, so fast telemetry never floods the log or stalls the UI
@@ -124,7 +124,7 @@ The Visualization tab is built the same way — as a pure projection of state. `
 
 ## Running commands
 
-Commands dispatched from the UI are awaited with `:infinity`, so a continuous command — one that only returns when it stops or is cancelled — is never reported as timed out while it is still running. Runaways stay bounded by the command's own DSL `timeout`. Press `c` in the commands panel to cancel the running command; the result panel then shows the cancellation.
+Commands dispatched from the UI are awaited with `:infinity`, so a continuous command — one that only returns when it stops or is cancelled — is never reported as timed out while it is still running. Runaways stay bounded by the command's own DSL `timeout`. Press `c` in the commands panel to cancel the selected command while it runs — including one started from another session, a browser tab or automation; the event log then shows the cancellation.
 
 ## Development
 

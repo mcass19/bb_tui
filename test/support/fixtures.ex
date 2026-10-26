@@ -231,6 +231,7 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Parameter, :list, fn _robot, _opts -> [] end)
     Mimic.stub(BB.Parameter, :set, fn _robot, _path, _value -> :ok end)
     Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> [] end)
+    Mimic.stub(BB.Command, :list, fn _robot -> Keyword.get(overrides, :running_commands, []) end)
 
     :ok
   end

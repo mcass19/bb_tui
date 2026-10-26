@@ -421,6 +421,20 @@ defmodule BB.TUI.StateTest do
       assert length(state.events.list) == 2
     end
 
+    test "never debounces command lifecycle or state machine events" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      path = [:command, :calibrate, make_ref()]
+
+      state =
+        state
+        |> State.append_event(path, %{payload: %BB.Command.Event{status: :started}})
+        |> State.append_event(path, %{payload: %BB.Command.Event{status: :failed}})
+        |> State.append_event([:state_machine], %{payload: %{from: :disarmed, to: :armed}})
+        |> State.append_event([:state_machine], %{payload: %{from: :armed, to: :executing}})
+
+      assert length(state.events.list) == 4
+    end
+
     test "records last-seen only for accepted events" do
       state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
