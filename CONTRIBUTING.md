@@ -42,9 +42,12 @@ The dev application also serves the same robot in the browser through `BB.TUI.Li
 ```sh
 mix test
 mix test --cover        # must report 100% Total
+elixir --sname test -S mix test --only distributed
 ```
 
 A small number of test/fixture modules are excluded from coverage in `mix.exs`. The threshold applies to everything else.
+
+Tests tagged `:distributed` are excluded by default. They start a `:peer` node running a real robot (`BB.TUI.Test.RemoteRobot`) and attach a dashboard to it with `node:`, so the remote paths run over actual distribution rather than a mocked `BB.TUI.Rpc`; the test node itself must be distributed, hence `--sname`. CI runs them on every push.
 
 ## Branching and Commits
 
@@ -64,6 +67,7 @@ mix compile --warnings-as-errors
 mix xref graph --format cycles --fail-above 0
 mix dialyzer
 mix test --cover
+elixir --sname test -S mix test --only distributed
 ```
 
 - Keep PRs focused — one feature or fix per PR
