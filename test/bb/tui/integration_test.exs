@@ -295,7 +295,7 @@ defmodule BB.TUI.IntegrationTest do
     test "dormant when nothing is animating" do
       pid = start_tui!()
 
-      # In :idle / :armed (no executing command) subscriptions/1 returns
+      # Outside :disarming subscriptions/1 returns
       # [], so the runtime registers no timer. Asserting on the snapshot
       # is deterministic — no need to sleep waiting for ticks that won't
       # fire.

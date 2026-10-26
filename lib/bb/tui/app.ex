@@ -39,9 +39,8 @@ defmodule BB.TUI.App do
       (PubSub, async results, subscription ticks, `send_after`
       messages). Returns `{:noreply, state}` for pure transitions or
       `{:noreply, state, commands: [cmd]}` when an effect should fire.
-    * `subscriptions/1` — declares the throbber tick interval whenever
-      the dashboard has something animating (a `:disarming` safety
-      state or a command currently executing), and a one-shot
+    * `subscriptions/1` — declares the throbber tick interval while
+      the safety panel's disarming spinner animates, and a one-shot
       `:sensor_flush` tick whenever a sensor render is pending (see
       *High-rate sensor handling*). The runtime diffs the result
       against the previous one, so timers only run when needed. This
@@ -1012,8 +1011,10 @@ defmodule BB.TUI.App do
     end
   end
 
+  # Only the safety panel's disarming spinner animates. A running command
+  # shows a static `⏳ Running` badge, so ticking while one runs would only
+  # redraw an unchanged screen ten times a second.
   defp needs_throbber?(%State{safety: %{state: :disarming}}), do: true
-  defp needs_throbber?(%State{commands: %{executing: marker}}) when marker != nil, do: true
   defp needs_throbber?(_), do: false
 
   defp maybe_add_popup(panels, %{ui: %{show_help?: true, help_scroll_offset: offset}}, full) do
