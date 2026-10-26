@@ -24,7 +24,14 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.EchoRenderer,
           BB.TUI.Test.SummaryOnlyRenderer,
           BB.TUI.Test.NilSummaryRenderer,
-          BB.TUI.Test.Endpoint
+          BB.TUI.Test.Endpoint,
+          # the robot `:distributed` tests start on a `:peer` node, its
+          # command handlers and driver, and the helper that starts it there
+          BB.TUI.Test.RemoteRobot,
+          BB.TUI.Test.InstantCommand,
+          BB.TUI.Test.SlowCommand,
+          BB.TUI.Test.Servo,
+          BB.TUI.Test.PeerHelper
         ]
       ],
       dialyzer: [
