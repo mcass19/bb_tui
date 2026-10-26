@@ -105,6 +105,15 @@ defmodule BB.TUI.Panels.CommandsTest do
       assert span.style.fg == :red
     end
 
+    test "shows an exception error result through its message" do
+      error = %BB.Error.State.CommandPending{actuator: :elbow, command: Position, timeout_ms: 250}
+      state = Fixtures.sample_state(%{commands: [], command_result: {:error, error}})
+      widget = Commands.render(state, false)
+
+      assert Enum.any?(widget.items, &(text(&1) =~ "✖ Actuator :elbow has not answered"))
+      refute Enum.any?(widget.items, &(text(&1) =~ "%BB.Error"))
+    end
+
     test "uses arrow symbol as highlight" do
       state = Fixtures.sample_state()
       widget = Commands.render(state, false)

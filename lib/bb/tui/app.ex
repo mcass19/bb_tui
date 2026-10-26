@@ -100,6 +100,9 @@ defmodule BB.TUI.App do
   `Command.async/2` — and so does `Robot.set_actuator/4`, whose
   `:pubsub` delivery blocks on the actuator's answer; its refusals
   come back as `{:actuator_result, _, _}` and land in the event log.
+  Each actuator has at most one jog in flight: targets that arrive
+  meanwhile are parked, latest wins, and sent once it is answered
+  (see `BB.TUI.State.request_jog/3`).
 
   ## Cancelling a running command
 
@@ -846,17 +849,29 @@ defmodule BB.TUI.App do
     {:noreply, State.set_command_result(state, result)}
   end
 
+  # Either answer frees the actuator's jog slot, sending the position parked
+  # behind it if there is one (see `continue_jog/2`).
+  #
   # Jog commands succeed silently — under key autorepeat there is one of
   # these per repeat, so skip the render. The joint's displayed position
   # moves on sensor feedback, not on acceptance.
-  def update({:info, {:actuator_result, _actuator, :ok}}, state) do
-    {:noreply, state, render?: false}
+  def update({:info, {:actuator_result, actuator, :ok}}, state) do
+    {state, commands} = continue_jog(state, actuator)
+    {:noreply, state, [render?: false] ++ commands}
   end
 
-  # A refusal (or the async runner's trapped exit from a dead actuator)
-  # lands in the event log; the target keeps the asked-for value.
+  # Anything else lands in the event log, and the target keeps the asked-for
+  # value: a refusal (`NotArmed`, `StaleEpoch`, …), an actuator that isn't
+  # running, a late answer (`CommandPending`, a warning — the command is queued
+  # and will most likely be applied), or the async runner's trapped exit from
+  # an actuator that crashed while handling the command.
   def update({:info, {:actuator_result, actuator, {:error, reason}}}, state) do
-    {:noreply, State.append_event(state, [:actuator, actuator], %{payload: %{error: reason}})}
+    {state, commands} =
+      state
+      |> State.append_event([:actuator, actuator], %{payload: %{error: reason}})
+      |> continue_jog(actuator)
+
+    {:noreply, state, commands}
   end
 
   def update({:info, :throbber_tick}, state) do
@@ -951,8 +966,9 @@ defmodule BB.TUI.App do
 
   defp maybe_add_popup(panels, _state, _full), do: panels
 
-  defp adjust_selected_joint(state, _direction, _multiplier)
-       when state.safety.state not in [:armed, :disarming] do
+  defguardp jog_allowed?(state) when state.safety.state in [:armed, :disarming]
+
+  defp adjust_selected_joint(state, _direction, _multiplier) when not jog_allowed?(state) do
     {:noreply, state}
   end
 
@@ -980,7 +996,7 @@ defmodule BB.TUI.App do
         state = State.set_joint_target(state, name, new_pos)
 
         if actuator do
-          {:noreply, state, commands: [set_actuator_command(state, actuator, new_pos)]}
+          jog(state, actuator, new_pos)
         else
           publish_simulated_position(state.robot, name, new_pos, state.node)
           {:noreply, State.set_joint_position(state, name, new_pos)}
@@ -988,10 +1004,42 @@ defmodule BB.TUI.App do
     end
   end
 
+  # One jog in flight per actuator. An actuator applies every command it is
+  # sent, in order — one answered late (`CommandPending`) is still queued, not
+  # dropped — so sending a target per autorepeat would leave a slow actuator
+  # working through stale ones. Targets arriving while a jog is in flight are
+  # parked, latest wins, and sent when it is answered.
+  defp jog(state, actuator, position) do
+    case State.request_jog(state, actuator, position) do
+      {:send, state} ->
+        {:noreply, state, commands: [set_actuator_command(state, actuator, position)]}
+
+      {:queued, state} ->
+        {:noreply, state}
+    end
+  end
+
+  # A position parked while the robot was armed is dropped if it has since
+  # been disarmed: sending it would only collect a refusal.
+  defp continue_jog(state, actuator) do
+    case State.finish_jog(state, actuator) do
+      {nil, state} ->
+        {state, []}
+
+      {position, state} when jog_allowed?(state) ->
+        {state, [commands: [set_actuator_command(state, actuator, position)]]}
+
+      {_position, state} ->
+        {_nil, state} = State.finish_jog(state, actuator)
+        {state, []}
+    end
+  end
+
   # Off the event loop because `set_position/4`'s `:pubsub` delivery is a
   # `GenServer.call`: inline it would stall the terminal-owning process on
-  # every jog keypress and exit it if the actuator is dead. The async runner
-  # traps that exit and delivers it as `{:error, {:exit, reason}}`.
+  # every jog keypress. The async runner traps the exit of an actuator that
+  # crashes while handling the command and delivers it as
+  # `{:error, {:exit, reason}}`.
   defp set_actuator_command(%State{robot: robot, node: node}, actuator, position) do
     Command.async(
       fn -> Robot.set_actuator(robot, actuator, position, node) end,

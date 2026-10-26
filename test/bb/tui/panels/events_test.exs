@@ -246,6 +246,25 @@ defmodule BB.TUI.Panels.EventsTest do
                "shoulder_motor \u{2718} {:exit, :noproc}"
     end
 
+    test "marks a late actuator answer as a warning rather than a refusal" do
+      pending = %BB.Error.State.CommandPending{
+        actuator: :elbow,
+        command: Position,
+        timeout_ms: 250
+      }
+
+      assert Events.summarize([:actuator, :elbow], %{payload: %{error: pending}}) =~
+               ~r/^elbow \x{26A0} Actuator :elbow has not answered Position within 250ms/u
+    end
+
+    test "summarizes a failed command via Exception.message when the reason is one" do
+      reason = %BB.Error.State.NotArmed{}
+      msg = %{payload: %{status: :failed, data: %{reason: reason}}}
+
+      assert Events.summarize([:command, :home, make_ref()], msg) ==
+               "home \u{2718} #{Exception.message(reason)}"
+    end
+
     test "falls back to inspect for unknown payloads" do
       msg = %{payload: :something}
       result = Events.summarize([:unknown], msg)
@@ -258,7 +277,48 @@ defmodule BB.TUI.Panels.EventsTest do
     end
   end
 
+  describe "summary_style/2" do
+    test "colors a failed command red whatever its reason" do
+      msg = %{payload: %{status: :failed, data: %{reason: :timeout}}}
+      assert Events.summary_style([:command, :home, make_ref()], msg).fg == :red
+    end
+
+    test "colors a hardware error report red" do
+      assert Events.summary_style([:safety, :error], %{payload: %{error: :overcurrent}}).fg ==
+               :red
+    end
+
+    test "colors the summary span of a rendered actuator warning yellow" do
+      pending = %BB.Error.State.CommandPending{
+        actuator: :elbow,
+        command: Position,
+        timeout_ms: 250
+      }
+
+      events = [{~U[2026-03-30 12:00:00Z], [:actuator, :elbow], %{payload: %{error: pending}}}]
+
+      widget = Events.render(Fixtures.sample_state(%{events: events}), true)
+      %Line{spans: spans} = hd(widget.items)
+
+      assert List.last(spans).style.fg == :yellow
+    end
+  end
+
   describe "format_event_details/1" do
+    test "renders an exception field through its message" do
+      pending = %BB.Error.State.CommandPending{
+        actuator: :elbow,
+        command: Position,
+        timeout_ms: 250
+      }
+
+      event = {~U[2026-01-15 18:23:12.000Z], [:actuator, :elbow], %{payload: %{error: pending}}}
+
+      assert [line] = Events.format_event_details(event)
+      assert line =~ "error"
+      assert line =~ "Actuator :elbow has not answered Position within 250ms"
+    end
+
     test "formats struct payload with type and fields" do
       # Use a standard library struct to test the struct payload path
       uri = %URI{scheme: "https", host: "example.com"}
