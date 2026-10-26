@@ -852,7 +852,7 @@ defmodule BB.TUI.App do
   # its `:started` event arrives (or when `[:command]` isn't subscribed).
   def update({:info, {:command_started, {:ok, cmd_pid}}}, state) do
     state = State.put_running_commands(state, Robot.running_commands(state.robot, state.node))
-    {:noreply, state, commands: [await_command_command(cmd_pid)]}
+    {:noreply, state, commands: [await_command_command(state, cmd_pid)]}
   end
 
   def update({:info, {:command_started, {:error, reason}}}, state) do
@@ -1366,9 +1366,9 @@ defmodule BB.TUI.App do
     )
   end
 
-  defp await_command_command(cmd_pid) do
+  defp await_command_command(%State{node: node}, cmd_pid) do
     Command.async(
-      fn -> await_command(cmd_pid) end,
+      fn -> await_command(cmd_pid, node) end,
       fn result -> {:command_result, result} end
     )
   end
@@ -1378,7 +1378,8 @@ defmodule BB.TUI.App do
   # (e.g. a synchronous {:stop, :normal, _}) terminates between
   # `Robot.execute_command/4` returning the pid and us awaiting on it.
   # The earlier Process.monitor approach surfaced that race as a
-  # spurious {:error, :noproc}.
+  # spurious {:error, :noproc}. The cache is node-local, so against a
+  # remote robot `Robot.await_command/2` runs the await on its node.
   #
   # Awaits `:infinity` rather than a UI-side deadline: a continuous command
   # only returns when it stops or is cancelled, and the command's own DSL
@@ -1388,8 +1389,8 @@ defmodule BB.TUI.App do
   #
   # Unwrap {:command_failed, reason} at the boundary so the panel shows
   # the bare reason (`:cancelled`, `:noproc`, etc.) consistently.
-  defp await_command(cmd_pid) do
-    case BB.Command.await(cmd_pid, :infinity) do
+  defp await_command(cmd_pid, node) do
+    case Robot.await_command(cmd_pid, node) do
       {:ok, result} -> {:ok, result}
       {:ok, result, _opts} -> {:ok, result}
       {:error, {:command_failed, reason}} -> {:error, reason}
