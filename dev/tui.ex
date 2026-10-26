@@ -29,10 +29,10 @@ defmodule Dev.TUI do
       readout "target", controller(:oscillator, :target), unit: :degree, decimals: 1
       readout "ticks", controller(:oscillator, :ticks)
 
-      plot "output vs target", [
-        controller(:oscillator, :output),
-        controller(:oscillator, :target)
-      ]
+      plot "output vs target",
+           [controller(:oscillator, :output), controller(:oscillator, :target)],
+           unit: :degree,
+           window: 8_000
     end
 
     panel :telemetry do

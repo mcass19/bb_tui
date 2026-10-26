@@ -92,6 +92,11 @@ defmodule BB.TUI.Extension.Dsl do
         default: 10_000,
         doc: "How much history the chart shows, in milliseconds."
       ],
+      unit: [
+        type: {:custom, BB.TUI.Extension.Format, :validate_unit, []},
+        doc: "Unit every line is shown in, as for a readout."
+      ],
+      scale: [type: :number, doc: "Multiplies every value before it is plotted."],
       y_range: [
         type: {:tuple, [:number, :number]},
         doc: "A fixed `{min, max}` for the y axis; follows the data when unset."

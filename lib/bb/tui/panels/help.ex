@@ -32,6 +32,9 @@ defmodule BB.TUI.Panels.Help do
   - `d` — Disarm robot
   - `f` — Force disarm (error state only)
 
+  ## Extension tabs
+  - `space` — Freeze the charts (they stop recording), again to resume
+
   ## Visualization tab
 
   - `←` / `→` or `h` / `l` — Orbit the camera

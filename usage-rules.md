@@ -164,6 +164,8 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   (radians, metres); use `scale:` for anything else. Controller sources are
   polled at 4 Hz only while their tab is visible — don't rely on them for
   anything time-critical.
+- `plot` takes `unit:`/`scale:` like a readout (applied to every line) and
+  `window:` in milliseconds. Space is reserved: it freezes the charts.
 
 ## Rendering custom payloads
 

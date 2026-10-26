@@ -58,6 +58,23 @@ defmodule BB.TUI.Extension.Source do
     do: %__MODULE__{type: :param, target: atoms!(path)}
 
   @doc """
+  A short name for the source, for a chart's legend: the field it reads, or
+  the joint's name.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.Source
+      iex> {Source.name(Source.joint(:lean)), Source.name(Source.controller(:pid, [:gains, :kp]))}
+      {"lean", "kp"}
+      iex> Source.name(Source.param([:yaw, :turn_rate]))
+      "turn_rate"
+  """
+  @spec name(t()) :: String.t()
+  def name(%__MODULE__{type: :joint, target: name}), do: Atom.to_string(name)
+  def name(%__MODULE__{type: :param, target: path}), do: path |> List.last() |> Atom.to_string()
+  def name(%__MODULE__{path: path}), do: path |> List.last() |> Atom.to_string()
+
+  @doc """
   The topic paths an extension's sources need subscribing to, without
   duplicates.
 

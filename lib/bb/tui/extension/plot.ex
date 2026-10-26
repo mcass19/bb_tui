@@ -1,14 +1,25 @@
 defmodule BB.TUI.Extension.Plot do
   @moduledoc """
   A live chart in a panel: one line per source over the last `window`
-  milliseconds, with an optional fixed `y_range`.
+  milliseconds, with an optional fixed `y_range`. `unit` and `scale` apply
+  to every line, as they do to a readout.
   """
-  defstruct [:label, :y_range, sources: [], window: 10_000, __spark_metadata__: nil]
+  defstruct [
+    :label,
+    :y_range,
+    :unit,
+    :scale,
+    sources: [],
+    window: 10_000,
+    __spark_metadata__: nil
+  ]
 
   @type t :: %__MODULE__{
           label: String.t(),
           sources: [BB.TUI.Extension.Source.t()],
           window: pos_integer(),
-          y_range: {number(), number()} | nil
+          y_range: {number(), number()} | nil,
+          unit: atom() | nil,
+          scale: number() | nil
         }
 end
