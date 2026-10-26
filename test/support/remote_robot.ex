@@ -120,4 +120,46 @@ defmodule BB.TUI.Test.PeerHelper do
     Process.unlink(pid)
     {:ok, pid}
   end
+
+  # Subscribes here, on the robot's node, and forwards each payload under
+  # `path` to `target` as `{:relayed, path, payload}`.
+  def relay(robot, path, target) do
+    BB.subscribe(robot, path)
+    send(target, {:relay_ready, path})
+    relay_loop(path, target)
+  end
+
+  defp relay_loop(path, target) do
+    receive do
+      {:bb, ^path, %{payload: payload}} ->
+        send(target, {:relayed, path, payload})
+        relay_loop(path, target)
+    end
+  end
+end
+
+defmodule BB.TUI.Test.RemoteDrive do
+  @moduledoc false
+  # The drive target the `:distributed` driving test casts to: runs on the
+  # robot's node and publishes there, like `BB.NSK.Drive`.
+
+  alias BB.Message.Geometry.Twist2D
+
+  def command(robot, throttle, turn) do
+    {:ok, msg} = Twist2D.new(:base_link, throttle, 0.0, turn)
+    BB.publish(robot, [:drive], msg)
+  end
+
+  def stop(robot), do: command(robot, 0.0, 0.0)
+end
+
+defmodule BB.TUI.Test.RemoteDriveExtension do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  drive do
+    publish {BB.TUI.Test.RemoteDrive, :command}
+    stop {BB.TUI.Test.RemoteDrive, :stop}
+    throttle_scale 0.5
+  end
 end

@@ -50,6 +50,31 @@ defmodule BB.TUI.DistributedTest do
     {:ok, tui: tui, peer_node: peer_node}
   end
 
+  test "driving publishes on the robot's node, and letting go stops it", %{peer_node: peer} do
+    test_pid = self()
+
+    # Relay the robot node's `[:drive]` traffic here.
+    Node.spawn_link(peer, PeerHelper, :relay, [RemoteRobot, [:drive], test_pid])
+    assert_receive {:relay_ready, [:drive]}, 2_000
+
+    {:ok, driver} =
+      App.start_link(
+        robot: RemoteRobot,
+        node: peer,
+        extensions: [BB.TUI.Test.RemoteDriveExtension],
+        test_mode: {120, 40},
+        name: nil
+      )
+
+    :sys.replace_state(driver, &put_in(&1.user_state.ui.active_tab, {:extension, :drive}))
+
+    :ok = Runtime.inject_event(driver, %Key{code: "up", kind: "press"})
+    assert_receive {:relayed, [:drive], %{vx: 0.5, omega: +0.0}}, 2_000
+
+    :ok = Runtime.inject_event(driver, %Key{code: "up", kind: "release"})
+    assert_receive {:relayed, [:drive], %{vx: +0.0, omega: +0.0}}, 2_000
+  end
+
   test "a quick command reports its real result", %{tui: tui} do
     select_command(tui, :home)
 
