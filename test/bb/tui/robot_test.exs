@@ -402,6 +402,13 @@ defmodule BB.TUI.RobotTest do
       assert {:ok, _pid} = Robot.execute_command(@robot, :home, %{}, nil)
     end
 
+    test "await_command/2 awaits locally with :infinity when node is nil" do
+      cmd_pid = self()
+      Mimic.expect(BB.Command, :await, fn ^cmd_pid, :infinity -> {:ok, :done} end)
+
+      assert Robot.await_command(cmd_pid, nil) == {:ok, :done}
+    end
+
     test "cancel_command/3 cancels by execution id locally when node is nil" do
       id = make_ref()
       Mimic.expect(BB.Command, :cancel, fn @robot, ^id -> :ok end)
@@ -618,6 +625,28 @@ defmodule BB.TUI.RobotTest do
       end)
 
       assert {:ok, ^reply_pid} = Robot.execute_command(@robot, :home, %{}, @remote)
+    end
+
+    # bb's ResultCache is node-local: awaited from the dashboard's node, a
+    # command that already finished reports :noproc although it succeeded.
+    test "await_command/2 awaits on the robot's node" do
+      cmd_pid = self()
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :await, [^cmd_pid, :infinity] ->
+        {:ok, :done}
+      end)
+
+      Mimic.reject(&BB.Command.await/2)
+
+      assert Robot.await_command(cmd_pid, @remote) == {:ok, :done}
+    end
+
+    test "await_command/2 reports a lost robot node as an error" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :await, _args ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.await_command(self(), @remote) == {:error, {:badrpc, :nodedown}}
     end
 
     test "cancel_command/3 routes through :rpc.call" do
