@@ -41,3 +41,53 @@ defmodule BB.TUI.Test.EmptyExtension do
   @moduledoc false
   use BB.TUI.Extension
 end
+
+defmodule BB.TUI.Test.SecondDrive do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  drive do
+    publish {BB.TUI.Test.Drive, :command}
+    stop {BB.TUI.Test.Drive, :stop}
+  end
+end
+
+defmodule BB.TUI.Test.ClashingBind do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  keys do
+    bind "s", command: :sit
+  end
+end
+
+defmodule BB.TUI.Test.ClashingPanel do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  panels do
+    panel :yaw do
+      readout "rate", topic([:drive], :omega)
+    end
+  end
+end
+
+defmodule BB.TUI.Test.LaterHints do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  hints do
+    state :idle, "later wins"
+    state :armed, "careful"
+  end
+end
+
+defmodule BB.TUI.Test.RemoteOnlyDrive do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  drive do
+    publish {BB.TUI.Test.NotHere, :command}
+    stop {BB.TUI.Test.NotHere, :stop}
+  end
+end

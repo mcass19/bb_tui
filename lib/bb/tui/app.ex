@@ -156,6 +156,8 @@ defmodule BB.TUI.App do
       raise ArgumentError, "#{inspect(robot)} is not a valid BB robot module"
     end
 
+    extensions = build_extensions!(opts, node)
+
     paths =
       Keyword.get(opts, :subscribe_paths, [
         [:state_machine],
@@ -167,7 +169,7 @@ defmodule BB.TUI.App do
         [:estimator]
       ])
 
-    Robot.subscribe(robot, paths, node)
+    Robot.subscribe(robot, paths ++ State.Extensions.subscribe_paths(extensions, paths), node)
 
     renderers = Keyword.get(opts, :renderers, %{})
 
@@ -202,6 +204,7 @@ defmodule BB.TUI.App do
           runtime: Robot.runtime_state(robot, node)
         },
         joints: %State.Joints{entries: joints, payloads: payloads},
+        extensions: extensions,
         commands: %State.Commands{available: commands},
         renderers: renderers
       }
@@ -216,6 +219,32 @@ defmodule BB.TUI.App do
     # it in the pane's corner. Soft-fails (no TTY) and is skipped under
     # test_mode, so it has no effect on the suite.
     {:ok, state, probe_image_protocol: true}
+  end
+
+  # The `:extensions` option, merged. A drive's functions are checked where
+  # they will run — on the robot's node under `:node` — since the compile-time
+  # check skips modules it can't load.
+  defp build_extensions!(opts, node) do
+    with {:ok, extensions} <- State.Extensions.build(Keyword.get(opts, :extensions, [])),
+         :ok <- drive_exported(extensions.drive, node) do
+      extensions
+    else
+      {:error, message} -> raise ArgumentError, "invalid :extensions — " <> message
+    end
+  end
+
+  defp drive_exported(nil, _node), do: :ok
+
+  defp drive_exported(%{publish: {pmod, pfun}, stop: {smod, sfun}}, node) do
+    missing =
+      for {mod, fun, arity} <- [{pmod, pfun, 3}, {smod, sfun, 1}],
+          not Robot.exported?(mod, fun, arity, node),
+          do: "#{inspect(mod)}.#{fun}/#{arity}"
+
+    case missing do
+      [] -> :ok
+      _ -> {:error, "drive functions not found on the robot's node: #{Enum.join(missing, ", ")}"}
+    end
   end
 
   # ── Render ────────────────────────────────────────────────────

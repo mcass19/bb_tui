@@ -216,6 +216,67 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "mount/1 with extensions" do
+    test "merges the extensions into the state" do
+      Fixtures.stub_bb_modules()
+
+      assert {:ok, state, _opts} =
+               App.init(
+                 robot: BB.TUI.TestRobot,
+                 extensions: [BB.TUI.Test.Extension, BB.TUI.Test.LaterHints]
+               )
+
+      assert state.extensions.modules == [BB.TUI.Test.Extension, BB.TUI.Test.LaterHints]
+      assert Enum.map(state.extensions.panels, & &1.name) == [:balance, :yaw]
+      assert state.extensions.drive.publish == {BB.TUI.Test.Drive, :command}
+    end
+
+    test "subscribes to the topics the extensions read that the paths don't cover" do
+      Fixtures.stub_bb_modules()
+      test_pid = self()
+
+      Mimic.stub(BB, :subscribe, fn _robot, path ->
+        send(test_pid, {:subscribed, path})
+        :ok
+      end)
+
+      assert {:ok, _state, _opts} =
+               App.init(
+                 robot: BB.TUI.TestRobot,
+                 subscribe_paths: [[:command]],
+                 extensions: [BB.TUI.Test.Extension]
+               )
+
+      assert_received {:subscribed, [:command]}
+      assert_received {:subscribed, [:sensor, :wheel]}
+    end
+
+    test "has no extensions by default" do
+      Fixtures.stub_bb_modules()
+
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
+      assert state.extensions == %State.Extensions{}
+    end
+
+    test "refuses a module that isn't an extension" do
+      Fixtures.stub_bb_modules()
+
+      assert_raise ArgumentError, ~r/invalid :extensions — Enum is not a BB.TUI.Extension/, fn ->
+        App.init(robot: BB.TUI.TestRobot, extensions: [Enum])
+      end
+    end
+
+    test "refuses a drive whose functions don't exist where the robot runs" do
+      Fixtures.stub_bb_modules()
+
+      assert_raise ArgumentError,
+                   ~r/drive functions not found on the robot's node: BB.TUI.Test.NotHere.command\/3, BB.TUI.Test.NotHere.stop\/1/,
+                   fn ->
+                     App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.RemoteOnlyDrive])
+                   end
+    end
+  end
+
   describe "mount/1" do
     test "on hardware reads each actuator's command payloads from the DSL" do
       Fixtures.stub_bb_modules(simulation: nil)

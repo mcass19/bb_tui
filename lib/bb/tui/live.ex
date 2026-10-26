@@ -21,7 +21,7 @@ if Code.ensure_loaded?(PhoenixExRatatui.LiveView) do
 
     The `use` options are the dashboard's mount options — the same keyword
     list `BB.TUI.start/2` takes (`:robot` is required; `:node`,
-    `:subscribe_paths`, and `:renderers` pass through). For per-session
+    `:subscribe_paths`, `:renderers` and `:extensions` pass through). For per-session
     options — picking the robot from the session or params — override
     `tui_mount_opts/1`, which receives the LiveView socket after `mount`:
 

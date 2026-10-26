@@ -37,6 +37,11 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.Drive,
           BB.TUI.Test.Extension,
           BB.TUI.Test.EmptyExtension,
+          BB.TUI.Test.SecondDrive,
+          BB.TUI.Test.ClashingBind,
+          BB.TUI.Test.ClashingPanel,
+          BB.TUI.Test.LaterHints,
+          BB.TUI.Test.RemoteOnlyDrive,
           ~r/^BB\.TUI\.Extension\.Dsl\./
         ]
       ],

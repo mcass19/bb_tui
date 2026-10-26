@@ -164,6 +164,17 @@ defmodule BB.TUITest do
       assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, renderers: renderers)
     end
 
+    test "wraps :extensions into :app_opts when transport is :ssh" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:app_opts][:extensions] == [BB.TUI.Test.Extension]
+        refute Keyword.has_key?(opts, :extensions)
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} =
+               BB.TUI.start_ssh(BB.TUI.TestRobot, port: 0, extensions: [BB.TUI.Test.Extension])
+    end
+
     test "wraps :renderers into :app_opts when transport is :ssh" do
       renderers = %{[:demo] => BB.TUI.Test.EchoRenderer}
 

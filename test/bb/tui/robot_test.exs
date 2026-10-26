@@ -687,6 +687,35 @@ defmodule BB.TUI.RobotTest do
     end
   end
 
+  describe "exported?/4" do
+    @remote :"robot@127.0.0.1"
+
+    test "checks a function here, loading its module" do
+      assert Robot.exported?(BB.TUI.Test.Drive, :command, 3, nil)
+      refute Robot.exported?(BB.TUI.Test.Drive, :command, 2, nil)
+      refute Robot.exported?(BB.TUI.Test.NotHere, :command, 3, nil)
+    end
+
+    test "checks a function on the robot's node" do
+      Mimic.stub(BB.TUI.Rpc, :call, fn
+        @remote, Code, :ensure_loaded?, [BB.TUI.Test.Drive] -> true
+        @remote, Code, :ensure_loaded?, [_missing] -> false
+        @remote, :erlang, :function_exported, [BB.TUI.Test.Drive, :command, 3] -> true
+      end)
+
+      assert Robot.exported?(BB.TUI.Test.Drive, :command, 3, @remote)
+      refute Robot.exported?(BB.TUI.Test.NotHere, :command, 3, @remote)
+    end
+
+    test "is false when the robot's node can't be reached" do
+      Mimic.stub(BB.TUI.Rpc, :call, fn @remote, Code, :ensure_loaded?, _ ->
+        {:badrpc, :nodedown}
+      end)
+
+      refute Robot.exported?(BB.TUI.Test.Drive, :command, 3, @remote)
+    end
+  end
+
   describe "command_payloads/2" do
     @remote :"robot@127.0.0.1"
 
