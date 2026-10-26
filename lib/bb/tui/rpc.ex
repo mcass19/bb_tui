@@ -18,6 +18,13 @@ defmodule BB.TUI.Rpc do
   def call(node, mod, fun, args), do: :rpc.call(node, mod, fun, args)
 
   @doc """
+  Asynchronous remote call: runs `mod.fun(args)` on `node` without waiting
+  for it. Mirrors `:erpc.cast/4`.
+  """
+  @spec cast(node(), module(), atom(), [term()]) :: :ok
+  def cast(node, mod, fun, args), do: :erpc.cast(node, mod, fun, args)
+
+  @doc """
   Spawns a linked process on a remote node. Mirrors `Node.spawn_link/2`.
   """
   @spec spawn_link(node(), (-> any())) :: pid()

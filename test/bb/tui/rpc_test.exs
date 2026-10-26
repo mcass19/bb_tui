@@ -12,6 +12,12 @@ defmodule BB.TUI.RpcTest do
     end
   end
 
+  describe "cast/4" do
+    test "delegates to :erpc.cast/4 — fire and forget, even to an unknown node" do
+      assert :ok = Rpc.cast(:"nonexistent@127.0.0.1", :erlang, :node, [])
+    end
+  end
+
   describe "spawn_link/2" do
     @tag capture_log: true
     test "delegates to Node.spawn_link/2 — returns a pid even for unknown node" do

@@ -38,7 +38,7 @@ end
 
 Four sections, all optional:
 
-- **`drive`** — hold-to-drive with the arrow keys. While a key is held, bb_tui calls `publish(robot, throttle, turn)` at `rate` Hz, with throttle and turn of -1, 0 or 1 scaled by `throttle_scale` and `turn_scale`; letting go calls `stop(robot)`. bb_tui never needs to know the kit: the extension names the functions.
+- **`drive`** — hold-to-drive with the arrow keys. While a key is held, bb_tui calls `publish(robot, throttle, turn)` at `rate` Hz, with throttle and turn of -1, 0 or 1 scaled by `throttle_scale` and `turn_scale`; letting go calls `stop(robot)`. bb_tui never needs to know the kit: the extension names the functions. The [Driving guide](driving.md) covers the Drive tab, key releases and every way driving stops.
 - **`panels`** — boxes of `readout`s (a labelled value) and `plot`s (a live chart), each on a tab of its own unless `tab` groups it; `tab :drive` puts a panel beside the drive pad.
 - **`keys`** — `bind` a key to a robot command. bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`) can't be bound, and the compiler says so.
 - **`hints`** — a banner under the title bar for each robot runtime state.

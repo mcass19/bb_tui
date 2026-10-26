@@ -1,0 +1,188 @@
+defmodule BB.TUI.State.Drive do
+  @moduledoc """
+  Hold-to-drive with the arrow keys, as a pure state machine.
+
+  Up/down set the throttle to 1/-1 and left/right the turn to 1/-1 (left is
+  positive, counter-clockwise), one direction per axis: pressing the
+  opposite arrow takes over. `step/2` turns what is held into what to do
+  now — publish a throttle and turn, stop, or nothing.
+
+  Terminals report key releases unevenly, so there are two modes:
+
+    * **inference** (the start): only presses arrive, and holding a key
+      repeats them after the OS autorepeat delay (~0.5 s, longer than a
+      robot's dead-man timeout). A key counts as held for 600 ms after
+      its first press and then 150 ms after each repeat, and is let go
+      when its presses stop.
+    * **release**: entered on the first `"release"` event, from a terminal
+      speaking the kitty keyboard protocol or a browser. A key is held until
+      its release; a 1 s safety window, refreshed by its repeats,
+      still lets go of one whose release got lost.
+  """
+
+  @first_press_ms 600
+  @repeat_ms 150
+  @release_safety_ms 1_000
+
+  @keys %{
+    "up" => {:throttle, 1},
+    "down" => {:throttle, -1},
+    "left" => {:turn, 1},
+    "right" => {:turn, -1}
+  }
+
+  defstruct mode: :inference, held: %{}, driving?: false
+
+  @type axis :: :throttle | :turn
+  @type t :: %__MODULE__{
+          mode: :inference | :release,
+          held: %{
+            axis() => %{
+              key: String.t(),
+              direction: -1 | 1,
+              pressed_at: integer(),
+              last_at: integer()
+            }
+          },
+          driving?: boolean()
+        }
+
+  @type action :: {:publish, -1 | 0 | 1, -1 | 0 | 1} | :stop | :idle
+
+  @doc """
+  The drive keys.
+
+  ## Examples
+
+      iex> BB.TUI.State.Drive.keys()
+      ["down", "left", "right", "up"]
+  """
+  @spec keys() :: [String.t()]
+  def keys, do: @keys |> Map.keys() |> Enum.sort()
+
+  @doc """
+  A drive key went down, or repeated. A key already held keeps its
+  `pressed_at`, so an autorepeat counts as a repeat.
+
+  ## Examples
+
+      iex> alias BB.TUI.State.Drive
+      iex> drive = Drive.press(%Drive{}, "up", 0)
+      iex> drive.held.throttle.direction
+      1
+      iex> Drive.press(drive, "down", 10).held.throttle.direction
+      -1
+  """
+  @spec press(t(), String.t(), integer()) :: t()
+  def press(%__MODULE__{held: held} = drive, key, now) do
+    {axis, direction} = Map.fetch!(@keys, key)
+
+    entry =
+      case held do
+        %{^axis => %{key: ^key} = entry} -> %{entry | last_at: now}
+        _ -> %{key: key, direction: direction, pressed_at: now, last_at: now}
+      end
+
+    %{drive | held: Map.put(held, axis, entry)}
+  end
+
+  @doc """
+  A drive key came up. The first release switches to release mode for the
+  rest of the session. Releasing a key that isn't the one held on its axis
+  (the opposite arrow, already taken over) changes nothing.
+
+  ## Examples
+
+      iex> alias BB.TUI.State.Drive
+      iex> drive = Drive.press(%Drive{}, "up", 0) |> Drive.release("up")
+      iex> {drive.mode, drive.held}
+      {:release, %{}}
+  """
+  @spec release(t(), String.t()) :: t()
+  def release(%__MODULE__{held: held} = drive, key) do
+    {axis, _direction} = Map.fetch!(@keys, key)
+
+    held =
+      case held do
+        %{^axis => %{key: ^key}} -> Map.delete(held, axis)
+        _ -> held
+      end
+
+    %{drive | mode: :release, held: held}
+  end
+
+  @doc """
+  What to do at `now`: lets go of keys whose window has passed, then
+  publishes the held throttle and turn, stops once when the last key is let
+  go, or does nothing.
+
+  ## Examples
+
+      iex> alias BB.TUI.State.Drive
+      iex> drive = Drive.press(%Drive{}, "up", 0) |> Drive.press("left", 0)
+      iex> {{:publish, 1, 1}, drive} = Drive.step(drive, 100)
+      iex> # No repeat arrived within the first-press window.
+      iex> {:stop, drive} = Drive.step(drive, 700)
+      iex> {:idle, _drive} = Drive.step(drive, 800)
+  """
+  @spec step(t(), integer()) :: {action(), t()}
+  def step(%__MODULE__{} = drive, now) do
+    held =
+      Map.filter(drive.held, fn {_axis, entry} -> now - entry.last_at <= window(drive, entry) end)
+
+    drive = %{drive | held: held}
+
+    cond do
+      held != %{} ->
+        {{:publish, direction(held, :throttle), direction(held, :turn)},
+         %{drive | driving?: true}}
+
+      drive.driving? ->
+        {:stop, %{drive | driving?: false}}
+
+      true ->
+        {:idle, drive}
+    end
+  end
+
+  defp window(%__MODULE__{mode: :release}, _entry), do: @release_safety_ms
+  defp window(_drive, %{pressed_at: same, last_at: same}), do: @first_press_ms
+  defp window(_drive, _entry), do: @repeat_ms
+
+  defp direction(held, axis) do
+    case held do
+      %{^axis => %{direction: direction}} -> direction
+      _ -> 0
+    end
+  end
+
+  @doc """
+  Lets go of every key at once — quitting, leaving the Drive tab, losing
+  focus. Returns `:stop` when it was driving, `:idle` otherwise. The mode
+  is kept.
+
+  ## Examples
+
+      iex> alias BB.TUI.State.Drive
+      iex> {_publish, drive} = Drive.press(%Drive{}, "up", 0) |> Drive.step(0)
+      iex> {:stop, drive} = Drive.halt(drive)
+      iex> {:idle, _drive} = Drive.halt(drive)
+  """
+  @spec halt(t()) :: {:stop | :idle, t()}
+  def halt(%__MODULE__{driving?: true} = drive),
+    do: {:stop, %{drive | held: %{}, driving?: false}}
+
+  def halt(%__MODULE__{} = drive), do: {:idle, %{drive | held: %{}}}
+
+  @doc """
+  Whether a key is held or a stop is still owed — while this is true, the
+  drive needs ticking.
+
+  ## Examples
+
+      iex> BB.TUI.State.Drive.active?(%BB.TUI.State.Drive{})
+      false
+  """
+  @spec active?(t()) :: boolean()
+  def active?(%__MODULE__{held: held, driving?: driving?}), do: held != %{} or driving?
+end

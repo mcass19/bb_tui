@@ -159,7 +159,10 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   `:inspect` state), `topic/2` and `param/1`. There is no `inspect/2`.
 - `bind` can't take bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`);
   the compiler rejects it.
-- Only one extension per session may declare `drive`.
+- Only one extension per session may declare `drive`. Driving happens only on
+  the Drive tab with the arrow keys; bb_tui calls `stop` on release, quit,
+  leaving the tab, focus loss and session end, but the robot must still keep
+  its own dead-man timeout — a dropped connection is invisible to bb_tui.
 - Readout `unit:` values are bb unit atoms and assume the source is in SI units
   (radians, metres); use `scale:` for anything else. Controller sources are
   polled at 4 Hz only while their tab is visible — don't rely on them for
