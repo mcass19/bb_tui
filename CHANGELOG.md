@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Commands run against a remote robot report their real result.** With `node:` set, the dashboard awaited a command's result from its own node. A command that finishes before the await arrives — any quick one — is answered from bb's `BB.Command.ResultCache`, which lives on the robot's node, so the dashboard found nothing and showed `✖ :noproc` for a command that had succeeded (5 runs out of 5 for the dev robot's `home` across two nodes). The await now runs on the robot's node through the new `BB.TUI.Robot.await_command/2`; a robot node lost mid-wait reports `{:badrpc, reason}`.
+
 - **Arming, disarming, parameter writes and bridge calls no longer block the dashboard.** All of them ran inline in the process that owns the terminal: an arm or disarm can run the robot's whole arm/disarm command and its disarm callbacks (up to 5s each), and a bridge call crosses to the remote system with a 5s timeout, freezing the UI for as long. Over `:rpc` a failed call raised and took the dashboard down. They now run off the event loop, and a bridge tab's list is fetched the same way when `t` cycles to it.
 
 - **Cancelling no longer freezes the dashboard.** `BB.Command.cancel` is a `GenServer.stop/3`, which waits for the command to terminate, and a handler busy inside a callback only reaches the stop request once that callback returns. The cancel ran inline in the process that owns the terminal, so `c` on a command sleeping in its handler froze the whole dashboard until the handler finished (~1.8s with the dev robot's `calibrate`). It now runs off the event loop.

@@ -370,6 +370,30 @@ defmodule BB.TUI.Robot do
   end
 
   @doc """
+  Awaits a command's result on the node the command runs on.
+
+  `BB.Command.await/2` falls back to bb's `BB.Command.ResultCache` when the
+  command has already finished by the time the call arrives — for a fast
+  command over distribution, nearly always. That cache is node-local, so an
+  await issued from the dashboard's node finds nothing there and reports
+  `{:error, {:command_failed, :noproc}}` for a command that succeeded. A
+  remote await therefore runs on the robot's node, over `:rpc`, whose
+  `:infinity` timeout matches the await's.
+
+  A `:badrpc` — the robot's node went away mid-wait — comes back as
+  `{:error, {:badrpc, reason}}`.
+  """
+  @spec await_command(pid(), maybe_node()) :: BB.Command.outcome()
+  def await_command(pid, nil), do: BB.Command.await(pid, :infinity)
+
+  def await_command(pid, node) do
+    case Rpc.call(node, BB.Command, :await, [pid, :infinity]) do
+      {:badrpc, reason} -> {:error, {:badrpc, reason}}
+      result -> result
+    end
+  end
+
+  @doc """
   Lists every command running on the robot, whoever started it.
 
   Returns `BB.Command.list/1`'s entries — `:name`, `:execution_id`, `:pid`,
