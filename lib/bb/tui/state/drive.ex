@@ -7,7 +7,8 @@ defmodule BB.TUI.State.Drive do
   opposite arrow takes over. `step/2` turns what is held into what to do
   now — publish a throttle and turn, stop, or nothing.
 
-  Terminals report key releases unevenly, so there are two modes:
+  Terminals report key releases unevenly, so there are two modes (see
+  `BB.TUI.State.Hold`):
 
     * **inference** (the start): only presses arrive, and holding a key
       repeats them after the OS autorepeat delay (~0.5 s, longer than a
@@ -20,9 +21,7 @@ defmodule BB.TUI.State.Drive do
       still lets go of one whose release got lost.
   """
 
-  @first_press_ms 600
-  @repeat_ms 150
-  @release_safety_ms 1_000
+  alias BB.TUI.State.Hold
 
   @keys %{
     "up" => {:throttle, 1},
@@ -135,8 +134,7 @@ defmodule BB.TUI.State.Drive do
   """
   @spec step(t(), integer()) :: {action(), t()}
   def step(%__MODULE__{} = drive, now) do
-    held =
-      Map.filter(drive.held, fn {_axis, entry} -> now - entry.last_at <= window(drive, entry) end)
+    held = Map.filter(drive.held, fn {_axis, entry} -> Hold.held?(drive.mode, entry, now) end)
 
     drive = %{drive | held: held}
 
@@ -152,10 +150,6 @@ defmodule BB.TUI.State.Drive do
         {:idle, drive}
     end
   end
-
-  defp window(%__MODULE__{mode: :release}, _entry), do: @release_safety_ms
-  defp window(_drive, %{pressed_at: same, last_at: same}), do: @first_press_ms
-  defp window(_drive, _entry), do: @repeat_ms
 
   defp direction(held, axis) do
     case held do

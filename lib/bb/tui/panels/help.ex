@@ -83,6 +83,8 @@ defmodule BB.TUI.Panels.Help do
 
   Commanded targets render as a hollow marker on the position bar until the joint reaches them. Each step moves the target, so holding a key keeps stepping ahead of the joint.
 
+  A `velocity only` joint spins while `h`/`l` is held (`H`/`L` 5× faster) and stops when it is let go. `t` takes the wheel first.
+
   ## Parameters panel
 
   - `j` / `↓` — Select next parameter

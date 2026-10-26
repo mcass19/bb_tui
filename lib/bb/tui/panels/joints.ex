@@ -8,7 +8,8 @@ defmodule BB.TUI.Panels.Joints do
   within the joint's limits. In simulation, joints without an actuator are
   marked with a SIM tag (the jog keys move them with a synthetic `JointState`);
   joints whose actuator refuses position commands show `velocity only` (or
-  `no position command`) in place of the bar.
+  `no position command`) in place of the bar, and a velocity-only joint
+  spinning under a held jog key shows the velocity it was sent.
 
   Pure function — takes state, returns a widget struct.
   """
@@ -52,7 +53,7 @@ defmodule BB.TUI.Panels.Joints do
           name_span(name, mode),
           format_type(joint),
           position_span(pos, joint, proximity),
-          target_cell_line(mode, pos, joint, proximity, target)
+          target_cell(state.joints.velocity_jog, name, mode, pos, joint, proximity, target)
         ]
       end)
 
@@ -255,6 +256,24 @@ defmodule BB.TUI.Panels.Joints do
 
   defp position_modifiers(:normal), do: []
   defp position_modifiers(_), do: [:bold]
+
+  defp target_cell(%{joint: name, velocity: velocity}, name, _mode, _pos, joint, _prox, _target) do
+    unit = if Map.get(joint, :type) == :prismatic, do: "m/s", else: "rad/s"
+    sign = if velocity >= 0, do: "+", else: ""
+
+    %Line{
+      spans: [
+        %Span{
+          content:
+            "spinning #{sign}#{:erlang.float_to_binary(velocity * 1.0, decimals: 2)} #{unit}",
+          style: %Style{fg: Theme.green(), modifiers: [:bold]}
+        }
+      ]
+    }
+  end
+
+  defp target_cell(_jog, _name, mode, pos, joint, proximity, target),
+    do: target_cell_line(mode, pos, joint, proximity, target)
 
   # A joint whose actuator refuses position commands has no target to show.
   defp target_cell_line(:velocity_only, _pos, _joint, _proximity, _target),

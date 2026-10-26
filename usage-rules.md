@@ -165,6 +165,8 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   connected nodes; bb_tui calls `stop` on release, quit,
   leaving the tab, focus loss and session end, but the robot must still keep
   its own dead-man timeout — a dropped connection is invisible to bb_tui.
+- The same lease gates spinning a velocity-only joint from the Joints panel
+  (`t`, then hold `h`/`l`); no extension is needed for it.
 - Readout `unit:` values are bb unit atoms and assume the source is in SI units
   (radians, metres); use `scale:` for anything else. Controller sources are
   polled at 4 Hz only while their tab is visible — don't rely on them for

@@ -281,7 +281,7 @@ defmodule BB.TUI.Panels.StatusBar do
         select ++ [Theme.dim_span(" read-only: no actuator ")]
 
       :velocity_only ->
-        select ++ [Theme.dim_span(" velocity only ")]
+        select ++ velocity_keys(state.drive.lease)
 
       :no_position ->
         select ++ [Theme.dim_span(" takes no position commands ")]
@@ -298,6 +298,22 @@ defmodule BB.TUI.Panels.StatusBar do
   end
 
   defp joints_keys(_state, _safety), do: [Theme.key_pill("j/k"), Theme.dim_span(" select ")]
+
+  # A velocity-only joint spins while its key is held, for the session
+  # holding the wheel.
+  defp velocity_keys(:mine),
+    do: [
+      Theme.key_pill("h/l"),
+      Theme.dim_span(" spin "),
+      Theme.key_pill("H/L"),
+      Theme.dim_span(" 5× "),
+      Theme.key_pill("t"),
+      Theme.dim_span(" wheel ")
+    ]
+
+  defp velocity_keys(:free), do: [Theme.key_pill("t"), Theme.dim_span(" take the wheel to spin ")]
+
+  defp velocity_keys({:other, node, _since}), do: [Theme.dim_span(" driven by #{node} ")]
 
   defp selected_jog_mode(state) do
     case State.selected_joint_name(state) do

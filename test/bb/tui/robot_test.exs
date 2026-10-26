@@ -347,6 +347,14 @@ defmodule BB.TUI.RobotTest do
   end
 
   describe "write calls (local)" do
+    test "set_velocity/4 and stop_actuator/3 broadcast locally when node is nil" do
+      Mimic.expect(BB.Actuator, :set_velocity, fn BB.TUI.TestRobot, :wheel_motor, 0.4 -> :ok end)
+      Mimic.expect(BB.Actuator, :stop, fn BB.TUI.TestRobot, :wheel_motor -> :ok end)
+
+      assert Robot.set_velocity(@robot, :wheel_motor, 0.4, nil) == :ok
+      assert Robot.stop_actuator(@robot, :wheel_motor, nil) == :ok
+    end
+
     test "arm/2 delegates locally when node is nil" do
       Mimic.expect(BB.Safety, :arm, fn BB.TUI.TestRobot -> :armed end)
       assert Robot.arm(@robot, nil) == :armed
@@ -556,6 +564,25 @@ defmodule BB.TUI.RobotTest do
 
   describe "write calls (remote)" do
     @remote :"robot@127.0.0.1"
+
+    test "set_velocity/4 and stop_actuator/3 are cast to the node" do
+      Mimic.expect(BB.TUI.Rpc, :cast, fn @remote,
+                                         BB.Actuator,
+                                         :set_velocity,
+                                         [BB.TUI.TestRobot, :wheel_motor, 0.4] ->
+        :ok
+      end)
+
+      Mimic.expect(BB.TUI.Rpc, :cast, fn @remote,
+                                         BB.Actuator,
+                                         :stop,
+                                         [BB.TUI.TestRobot, :wheel_motor] ->
+        :ok
+      end)
+
+      assert Robot.set_velocity(@robot, :wheel_motor, 0.4, @remote) == :ok
+      assert Robot.stop_actuator(@robot, :wheel_motor, @remote) == :ok
+    end
 
     test "arm/2 routes through :rpc.call" do
       Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Safety, :arm, [BB.TUI.TestRobot] ->

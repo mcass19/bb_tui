@@ -44,6 +44,12 @@ The pad shows which mode is on. Key releases come from terminals speaking the ki
 
 Besides letting go of the keys, bb_tui calls `stop` when the dashboard quits, when the Drive tab is left, when the wheel is handed back or lost, when the terminal window loses focus (the dashboard asks for focus reports whenever an extension declares a drive), and when the session ends for any reason. The robot's own dead-man timeout (`drive_timeout` on a balance bot) stays the backstop for everything bb_tui can't see, such as a dropped SSH connection or a frozen laptop.
 
+## Spinning a joint
+
+The Joints panel uses the same lease and the same hold detection for a joint whose actuator only takes velocity commands, such as a wheel. With the wheel taken (`t` on the Joints panel, with such a joint selected) and the robot armed, holding `l` or `h` sends `BB.Actuator.set_velocity/3` at 10% of the joint's velocity limit (1 rad/s without one), `L` and `H` at half of it, and letting go sends `BB.Actuator.stop/2`. The Target column shows the velocity sent while it spins.
+
+It stops the same ways driving does, and also when another joint is selected, the panel or tab is left, or the robot is disarmed. Both commands are broadcast, so a slow actuator never holds up the dashboard, and cast under `node:`. A robot without a drive extension still gets this: the lease belongs to the robot, not to the Drive tab.
+
 ## Transports
 
 Driving works on every transport: the local terminal, SSH, the browser, `:node` and `Distributed.attach/3`. What differs is whether key releases arrive (release mode) or not (repeat mode); the stops above apply on all of them.
