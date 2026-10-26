@@ -138,11 +138,28 @@ defmodule BB.TUI.Panels.StatusBarTest do
       refute txt =~ "adjust"
     end
 
-    test "says a velocity-only joint doesn't jog" do
+    test "offers to take the wheel for a velocity-only joint" do
       txt = state_with_payloads([Velocity, Stop]) |> StatusBar.render() |> text()
 
-      assert txt =~ "velocity only"
+      assert txt =~ "take the wheel to spin"
       refute txt =~ "adjust"
+    end
+
+    test "offers the spin keys for a velocity-only joint with the wheel" do
+      state = state_with_payloads([Velocity, Stop])
+      txt = put_in(state.drive.lease, :mine) |> StatusBar.render() |> text()
+
+      assert txt =~ "spin"
+      assert txt =~ "5×"
+      assert txt =~ "wheel"
+    end
+
+    test "says who drives a velocity-only joint's robot" do
+      state = state_with_payloads([Velocity, Stop])
+      lease = {:other, :pilot@host, ~N[2026-10-26 10:00:00]}
+      txt = put_in(state.drive.lease, lease) |> StatusBar.render() |> text()
+
+      assert txt =~ "driven by pilot@host"
     end
 
     test "says a joint taking no position or velocity commands doesn't jog" do

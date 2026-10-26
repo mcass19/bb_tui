@@ -168,6 +168,21 @@ defmodule BB.TUI.Panels.JointsTest do
       assert cell_text(Enum.at(row, 3)) == "velocity only"
     end
 
+    test "shows the velocity a spinning joint was sent" do
+      state =
+        %{joints: wrist_joint(), robot_struct: wrist_robot(), simulation: nil}
+        |> Fixtures.sample_state()
+        |> State.put_command_payloads(:wrist_motor, [Velocity, Stop])
+
+      jog = %BB.TUI.State.VelocityJog{actuator: :wrist_motor, joint: :wrist, velocity: 0.4}
+      [row] = Joints.render(put_in(state.joints.velocity_jog, jog), false).rows
+      assert cell_text(Enum.at(row, 3)) == "spinning +0.40 rad/s"
+
+      state = put_in(state.joints.entries.wrist.joint.type, :prismatic)
+      [row] = Joints.render(put_in(state.joints.velocity_jog, %{jog | velocity: -2}), false).rows
+      assert cell_text(Enum.at(row, 3)) == "spinning -2.00 m/s"
+    end
+
     test "marks a joint whose actuator takes neither position nor velocity" do
       state =
         %{joints: wrist_joint(), robot_struct: wrist_robot(), simulation: nil}

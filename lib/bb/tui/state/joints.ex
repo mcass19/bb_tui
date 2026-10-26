@@ -11,6 +11,9 @@ defmodule BB.TUI.State.Joints do
   `jogs` holds one key per actuator with a jog in flight, mapped to the
   position parked behind it (or `nil`); see `BB.TUI.State.request_jog/3`.
 
+  `velocity_jog` is the velocity-only joint spinning while its jog key is
+  held, or `nil` (see `BB.TUI.State.VelocityJog`).
+
   `payloads` maps an actuator to the command payloads it accepts, when known:
   read from the robot's DSL on mount (hardware only) and corrected by any
   `BB.Error.State.UnsupportedCommand` it answers with. An actuator missing
@@ -20,12 +23,14 @@ defmodule BB.TUI.State.Joints do
   defstruct entries: %{},
             selected: 0,
             jogs: %{},
-            payloads: %{}
+            payloads: %{},
+            velocity_jog: nil
 
   @type t :: %__MODULE__{
           entries: %{atom() => %{position: float() | struct(), joint: term()}},
           selected: non_neg_integer(),
           jogs: %{atom() => float() | nil},
-          payloads: %{atom() => [module()]}
+          payloads: %{atom() => [module()]},
+          velocity_jog: BB.TUI.State.VelocityJog.t() | nil
         }
 end

@@ -437,7 +437,7 @@ defmodule BB.TUI.App do
   # ── Update — global keys ─────────────────────────────────────
 
   def update({:event, %Event.Key{code: "q", kind: "press"}}, state) do
-    {:stop, halt_drive(state)}
+    {:stop, halt_motion(state)}
   end
 
   # Leaving the Drive tab lets go of the drive keys: driving is only ever
@@ -452,7 +452,7 @@ defmodule BB.TUI.App do
 
   # The window lost focus: its key releases won't reach us.
   def update({:event, %Event.FocusLost{}}, state) do
-    {:noreply, halt_drive(state)}
+    {:noreply, halt_motion(state)}
   end
 
   # ── Update — driving ─────────────────────────────────────────
@@ -482,22 +482,13 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: "t", kind: "press"}},
         %{ui: %{active_tab: {:extension, :drive}}, extensions: %{drive: %{}}} = state
       ) do
-    case observe_lease(state) do
-      %{drive: %{lease: :mine}} = state ->
-        state = halt_drive(state)
-        :ok = Pilot.release(state.robot)
-        {:noreply, observe_lease(state)}
-
-      state ->
-        _ = Pilot.take(state.robot)
-        {:noreply, observe_lease(state)}
-    end
+    toggle_lease(state)
   end
 
   # Another session won the lease after a network split healed: this one
   # stops at once.
   def update({:info, {:global_name_conflict, {Pilot, _robot}}}, state) do
-    {:noreply, state |> halt_drive() |> observe_lease()}
+    {:noreply, state |> halt_motion() |> observe_lease()}
   end
 
   # Keeps "driven by …" current while the Drive tab is on screen.
@@ -836,34 +827,62 @@ defmodule BB.TUI.App do
     {:noreply, State.select_prev_joint(state)}
   end
 
+  # A repeat steps like a press: terminals that report autorepeat as its own
+  # kind would otherwise jog once per hold.
   def update(
-        {:event, %Event.Key{code: code, kind: "press"}},
+        {:event, %Event.Key{code: code, kind: kind}},
         %{ui: %{active_panel: :joints}} = state
       )
-      when code in ["l", "right"] do
+      when code in ["l", "right"] and kind in ["press", "repeat"] do
     adjust_selected_joint(state, :increase, 1)
   end
 
   def update(
-        {:event, %Event.Key{code: code, kind: "press"}},
+        {:event, %Event.Key{code: code, kind: kind}},
         %{ui: %{active_panel: :joints}} = state
       )
-      when code in ["h", "left"] do
+      when code in ["h", "left"] and kind in ["press", "repeat"] do
     adjust_selected_joint(state, :decrease, 1)
   end
 
   def update(
-        {:event, %Event.Key{code: "L", kind: "press"}},
+        {:event, %Event.Key{code: "L", kind: kind}},
         %{ui: %{active_panel: :joints}} = state
-      ) do
+      )
+      when kind in ["press", "repeat"] do
     adjust_selected_joint(state, :increase, 10)
   end
 
   def update(
-        {:event, %Event.Key{code: "H", kind: "press"}},
+        {:event, %Event.Key{code: "H", kind: kind}},
         %{ui: %{active_panel: :joints}} = state
-      ) do
+      )
+      when kind in ["press", "repeat"] do
     adjust_selected_joint(state, :decrease, 10)
+  end
+
+  # Letting go of a jog key stops a spinning joint at once.
+  def update(
+        {:event, %Event.Key{code: code, kind: "release"}},
+        %{ui: %{active_panel: :joints}} = state
+      )
+      when code in ["h", "l", "H", "L", "left", "right"] do
+    state = put_in(state.drive.mode, :release)
+    {:noreply, halt_velocity_jog(state)}
+  end
+
+  # A tick already queued when the jog stopped.
+  def update({:info, :velocity_jog_tick}, %State{joints: %{velocity_jog: nil}} = state),
+    do: {:noreply, state, render?: false}
+
+  def update({:info, :velocity_jog_tick}, state) do
+    {commands, jog} =
+      if velocity_jog_valid?(state),
+        do: State.VelocityJog.tick(state.joints.velocity_jog, state.drive.mode, now_ms()),
+        else: State.VelocityJog.halt(state.joints.velocity_jog)
+
+    send_jog_commands(state, commands)
+    {:noreply, put_in(state.joints.velocity_jog, jog), render?: jog != state.joints.velocity_jog}
   end
 
   # ── Update — parameters panel keys ───────────────────────────
@@ -919,6 +938,14 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :parameters}} = state
       ) do
     toggle_selected_param(state)
+  end
+
+  # A velocity-only joint spins only for the session holding the wheel.
+  def update(
+        {:event, %Event.Key{code: "t", kind: "press"}},
+        %{ui: %{active_tab: :control, active_panel: :joints}} = state
+      ) do
+    if velocity_joint_selected?(state), do: toggle_lease(state), else: {:noreply, state}
   end
 
   def update(
@@ -1057,8 +1084,15 @@ defmodule BB.TUI.App do
     throbber_subscriptions(state) ++
       sensor_flush_subscriptions(state) ++
       controller_poll_subscriptions(state) ++
-      drive_subscriptions(state) ++ pilot_subscriptions(state)
+      drive_subscriptions(state) ++
+      velocity_jog_subscriptions(state) ++ pilot_subscriptions(state)
   end
+
+  # Checks a spinning joint's key often enough to stop it promptly.
+  defp velocity_jog_subscriptions(%State{joints: %{velocity_jog: nil}}), do: []
+
+  defp velocity_jog_subscriptions(_state),
+    do: [Subscription.interval(:velocity_jog_tick, 50, :velocity_jog_tick)]
 
   # Ticks at the drive's rate for as long as a key is held or a stop is owed.
   defp drive_subscriptions(%State{extensions: %{drive: %{rate: rate}}} = state) do
@@ -1075,13 +1109,18 @@ defmodule BB.TUI.App do
        }),
        do: [Subscription.interval(:pilot_check, 1_000, :pilot_check)]
 
+  defp pilot_subscriptions(%State{ui: %{active_tab: :control, active_panel: :joints}} = state) do
+    if velocity_joint_selected?(state),
+      do: [Subscription.interval(:pilot_check, 1_000, :pilot_check)],
+      else: []
+  end
+
   defp pilot_subscriptions(_state), do: []
 
   @impl true
   def terminate(_reason, state) do
-    state = halt_drive(state)
-    if state.extensions.drive, do: Pilot.release(state.robot)
-    :ok
+    state = halt_motion(state)
+    Pilot.release(state.robot)
   end
 
   defp throbber_subscriptions(state) do
@@ -1253,6 +1292,22 @@ defmodule BB.TUI.App do
     %{state | drive: drive}
   end
 
+  # Everything this session keeps moving: the drive and a spinning joint.
+  defp halt_motion(state), do: state |> halt_drive() |> halt_velocity_jog()
+
+  defp toggle_lease(state) do
+    case observe_lease(state) do
+      %{drive: %{lease: :mine}} = state ->
+        state = halt_motion(state)
+        :ok = Pilot.release(state.robot)
+        {:noreply, observe_lease(state)}
+
+      state ->
+        _ = Pilot.take(state.robot)
+        {:noreply, observe_lease(state)}
+    end
+  end
+
   defp halt_drive_off_tab(%State{ui: %{active_tab: {:extension, :drive}}} = state), do: state
   defp halt_drive_off_tab(state), do: halt_drive(state)
 
@@ -1393,7 +1448,55 @@ defmodule BB.TUI.App do
     end
   end
 
+  defp jog_joint(state, name, %{joint: joint}, :velocity_only, direction, multiplier) do
+    case observe_lease(state) do
+      %{drive: %{lease: :mine}} = state ->
+        actuator = State.actuator_for_joint(state.robot_struct, name)
+        velocity = State.VelocityJog.velocity(joint, direction, multiplier)
+
+        {commands, jog} =
+          State.VelocityJog.press(state.joints.velocity_jog, actuator, name, velocity, now_ms())
+
+        send_jog_commands(state, commands)
+        {:noreply, put_in(state.joints.velocity_jog, jog)}
+
+      state ->
+        {:noreply, state}
+    end
+  end
+
   defp jog_joint(state, _name, _joint_data, _mode, _direction, _multiplier), do: {:noreply, state}
+
+  # A spinning joint keeps spinning only while it is still the selected joint
+  # on the Joints panel, the robot is armed, and the wheel is this session's.
+  defp velocity_jog_valid?(%State{joints: %{velocity_jog: %{joint: joint}}} = state) do
+    state.ui.active_tab == :control and state.ui.active_panel == :joints and
+      State.selected_joint_name(state) == joint and jog_allowed?(state) and
+      Pilot.holder(state.robot) == :mine
+  end
+
+  defp velocity_joint_selected?(state) do
+    case State.selected_joint_name(state) do
+      nil -> false
+      name -> State.jog_mode(state, name) == :velocity_only
+    end
+  end
+
+  defp halt_velocity_jog(state) do
+    {commands, nil} = State.VelocityJog.halt(state.joints.velocity_jog)
+    send_jog_commands(state, commands)
+    put_in(state.joints.velocity_jog, nil)
+  end
+
+  defp send_jog_commands(state, commands) do
+    Enum.each(commands, fn
+      {:velocity, actuator, velocity} ->
+        Robot.set_velocity(state.robot, actuator, velocity, state.node)
+
+      {:stop, actuator} ->
+        Robot.stop_actuator(state.robot, actuator, state.node)
+    end)
+  end
 
   # The refusal carries the payloads the actuator really accepts, which beats
   # whatever its DSL declaration suggested on mount.

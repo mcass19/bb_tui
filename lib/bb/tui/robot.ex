@@ -233,6 +233,27 @@ defmodule BB.TUI.Robot do
   end
 
   @doc """
+  Spins a velocity-driven actuator, for a held jog key. Broadcast here — a
+  command that doesn't wait for the actuator — or cast to `node`.
+  """
+  @spec set_velocity(module(), atom(), float(), maybe_node()) :: :ok | {:error, term()}
+  def set_velocity(robot, actuator, velocity, nil),
+    do: BB.Actuator.set_velocity(robot, actuator, velocity)
+
+  def set_velocity(robot, actuator, velocity, node),
+    do: Rpc.cast(node, BB.Actuator, :set_velocity, [robot, actuator, velocity])
+
+  @doc """
+  Stops an actuator, when a held jog key is let go. Broadcast here, or cast
+  to `node`.
+  """
+  @spec stop_actuator(module(), atom(), maybe_node()) :: :ok | {:error, term()}
+  def stop_actuator(robot, actuator, nil), do: BB.Actuator.stop(robot, actuator)
+
+  def stop_actuator(robot, actuator, node),
+    do: Rpc.cast(node, BB.Actuator, :stop, [robot, actuator])
+
+  @doc """
   Calls a drive function — an extension's `publish` or `stop` — where the
   robot runs: inline here, or as a cast to `node`, so a 20 Hz drive tick
   never waits on the network.

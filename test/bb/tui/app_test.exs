@@ -222,6 +222,206 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "velocity jog" do
+    setup do
+      Fixtures.stub_bb_modules(safety_state: :armed)
+      test = self()
+
+      Mimic.stub(BB.Actuator, :set_velocity, fn robot, actuator, velocity ->
+        send(test, {:set_velocity, robot, actuator, velocity})
+        :ok
+      end)
+
+      Mimic.stub(BB.Actuator, :stop, fn robot, actuator ->
+        send(test, {:stop, robot, actuator})
+        :ok
+      end)
+
+      joints = %{
+        lean: %{
+          joint: %{name: :lean, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: nil
+        },
+        wheel: %{
+          joint: %{name: :wheel, type: :continuous, limits: %{velocity: 4.0}},
+          position: 0.0,
+          target: nil
+        }
+      }
+
+      robot_struct =
+        Map.put(Fixtures.sample_robot_struct(), :actuators, %{wheel_motor: %{joint: :wheel}})
+
+      # A robot name of this describe's own: the lease is a node-wide name.
+      robot = BB.TUI.WheelRobot
+      on_exit(fn -> :global.unregister_name(Pilot.name(robot)) end)
+
+      state =
+        %{
+          robot: robot,
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 1,
+          safety_state: :armed,
+          robot_struct: robot_struct,
+          simulation: nil
+        }
+        |> Fixtures.sample_state()
+        |> State.put_command_payloads(:wheel_motor, [Command.Velocity, Command.Stop])
+
+      %{state: state, robot: robot}
+    end
+
+    defp spin_key(state, code, kind \\ "press"),
+      do: App.update({:event, %ExRatatui.Event.Key{code: code, kind: kind}}, state)
+
+    defp with_wheel(state) do
+      {:noreply, state} = spin_key(state, "t")
+      assert state.drive.lease == :mine
+      state
+    end
+
+    defp spinning(state, code \\ "l") do
+      {:noreply, state} = state |> with_wheel() |> spin_key(code)
+      state
+    end
+
+    test "without the wheel a velocity-only joint doesn't spin", %{state: state} do
+      assert {:noreply, state} = spin_key(state, "l")
+      assert state.joints.velocity_jog == nil
+      refute_received {:set_velocity, _, _, _}
+    end
+
+    test "t takes the wheel; holding l spins and letting go stops", %{state: state, robot: robot} do
+      state = spinning(state)
+      assert_received {:set_velocity, ^robot, :wheel_motor, 0.4}
+      assert %{joint: :wheel, velocity: 0.4} = state.joints.velocity_jog
+
+      assert Subscription.interval(:velocity_jog_tick, 50, :velocity_jog_tick) in App.subscriptions(
+               state
+             )
+
+      # A repeat keeps it spinning without sending again.
+      {:noreply, state} = spin_key(state, "l", "repeat")
+      refute_received {:set_velocity, _, _, _}
+
+      assert {:noreply, state} = spin_key(state, "l", "release")
+      assert_received {:stop, ^robot, :wheel_motor}
+      assert state.joints.velocity_jog == nil
+      assert state.drive.mode == :release
+      refute Enum.any?(App.subscriptions(state), &(&1.id == :velocity_jog_tick))
+    end
+
+    test "the shifted keys spin at half the limit, the other way at once", %{
+      state: state,
+      robot: robot
+    } do
+      state = spinning(state, "L")
+      assert_received {:set_velocity, ^robot, :wheel_motor, 2.0}
+
+      {:noreply, _state} = spin_key(state, "h")
+      assert_received {:set_velocity, ^robot, :wheel_motor, -0.4}
+      refute_received {:stop, _, _}
+
+      {:noreply, _state} = spin_key(state, "H")
+      assert_received {:set_velocity, ^robot, :wheel_motor, -2.0}
+    end
+
+    test "a held jog keeps spinning on the tick", %{state: state} do
+      state = spinning(state)
+      assert {:noreply, ^state, render?: false} = App.update({:info, :velocity_jog_tick}, state)
+      refute_received {:stop, _, _}
+    end
+
+    test "the tick stops a jog whose presses stopped coming", %{state: state, robot: robot} do
+      state = spinning(state)
+      state = update_in(state.joints.velocity_jog, &%{&1 | last_at: &1.last_at - 1_000})
+
+      assert {:noreply, state, render?: true} = App.update({:info, :velocity_jog_tick}, state)
+      assert_received {:stop, ^robot, :wheel_motor}
+      assert state.joints.velocity_jog == nil
+    end
+
+    for {label, change} <- [
+          {"another joint is selected", quote(do: &put_in(&1.joints.selected, 0))},
+          {"the panel is left", quote(do: &put_in(&1.ui.active_panel, :safety))},
+          {"the tab is left", quote(do: &put_in(&1.ui.active_tab, :visualization))},
+          {"the robot is disarmed", quote(do: &put_in(&1.safety.state, :disarmed))},
+          {"the wheel is lost",
+           quote(do: &tap(&1, fn state -> :global.unregister_name(Pilot.name(state.robot)) end))}
+        ] do
+      test "the tick stops a spinning joint when #{label}", %{state: state, robot: robot} do
+        state = spinning(state) |> unquote(change).()
+
+        assert {:noreply, state, render?: true} = App.update({:info, :velocity_jog_tick}, state)
+        assert_received {:stop, ^robot, :wheel_motor}
+        assert state.joints.velocity_jog == nil
+      end
+    end
+
+    test "q, focus loss, t and the session ending stop a spinning joint", %{
+      state: state,
+      robot: robot
+    } do
+      state = spinning(state)
+
+      assert {:stop, %{joints: %{velocity_jog: nil}}} = spin_key(state, "q")
+      assert_received {:stop, ^robot, :wheel_motor}
+
+      assert {:noreply, %{joints: %{velocity_jog: nil}}} =
+               App.update({:event, %ExRatatui.Event.FocusLost{}}, state)
+
+      assert_received {:stop, ^robot, :wheel_motor}
+
+      assert {:noreply, %{joints: %{velocity_jog: nil}, drive: %{lease: :free}}} =
+               spin_key(state, "t")
+
+      assert_received {:stop, ^robot, :wheel_motor}
+
+      {:noreply, state} = state |> with_wheel() |> spin_key("l")
+      assert :ok = App.terminate(:normal, state)
+      assert_received {:stop, ^robot, :wheel_motor}
+      assert Pilot.holder(robot) == :free
+    end
+
+    test "under node: the jog is cast to the robot's node", %{state: state, robot: robot} do
+      test = self()
+
+      Mimic.stub(BB.TUI.Rpc, :cast, fn node, m, f, args ->
+        send(test, {:cast, node, m, f, args})
+      end)
+
+      state = %{state | node: :"robot@127.0.0.1"}
+
+      state = spinning(state)
+
+      assert_received {:cast, :"robot@127.0.0.1", BB.Actuator, :set_velocity,
+                       [^robot, :wheel_motor, 0.4]}
+
+      {:noreply, _state} = spin_key(state, "l", "release")
+      assert_received {:cast, :"robot@127.0.0.1", BB.Actuator, :stop, [^robot, :wheel_motor]}
+    end
+
+    test "t does nothing on a joint that doesn't spin", %{state: state, robot: robot} do
+      state = put_in(state.joints.selected, 0)
+      assert {:noreply, ^state} = spin_key(state, "t")
+      assert Pilot.holder(robot) == :free
+      assert App.subscriptions(state) |> Enum.filter(&(&1.id == :pilot_check)) == []
+
+      state = put_in(state.joints.entries, %{})
+      assert {:noreply, ^state} = spin_key(state, "t")
+    end
+
+    test "a tick queued before the jog stopped does nothing", %{state: state} do
+      assert {:noreply, ^state, render?: false} = App.update({:info, :velocity_jog_tick}, state)
+    end
+
+    test "the lease is checked while a velocity-only joint is selected", %{state: state} do
+      assert Subscription.interval(:pilot_check, 1_000, :pilot_check) in App.subscriptions(state)
+    end
+  end
+
   describe "extension sources" do
     setup do
       Fixtures.stub_bb_modules()
@@ -369,9 +569,6 @@ defmodule BB.TUI.AppTest do
       state = State.update_parameters(state, [{[:yaw, :turn_rate], 2.0}])
       %{state: put_in(state.ui.active_tab, {:extension, :drive})}
     end
-
-    defp key(state, code, kind),
-      do: App.update({:event, %ExRatatui.Event.Key{code: code, kind: kind}}, state)
 
     test "a drive key publishes at once and keeps ticking while held", %{state: state} do
       assert {:noreply, state, render?: true} = key(state, "left", "press")

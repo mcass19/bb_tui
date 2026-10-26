@@ -88,8 +88,9 @@ Enum-typed args (`{:in, [...]}` in the Spark schema) render as `‹ value ›` c
 | `h` / `Left` | Decrease position (1% step) |
 | `L` | Increase position (10% step) |
 | `H` | Decrease position (10% step) |
+| `t` | Take or hand back the wheel (velocity-only joints) |
 
-Each step moves the joint's commanded target — the hollow marker on its position bar — so holding a key keeps stepping ahead of a joint that is still travelling. The marker clears once the joint arrives, or when a jog is refused or the robot is disarmed, and the next step starts from where the joint is. A joint with an actuator has at most one jog in flight. In simulation, a joint without one (marked `SIM`) is moved by a simulated `JointState`; on hardware it is read-only, since something else drives it (an estimator, a balancing controller). A joint whose actuator refuses position commands — a velocity-driven wheel — shows `velocity only` in place of its position bar and doesn't jog either; the status bar says why when one of them is selected.
+Each step moves the joint's commanded target — the hollow marker on its position bar — so holding a key keeps stepping ahead of a joint that is still travelling. The marker clears once the joint arrives, or when a jog is refused or the robot is disarmed, and the next step starts from where the joint is. A joint with an actuator has at most one jog in flight. In simulation, a joint without one (marked `SIM`) is moved by a simulated `JointState`; on hardware it is read-only, since something else drives it (an estimator, a balancing controller). A joint whose actuator refuses position commands — a velocity-driven wheel — shows `velocity only` in place of its position bar and spins instead: holding `l`/`h` sends 10% of its velocity limit, `L`/`H` half of it, and letting go stops it. Spinning needs the wheel (`t`, see [Driving](driving.md#spinning-a-joint)), like driving does.
 
 ## Parameters panel
 
