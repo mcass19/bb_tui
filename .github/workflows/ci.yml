@@ -67,3 +67,8 @@ jobs:
 
       - run: mix test
         if: ${{ ! matrix.lint }}
+
+      # Starts a `:peer` running a real robot and attaches a dashboard with
+      # `node:`, so the test node itself has to be distributed.
+      - name: Run distributed tests
+        run: elixir --sname test -S mix test --only distributed
