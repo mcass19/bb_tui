@@ -50,6 +50,42 @@ defmodule BB.TUI.State.ExtensionsTest do
     end
   end
 
+  describe "what the sources read" do
+    test "build/1 lists the topics and controllers to watch" do
+      {:ok, extensions} = Extensions.build([Test.Extension])
+
+      assert extensions.topics == [[:sensor, :wheel]]
+      assert extensions.controllers == [:balancer, :yaw]
+    end
+
+    test "put_message/3 ignores messages when no source reads a topic" do
+      assert Extensions.put_message(%Extensions{}, [:drive], %{vx: 1}) == %Extensions{}
+    end
+
+    test "put_message/3 matches an exact path, and a longer one only for [root, name]" do
+      ext = %Extensions{topics: [[:drive], [:sensor, :imu, :raw]]}
+
+      ext = Extensions.put_message(ext, [:drive], %{vx: 1})
+      ext = Extensions.put_message(ext, [:sensor, :base, :imu, :raw], %{x: 2})
+
+      assert ext.values == %{{:topic, [:drive]} => %{vx: 1}}
+    end
+
+    test "read/2 is nil for a joint the robot doesn't have and digs only into maps" do
+      state = %BB.TUI.State{
+        parameters: %BB.TUI.State.Parameters{list: [{[:other], 1}, {[:yaw, :rate], 2}]},
+        extensions: %Extensions{values: %{{:topic, [:drive]} => %{vx: 1.0}}}
+      }
+
+      assert Extensions.read(state, Source.param([:yaw, :rate])) == 2
+
+      assert Extensions.read(state, Source.joint(:missing)) == nil
+      assert Extensions.read(state, Source.param([:missing])) == nil
+      assert Extensions.read(state, Source.topic([:drive], [:vx, :deeper])) == nil
+      assert Extensions.read(state, Source.topic([:drive], :vx)) == 1.0
+    end
+  end
+
   describe "sources/1 and subscribe_paths/2" do
     setup do
       {:ok, extensions} = Extensions.build([Test.Extension])

@@ -10,6 +10,7 @@ Mimic.copy(BB.PubSub)
 Mimic.copy(BB.Parameter)
 Mimic.copy(BB.Dsl.Info)
 Mimic.copy(BB.Command)
+Mimic.copy(BB.Process)
 Mimic.copy(BB.TUI.Rpc)
 Mimic.copy(BB.TUI.App)
 

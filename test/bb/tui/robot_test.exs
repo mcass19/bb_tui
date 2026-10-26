@@ -687,6 +687,37 @@ defmodule BB.TUI.RobotTest do
     end
   end
 
+  describe "inspect_controller/3" do
+    @remote :"robot@127.0.0.1"
+
+    test "returns the controller's :inspect answer" do
+      Mimic.expect(BB.Process, :call, fn @robot, :balancer, :inspect, 200 -> %{lean: 0.1} end)
+      assert Robot.inspect_controller(@robot, :balancer, nil) == {:ok, %{lean: 0.1}}
+    end
+
+    test "turns a missing, crashing or slow controller into an error" do
+      Mimic.expect(BB.Process, :call, fn _robot, _name, _msg, _timeout -> exit(:noproc) end)
+      assert Robot.inspect_controller(@robot, :balancer, nil) == {:error, :noproc}
+    end
+
+    test "asks on the robot's node" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote,
+                                         Robot,
+                                         :inspect_controller,
+                                         [@robot, :yaw, nil] ->
+        {:ok, %{heading: 1.0}}
+      end)
+
+      assert Robot.inspect_controller(@robot, :yaw, @remote) == {:ok, %{heading: 1.0}}
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, Robot, :inspect_controller, _args ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.inspect_controller(@robot, :yaw, @remote) == {:error, :nodedown}
+    end
+  end
+
   describe "exported?/4" do
     @remote :"robot@127.0.0.1"
 

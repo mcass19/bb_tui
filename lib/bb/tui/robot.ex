@@ -209,6 +209,29 @@ defmodule BB.TUI.Robot do
     end
   end
 
+  # A readout poll, not a control loop: a controller that takes longer than
+  # this to answer `:inspect` is skipped until the next poll.
+  @inspect_timeout_ms 200
+
+  @doc """
+  Asks a robot controller for its state, through its `handle_call(:inspect,
+  ...)`. Returns `{:ok, state}`, or `{:error, reason}` when the controller
+  isn't running, doesn't answer `:inspect`, or is too slow to.
+  """
+  @spec inspect_controller(module(), atom(), maybe_node()) :: {:ok, term()} | {:error, term()}
+  def inspect_controller(robot, name, nil) do
+    {:ok, BB.Process.call(robot, name, :inspect, @inspect_timeout_ms)}
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  def inspect_controller(robot, name, node) do
+    case Rpc.call(node, __MODULE__, :inspect_controller, [robot, name, nil]) do
+      {:badrpc, reason} -> {:error, reason}
+      result -> result
+    end
+  end
+
   @doc """
   Whether `module.function/arity` exists where the robot runs: here, or on
   `node`, loading the module first.

@@ -7,7 +7,7 @@ defmodule BB.TUI.ExtensionTest do
   doctest BB.TUI.Extension.Source
 
   alias BB.TUI.Extension
-  alias BB.TUI.Extension.{Bind, Hint, Info, Panel, Plot, Readout, Source}
+  alias BB.TUI.Extension.{Bind, Format, Hint, Info, Panel, Plot, Readout, Source}
   alias BB.TUI.Test.EmptyExtension
   alias BB.TUI.Test.Extension, as: TestExtension
   alias Spark.Error.DslError
@@ -122,6 +122,25 @@ defmodule BB.TUI.ExtensionTest do
         end
 
       assert error.message =~ ~s("q" is one of bb_tui's own keys)
+    end
+
+    test "a readout's unit must be one Localize knows" do
+      assert_raise DslError, ~r/unknown unit :centimetre_per_second/, fn ->
+        defmodule MisspeltUnit do
+          use BB.TUI.Extension
+
+          panels do
+            panel :p do
+              readout "speed", joint(:wheel), unit: :centimetre_per_second
+            end
+          end
+        end
+      end
+
+      assert Format.validate_unit(:degree) == {:ok, :degree}
+
+      assert {:error, "expected a unit atom" <> _} =
+               Format.validate_unit("degree")
     end
 
     test "a key can only be bound once" do
