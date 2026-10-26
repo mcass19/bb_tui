@@ -131,6 +131,7 @@ defmodule BB.TUI.App do
   alias BB.Robot.Joint
   alias BB.TUI.Errors
   alias BB.TUI.Panels
+  alias BB.TUI.Pilot
   alias BB.TUI.Robot
   alias BB.TUI.State
   alias ExRatatui.Command
@@ -456,14 +457,53 @@ defmodule BB.TUI.App do
 
   # ── Update — driving ─────────────────────────────────────────
 
+  # Only the session holding the pilot lease drives; without it the pad
+  # says how to take it.
   def update(
         {:event, %Event.Key{code: code, kind: kind}},
         %{ui: %{active_tab: {:extension, :drive}}, extensions: %{drive: %{}}} = state
       )
       when code in ["up", "down", "left", "right"] and kind in ["press", "repeat"] do
-    state
-    |> Map.update!(:drive, &State.Drive.press(&1, code, now_ms()))
-    |> step_drive()
+    state = observe_lease(state)
+
+    case state.drive.lease do
+      :mine ->
+        state
+        |> Map.update!(:drive, &State.Drive.press(&1, code, now_ms()))
+        |> step_drive()
+
+      _not_mine ->
+        {:noreply, state}
+    end
+  end
+
+  # `t` takes the wheel, or hands it back (stopping first).
+  def update(
+        {:event, %Event.Key{code: "t", kind: "press"}},
+        %{ui: %{active_tab: {:extension, :drive}}, extensions: %{drive: %{}}} = state
+      ) do
+    case observe_lease(state) do
+      %{drive: %{lease: :mine}} = state ->
+        state = halt_drive(state)
+        :ok = Pilot.release(state.robot)
+        {:noreply, observe_lease(state)}
+
+      state ->
+        _ = Pilot.take(state.robot)
+        {:noreply, observe_lease(state)}
+    end
+  end
+
+  # Another session won the lease after a network split healed: this one
+  # stops at once.
+  def update({:info, {:global_name_conflict, {Pilot, _robot}}}, state) do
+    {:noreply, state |> halt_drive() |> observe_lease()}
+  end
+
+  # Keeps "driven by …" current while the Drive tab is on screen.
+  def update({:info, :pilot_check}, state) do
+    checked = observe_lease(state)
+    {:noreply, checked, render?: checked.drive.lease != state.drive.lease}
   end
 
   def update(
@@ -1016,7 +1056,8 @@ defmodule BB.TUI.App do
   def subscriptions(state) do
     throbber_subscriptions(state) ++
       sensor_flush_subscriptions(state) ++
-      controller_poll_subscriptions(state) ++ drive_subscriptions(state)
+      controller_poll_subscriptions(state) ++
+      drive_subscriptions(state) ++ pilot_subscriptions(state)
   end
 
   # Ticks at the drive's rate for as long as a key is held or a stop is owed.
@@ -1028,9 +1069,18 @@ defmodule BB.TUI.App do
 
   defp drive_subscriptions(_state), do: []
 
+  defp pilot_subscriptions(%State{
+         ui: %{active_tab: {:extension, :drive}},
+         extensions: %{drive: %{}}
+       }),
+       do: [Subscription.interval(:pilot_check, 1_000, :pilot_check)]
+
+  defp pilot_subscriptions(_state), do: []
+
   @impl true
   def terminate(_reason, state) do
-    _ = halt_drive(state)
+    state = halt_drive(state)
+    if state.extensions.drive, do: Pilot.release(state.robot)
     :ok
   end
 
@@ -1167,11 +1217,34 @@ defmodule BB.TUI.App do
   # Steps the drive and does what it says: publish the held throttle and
   # turn, or stop once when the last key is let go. A tick only redraws the
   # pad when what is held changed.
+  # A session that lost the lease since the last step — taken over after a
+  # split healed, released elsewhere — stops instead of publishing.
   defp step_drive(state, opts \\ []) do
-    {action, drive} = State.Drive.step(state.drive, now_ms())
-    drive_action(state, action)
-    render? = Keyword.get(opts, :render?, true) or drive.held != state.drive.held
-    {:noreply, %{state | drive: drive}, render?: render?}
+    checked = observe_lease(state)
+
+    {action, drive} =
+      case checked.drive.lease do
+        :mine -> State.Drive.step(checked.drive, now_ms())
+        _lost -> State.Drive.halt(checked.drive)
+      end
+
+    drive_action(checked, action)
+
+    render? =
+      Keyword.get(opts, :render?, true) or drive.held != state.drive.held or
+        drive.lease != state.drive.lease
+
+    {:noreply, %{checked | drive: drive}, render?: render?}
+  end
+
+  defp observe_lease(%State{} = state) do
+    holder =
+      case Pilot.holder(state.robot) do
+        {:other, pid} -> {:other, node(pid)}
+        mine_or_free -> mine_or_free
+      end
+
+    %{state | drive: State.Drive.observe_lease(state.drive, holder, NaiveDateTime.local_now())}
   end
 
   defp halt_drive(%State{} = state) do

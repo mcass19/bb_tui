@@ -12,6 +12,7 @@ defmodule BB.TUI.AppTest do
   alias BB.TUI.Panels.Events
   alias BB.TUI.Panels.StatusBar
   alias BB.TUI.Panels.TabBar
+  alias BB.TUI.Pilot
   alias BB.TUI.State
   alias BB.TUI.State.Series
   alias BB.TUI.Test.Fixtures
@@ -361,6 +362,9 @@ defmodule BB.TUI.AppTest do
       Mimic.stub(BB.TUI.Test.Drive, :stop, fn robot -> send(test_pid, {:stop, robot}) end)
 
       {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+      # The test process plays the session, and holds the wheel.
+      :ok = Pilot.take(BB.TUI.TestRobot)
+      on_exit(fn -> :global.unregister_name(Pilot.name(BB.TUI.TestRobot)) end)
       # The turn scale reads [:yaw, :turn_rate].
       state = State.update_parameters(state, [{[:yaw, :turn_rate], 2.0}])
       %{state: put_in(state.ui.active_tab, {:extension, :drive})}
@@ -451,6 +455,143 @@ defmodule BB.TUI.AppTest do
 
       assert Enum.map_join(spans, "", & &1.content) =~ "drive"
     end
+  end
+
+  describe "the pilot lease" do
+    setup do
+      Fixtures.stub_bb_modules()
+      test_pid = self()
+
+      Mimic.stub(BB.TUI.Test.Drive, :command, fn _robot, t, r ->
+        send(test_pid, {:publish, t, r})
+      end)
+
+      Mimic.stub(BB.TUI.Test.Drive, :stop, fn _robot -> send(test_pid, :stop) end)
+
+      # A robot name of this describe's own: the lease is a node-wide name.
+      robot = BB.TUI.LeaseRobot
+      {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+      on_exit(fn -> :global.unregister_name(Pilot.name(robot)) end)
+      %{state: %{put_in(state.ui.active_tab, {:extension, :drive}) | robot: robot}, robot: robot}
+    end
+
+    defp key(state, code, kind \\ "press"),
+      do: App.update({:event, %ExRatatui.Event.Key{code: code, kind: kind}}, state)
+
+    defp other_session(robot) do
+      test = self()
+
+      pid =
+        spawn(fn ->
+          :ok = Pilot.take(robot)
+          send(test, :taken)
+
+          receive do
+            :release -> Pilot.release(robot)
+          end
+
+          send(test, :released)
+          receive do: (:never -> :ok)
+        end)
+
+      assert_receive :taken
+      pid
+    end
+
+    test "without the wheel the arrows don't drive, and the pad says t", %{state: state} do
+      assert {:noreply, state} = key(state, "up")
+      assert state.drive.lease == :free
+      refute_received {:publish, _, _}
+      assert pad_text(state) =~ "t to take the wheel"
+    end
+
+    test "t takes the wheel and hands it back, stopping first", %{state: state, robot: robot} do
+      {:noreply, state} = key(state, "t")
+      assert state.drive.lease == :mine
+      assert Pilot.holder(robot) == :mine
+      assert pad_text(state) =~ "you have the wheel"
+
+      {:noreply, state, _} = key(state, "up")
+      assert_received {:publish, 1.0, +0.0}
+
+      {:noreply, state} = key(state, "t")
+      assert_received :stop
+      assert state.drive.lease == :free
+      assert Pilot.holder(robot) == :free
+    end
+
+    test "another session's wheel shows who has it, and can't be taken", %{
+      state: state,
+      robot: robot
+    } do
+      other = other_session(robot)
+
+      {:noreply, state} = key(state, "t")
+      assert {:other, node, _since} = state.drive.lease
+      assert node == node()
+      assert pad_text(state) =~ "driven by #{node()}"
+
+      # Once it's let go, the next check notices.
+      send(other, :release)
+      assert_receive :released
+      assert {:noreply, state, render?: true} = App.update({:info, :pilot_check}, state)
+      assert state.drive.lease == :free
+      assert {:noreply, _, render?: false} = App.update({:info, :pilot_check}, state)
+    end
+
+    test "losing the wheel while driving stops", %{state: state, robot: robot} do
+      {:noreply, state} = key(state, "t")
+      {:noreply, state, _} = key(state, "up")
+      assert_received {:publish, _, _}
+
+      # Taken over behind this session's back, as after a split heals.
+      :global.unregister_name(Pilot.name(robot))
+      _other = other_session(robot)
+
+      assert {:noreply, state, render?: true} = App.update({:info, :drive_tick}, state)
+      assert_received :stop
+      refute state.drive.driving?
+      assert {:other, _node, _since} = state.drive.lease
+    end
+
+    test "a name conflict after a split stops at once", %{state: state, robot: robot} do
+      {:noreply, state} = key(state, "t")
+      {:noreply, state, _} = key(state, "up")
+      assert_received {:publish, _, _}
+
+      assert {:noreply, state} =
+               App.update({:info, {:global_name_conflict, Pilot.name(robot)}}, state)
+
+      assert_received :stop
+      refute state.drive.driving?
+    end
+
+    test "the session lets go of the wheel when it ends", %{state: state, robot: robot} do
+      {:noreply, state} = key(state, "t")
+      assert :ok = App.terminate(:normal, state)
+      assert Pilot.holder(robot) == :free
+    end
+
+    test "the lease is checked every second while the Drive tab is up", %{state: state} do
+      assert %Subscription{interval_ms: 1_000} =
+               Enum.find(App.subscriptions(state), &(&1.id == :pilot_check))
+
+      refute Enum.any?(
+               App.subscriptions(put_in(state.ui.active_tab, :control)),
+               &(&1.id == :pilot_check)
+             )
+    end
+  end
+
+  defp pad_text(state) do
+    {%ExRatatui.Widgets.Paragraph{text: lines}, _} =
+      state
+      |> App.render(%ExRatatui.Frame{width: 120, height: 30})
+      |> Enum.find(fn {w, _} ->
+        match?(%ExRatatui.Widgets.Paragraph{block: %{title: " Drive "}}, w)
+      end)
+
+    Enum.map_join(lines, "\n", fn line -> Enum.map_join(line.spans, "", & &1.content) end)
   end
 
   describe "extension tabs and keys" do

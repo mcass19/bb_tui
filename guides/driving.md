@@ -17,6 +17,14 @@ The extension's Drive tab shows the pad: the arrows light while held, two bars s
 
 Driving only happens on this tab. Elsewhere the arrows keep their usual jobs, and switching away from the Drive tab while a key is held stops the robot.
 
+## Taking the wheel
+
+Only one dashboard session drives a robot at a time. On the Drive tab, `t` takes the wheel — the pilot lease — and `t` again hands it back, stopping first; without it the arrows don't drive and the pad says so. Another session holding it shows as "driven by <node> since <time>" (the time this session first saw it there), checked every second while the tab is up.
+
+The lease is a `:global` name registered to the session that holds it (`BB.TUI.Pilot`), so it reaches every connected node — a laptop on `node:`, an SSH session on the robot, an attached terminal — and goes away with its session, however that ends. After a network split heals, two sessions may both believe they hold it for a moment; the one that loses is told, and stops at once. Every drive tick checks the lease too, so a session whose lease went elsewhere stops within a tick.
+
+The lease coordinates bb_tui sessions only. Other ways of driving the same robot — a badge, a phone pad — don't take it, and the robot's own command handling decides between them.
+
 ## What gets published
 
 Up and down set the throttle to 1 and -1, left and right the turn to 1 and -1 (left positive, counter-clockwise), one direction per axis: pressing the opposite arrow takes over. Each is multiplied by its scale — a number, or a `param(path)` read on every tick, so retuning the parameter changes the next command — and handed to `publish` as floats.
@@ -34,7 +42,7 @@ The pad shows which mode is on. Key releases come from terminals speaking the ki
 
 ## When driving stops
 
-Besides letting go of the keys, bb_tui calls `stop` when the dashboard quits, when the Drive tab is left, when the terminal window loses focus (the dashboard asks for focus reports whenever an extension declares a drive), and when the session ends for any reason. The robot's own dead-man timeout (`drive_timeout` on a balance bot) stays the backstop for everything bb_tui can't see, such as a dropped SSH connection or a frozen laptop.
+Besides letting go of the keys, bb_tui calls `stop` when the dashboard quits, when the Drive tab is left, when the wheel is handed back or lost, when the terminal window loses focus (the dashboard asks for focus reports whenever an extension declares a drive), and when the session ends for any reason. The robot's own dead-man timeout (`drive_timeout` on a balance bot) stays the backstop for everything bb_tui can't see, such as a dropped SSH connection or a frozen laptop.
 
 ## Transports
 

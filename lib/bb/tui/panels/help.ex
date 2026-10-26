@@ -34,7 +34,8 @@ defmodule BB.TUI.Panels.Help do
 
   ## Extension tabs
   - `space` — Freeze the charts (they stop recording), again to resume
-  - `←` `↑` `↓` `→` — On the Drive tab, hold to drive; letting go stops. Leaving the tab, quitting or the window losing focus stops too
+  - `t` — On the Drive tab, take the wheel (the pilot lease), or hand it back
+  - `←` `↑` `↓` `→` — On the Drive tab, with the wheel, hold to drive; letting go stops. Leaving the tab, quitting or the window losing focus stops too
 
   ## Visualization tab
 

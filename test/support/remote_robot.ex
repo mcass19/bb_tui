@@ -110,6 +110,9 @@ end
 
 defmodule BB.TUI.Test.PeerHelper do
   @moduledoc false
+
+  alias BB.TUI.Pilot
+
   # Runs on the `:peer` node. `BB.Supervisor.start_link/2` links the robot to
   # its caller, which under `:rpc.call` is a process that exits as soon as the
   # call returns — so the robot is unlinked straight away.
@@ -119,6 +122,16 @@ defmodule BB.TUI.Test.PeerHelper do
     {:ok, pid} = BB.Supervisor.start_link(robot, simulation: :kinematic)
     Process.unlink(pid)
     {:ok, pid}
+  end
+
+  # Holds the pilot lease from the robot's node, as an SSH session there would.
+  def hold_lease(robot, target) do
+    :ok = Pilot.take(robot)
+    send(target, {:holding_lease, self()})
+
+    receive do
+      :release -> :ok
+    end
   end
 
   # Subscribes here, on the robot's node, and forwards each payload under

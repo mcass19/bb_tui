@@ -50,6 +50,32 @@ defmodule BB.TUI.DistributedTest do
     {:ok, tui: tui, peer_node: peer_node}
   end
 
+  test "a lease held on another node is seen, and keeps this session from driving", %{
+    peer_node: peer
+  } do
+    test_pid = self()
+    Node.spawn_link(peer, PeerHelper, :hold_lease, [RemoteRobot, test_pid])
+    assert_receive {:holding_lease, holder}, 2_000
+
+    {:ok, driver} =
+      App.start_link(
+        robot: RemoteRobot,
+        node: peer,
+        extensions: [BB.TUI.Test.RemoteDriveExtension],
+        test_mode: {120, 40},
+        name: nil
+      )
+
+    :sys.replace_state(driver, &put_in(&1.user_state.ui.active_tab, {:extension, :drive}))
+    :ok = Runtime.inject_event(driver, %Key{code: "t", kind: "press"})
+
+    eventually(fn ->
+      assert {:other, ^peer, _since} = user_state(driver).drive.lease
+    end)
+
+    assert node(holder) == peer
+  end
+
   test "driving publishes on the robot's node, and letting go stops it", %{peer_node: peer} do
     test_pid = self()
 
@@ -67,6 +93,7 @@ defmodule BB.TUI.DistributedTest do
       )
 
     :sys.replace_state(driver, &put_in(&1.user_state.ui.active_tab, {:extension, :drive}))
+    :ok = Runtime.inject_event(driver, %Key{code: "t", kind: "press"})
 
     :ok = Runtime.inject_event(driver, %Key{code: "up", kind: "press"})
     assert_receive {:relayed, [:drive], %{vx: 0.5, omega: +0.0}}, 2_000

@@ -50,24 +50,24 @@ defmodule BB.TUI.Panels.Drive do
     {throttle, turn} = directions(drive)
     {throttle_value, turn_value} = State.Extensions.drive_command(state, throttle, turn)
 
-    lines = [
-      %Line{spans: []},
-      centered([arrow(drive, "up", "▲")]),
-      %Line{spans: []},
-      centered([arrow(drive, "left", "◀"), plain("     "), arrow(drive, "right", "▶")]),
-      %Line{spans: []},
-      centered([arrow(drive, "down", "▼")]),
-      %Line{spans: []},
-      bar_line("throttle", throttle, throttle_value),
-      # Left turns are positive; the bar follows the arrow, so it fills right
-      # for a right turn.
-      bar_line("turn    ", -turn, turn_value),
-      %Line{spans: []},
-      %Line{spans: [dim(" mode  "), mode(drive.mode)]},
-      %Line{spans: [dim(" rate  "), plain("#{state.extensions.drive.rate} Hz")]},
-      %Line{spans: []},
-      %Line{spans: [dim(" hold the arrows to drive")]}
-    ]
+    lines =
+      [
+        %Line{spans: []},
+        centered([arrow(drive, "up", "▲")]),
+        %Line{spans: []},
+        centered([arrow(drive, "left", "◀"), plain("     "), arrow(drive, "right", "▶")]),
+        %Line{spans: []},
+        centered([arrow(drive, "down", "▼")]),
+        %Line{spans: []},
+        bar_line("throttle", throttle, throttle_value),
+        # Left turns are positive; the bar follows the arrow, so it fills right
+        # for a right turn.
+        bar_line("turn    ", -turn, turn_value),
+        %Line{spans: []},
+        %Line{spans: [dim(" mode  "), mode(drive.mode)]},
+        %Line{spans: [dim(" rate  "), plain("#{state.extensions.drive.rate} Hz")]},
+        %Line{spans: []}
+      ] ++ lease_lines(drive.lease)
 
     %Paragraph{
       text: lines,
@@ -122,6 +122,34 @@ defmodule BB.TUI.Panels.Drive do
         plain(" " <> :erlang.float_to_binary(value, decimals: 2))
       ]
     }
+  end
+
+  defp lease_lines(:mine) do
+    [
+      %Line{
+        spans: [
+          %Span{
+            content: " you have the wheel",
+            style: %Style{fg: Theme.green(), modifiers: [:bold]}
+          }
+        ]
+      },
+      %Line{spans: [dim(" hold the arrows to drive, t hands it back")]}
+    ]
+  end
+
+  defp lease_lines(:free),
+    do: [
+      %Line{spans: [%Span{content: " t to take the wheel", style: %Style{fg: Theme.yellow()}}]}
+    ]
+
+  defp lease_lines({:other, node, since}) do
+    [
+      %Line{spans: [%Span{content: " driven by #{node}", style: %Style{fg: Theme.yellow()}}]},
+      %Line{
+        spans: [dim(" since #{Calendar.strftime(since, "%H:%M:%S")}, t to take over when free")]
+      }
+    ]
   end
 
   defp mode(:release), do: %Span{content: "release", style: %Style{fg: Theme.green()}}
