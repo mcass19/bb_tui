@@ -47,6 +47,9 @@ The Visualization tab renders the live robot in 3D from its URDF topology and jo
 | `j` / `Down` | Select next |
 | `k` / `Up` | Select previous |
 | `Enter` | Execute (or enter argument edit mode when the command declares arguments) |
+| `c` | Cancel the selected command's newest execution while it runs, whoever started it |
+
+A running command shows `⏳ Running` in place of its Ready / Blocked badge, with `×N` when it has several executions. The panel lists every command running on the robot — started from this dashboard, another SSH session, a browser tab or automation — so `c` stops those too.
 
 ### Command edit mode
 

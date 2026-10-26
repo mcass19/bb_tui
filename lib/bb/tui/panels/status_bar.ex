@@ -196,6 +196,7 @@ defmodule BB.TUI.Panels.StatusBar do
     extras =
       case panel do
         :parameters -> parameters_keys(state)
+        :commands -> commands_keys(state)
         _ -> panel_keys(panel, safety)
       end
 
@@ -211,15 +212,6 @@ defmodule BB.TUI.Panels.StatusBar do
       Theme.dim_span(" arm "),
       Theme.key_pill("d"),
       Theme.dim_span(" disarm ")
-    ]
-  end
-
-  defp panel_keys(:commands, _safety) do
-    [
-      Theme.key_pill("j/k"),
-      Theme.dim_span(" select "),
-      Theme.key_pill("⏎"),
-      Theme.dim_span(" execute ")
     ]
   end
 
@@ -252,6 +244,21 @@ defmodule BB.TUI.Panels.StatusBar do
   end
 
   defp panel_keys(_, _), do: []
+
+  defp commands_keys(state) do
+    base = [
+      Theme.key_pill("j/k"),
+      Theme.dim_span(" select "),
+      Theme.key_pill("⏎"),
+      Theme.dim_span(" execute ")
+    ]
+
+    if State.selected_running_execution(state) do
+      base ++ [Theme.key_pill("c"), Theme.dim_span(" cancel ")]
+    else
+      base
+    end
+  end
 
   defp parameters_keys(%State{parameters: %{editing: %{}}}) do
     [

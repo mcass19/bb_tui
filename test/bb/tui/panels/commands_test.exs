@@ -3,6 +3,7 @@ defmodule BB.TUI.Panels.CommandsTest do
   doctest BB.TUI.Panels.Commands
 
   alias BB.TUI.Panels.Commands
+  alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Text.Line
   alias ExRatatui.Widgets.List, as: WidgetList
@@ -72,11 +73,46 @@ defmodule BB.TUI.Panels.CommandsTest do
       assert widget.selected == 1
     end
 
-    test "shows executing indicator" do
-      state = Fixtures.sample_state(%{commands: [], executing_command: :running})
+    test "a command this dashboard started shows Running before it is listed" do
+      commands = [%{name: :home, allowed_states: [:idle]}]
+      state = Fixtures.sample_state(%{commands: commands, executing_command: :home})
       widget = Commands.render(state, false)
 
-      assert Enum.any?(widget.items, &(text(&1) =~ "Executing"))
+      assert Enum.map(widget.items, &text/1) == ["home  \u{23F3} Running"]
+    end
+
+    test "a command entry without a name is never shown as running" do
+      state =
+        Fixtures.sample_state(%{commands: [%{allowed_states: [:idle]}], runtime_state: :idle})
+
+      widget = Commands.render(state, false)
+
+      assert [row] = Enum.map(widget.items, &text/1)
+      assert row =~ "Ready"
+    end
+
+    test "a command running elsewhere shows Running with its execution count" do
+      commands = [%{name: :home, allowed_states: [:idle]}, %{name: :log, allowed_states: [:idle]}]
+      now = DateTime.utc_now()
+
+      running = [
+        %{name: :home, execution_id: make_ref(), started_at: now},
+        %{name: :home, execution_id: make_ref(), started_at: now}
+      ]
+
+      state =
+        Fixtures.sample_state(%{commands: commands, runtime_state: :idle})
+        |> State.put_running_commands(running)
+
+      widget = Commands.render(state, false)
+
+      assert Enum.map(widget.items, &text/1) == [
+               "home  \u{23F3} Running \u{00D7}2",
+               "log  \u{25CF} Ready"
+             ]
+
+      %Line{spans: [_, _, badge]} = hd(widget.items)
+      assert badge.style.fg == :yellow
     end
 
     test "shows success result (green)" do
