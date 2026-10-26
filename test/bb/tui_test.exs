@@ -164,6 +164,22 @@ defmodule BB.TUITest do
       assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, renderers: renderers)
     end
 
+    test "asks for focus events when an extension declares a drive" do
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        assert opts[:focus_events] == true
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+
+      Mimic.expect(BB.TUI.App, :start_link, fn opts ->
+        refute Keyword.has_key?(opts, :focus_events)
+        {:ok, spawn(fn -> :ok end)}
+      end)
+
+      assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, extensions: [BB.TUI.Test.LaterHints])
+    end
+
     test "wraps :extensions into :app_opts when transport is :ssh" do
       Mimic.expect(BB.TUI.App, :start_link, fn opts ->
         assert opts[:app_opts][:extensions] == [BB.TUI.Test.Extension]

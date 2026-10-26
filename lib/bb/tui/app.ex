@@ -293,6 +293,13 @@ defmodule BB.TUI.App do
     end
   end
 
+  defp render_body(
+         %{ui: %{active_tab: {:extension, :drive}}, extensions: %{drive: %{}}} = state,
+         main
+       ) do
+    Panels.Drive.render(state, main, now_ms())
+  end
+
   defp render_body(%{ui: %{active_tab: {:extension, tab}}} = state, main) do
     Panels.Extension.render_tab(state, tab, main, now_ms())
   end
@@ -429,16 +436,47 @@ defmodule BB.TUI.App do
   # ── Update — global keys ─────────────────────────────────────
 
   def update({:event, %Event.Key{code: "q", kind: "press"}}, state) do
-    {:stop, state}
+    {:stop, halt_drive(state)}
   end
 
+  # Leaving the Drive tab lets go of the drive keys: driving is only ever
+  # done with the pad in view.
   def update({:event, %Event.Key{code: "]", kind: "press"}}, state) do
-    {:noreply, State.next_tab(state)}
+    {:noreply, state |> State.next_tab() |> halt_drive_off_tab()}
   end
 
   def update({:event, %Event.Key{code: "[", kind: "press"}}, state) do
-    {:noreply, State.prev_tab(state)}
+    {:noreply, state |> State.prev_tab() |> halt_drive_off_tab()}
   end
+
+  # The window lost focus: its key releases won't reach us.
+  def update({:event, %Event.FocusLost{}}, state) do
+    {:noreply, halt_drive(state)}
+  end
+
+  # ── Update — driving ─────────────────────────────────────────
+
+  def update(
+        {:event, %Event.Key{code: code, kind: kind}},
+        %{ui: %{active_tab: {:extension, :drive}}, extensions: %{drive: %{}}} = state
+      )
+      when code in ["up", "down", "left", "right"] and kind in ["press", "repeat"] do
+    state
+    |> Map.update!(:drive, &State.Drive.press(&1, code, now_ms()))
+    |> step_drive()
+  end
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "release"}},
+        %{ui: %{active_tab: {:extension, :drive}}, extensions: %{drive: %{}}} = state
+      )
+      when code in ["up", "down", "left", "right"] do
+    state
+    |> Map.update!(:drive, &State.Drive.release(&1, code))
+    |> step_drive()
+  end
+
+  def update({:info, :drive_tick}, state), do: step_drive(state, render?: false)
 
   # Visualization-tab camera controls.
   def update(
@@ -977,7 +1015,23 @@ defmodule BB.TUI.App do
   @impl true
   def subscriptions(state) do
     throbber_subscriptions(state) ++
-      sensor_flush_subscriptions(state) ++ controller_poll_subscriptions(state)
+      sensor_flush_subscriptions(state) ++
+      controller_poll_subscriptions(state) ++ drive_subscriptions(state)
+  end
+
+  # Ticks at the drive's rate for as long as a key is held or a stop is owed.
+  defp drive_subscriptions(%State{extensions: %{drive: %{rate: rate}}} = state) do
+    if State.Drive.active?(state.drive),
+      do: [Subscription.interval(:drive_tick, div(1000, rate), :drive_tick)],
+      else: []
+  end
+
+  defp drive_subscriptions(_state), do: []
+
+  @impl true
+  def terminate(_reason, state) do
+    _ = halt_drive(state)
+    :ok
   end
 
   defp throbber_subscriptions(state) do
@@ -1109,6 +1163,35 @@ defmodule BB.TUI.App do
   defp observe_extension_topics(state, _path, _msg), do: state
 
   defp record_extensions(state, filter), do: State.Extensions.record(state, now_ms(), filter)
+
+  # Steps the drive and does what it says: publish the held throttle and
+  # turn, or stop once when the last key is let go. A tick only redraws the
+  # pad when what is held changed.
+  defp step_drive(state, opts \\ []) do
+    {action, drive} = State.Drive.step(state.drive, now_ms())
+    drive_action(state, action)
+    render? = Keyword.get(opts, :render?, true) or drive.held != state.drive.held
+    {:noreply, %{state | drive: drive}, render?: render?}
+  end
+
+  defp halt_drive(%State{} = state) do
+    {action, drive} = State.Drive.halt(state.drive)
+    drive_action(state, action)
+    %{state | drive: drive}
+  end
+
+  defp halt_drive_off_tab(%State{ui: %{active_tab: {:extension, :drive}}} = state), do: state
+  defp halt_drive_off_tab(state), do: halt_drive(state)
+
+  defp drive_action(%State{extensions: %{drive: drive}} = state, {:publish, throttle, turn}) do
+    {throttle, turn} = State.Extensions.drive_command(state, throttle, turn)
+    Robot.drive(drive.publish, [state.robot, throttle, turn], state.node)
+  end
+
+  defp drive_action(%State{extensions: %{drive: drive}} = state, :stop),
+    do: Robot.drive(drive.stop, [state.robot], state.node)
+
+  defp drive_action(_state, _idle), do: :ok
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 

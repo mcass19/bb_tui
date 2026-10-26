@@ -157,6 +157,7 @@ Exercising the SSH, browser, and Erlang-distribution transports against the simu
 | Guide | Description |
 |---|---|
 | [Transports](guides/transports.md) | Serve the dashboard over SSH or in the browser, attach over Erlang distribution, inspect a running session, and test each transport locally |
+| [Driving](guides/driving.md) | Hold-to-drive with the arrow keys: the Drive tab, repeat and release modes, and when driving stops |
 | [Extensions](guides/extensions.md) | Add a robot's drive, panels, key binds and hints with a `BB.TUI.Extension`, and wire it into every transport |
 | [Keybindings](guides/keybindings.md) | Full per-panel key reference, including command argument editing, parameter stepping, and inline parameter editing |
 | [Telemetry](guides/telemetry.md) | `:telemetry` events for mount, input, dispatch, and frames — logging and `Telemetry.Metrics` |

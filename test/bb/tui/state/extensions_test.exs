@@ -32,6 +32,11 @@ defmodule BB.TUI.State.ExtensionsTest do
              }
     end
 
+    test "a declared drive gets a Drive tab even with no panels on it" do
+      {:ok, extensions} = Extensions.build([Test.SecondDrive, Test.LaterHints])
+      assert Extensions.tabs(extensions) == [drive: "Drive"]
+    end
+
     test "has no drive when none is declared" do
       assert {:ok, %{drive: nil}} = Extensions.build([Test.EmptyExtension])
     end

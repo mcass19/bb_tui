@@ -179,6 +179,8 @@ defmodule BB.TUI do
   """
 
   alias BB.TUI.App
+  alias BB.TUI.Extension
+  alias BB.TUI.Extension.Info
 
   @doc """
   Returns a child specification for supervision trees.
@@ -306,9 +308,23 @@ defmodule BB.TUI do
         |> App.start_link()
 
       _ ->
-        App.start_link(Keyword.put(opts, :robot, robot))
+        opts
+        |> Keyword.put(:robot, robot)
+        |> focus_events_for_drive()
+        |> App.start_link()
     end
   end
+
+  # Driving stops when the terminal window loses focus, which needs the
+  # terminal to report it.
+  defp focus_events_for_drive(opts) do
+    if Enum.any?(Keyword.get(opts, :extensions, []), &drive_extension?/1),
+      do: Keyword.put_new(opts, :focus_events, true),
+      else: opts
+  end
+
+  defp drive_extension?(module),
+    do: Extension.extension?(module) and Info.drive?(module)
 
   @doc """
   Starts the TUI dashboard as an SSH daemon.

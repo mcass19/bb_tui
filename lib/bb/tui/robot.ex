@@ -233,6 +233,15 @@ defmodule BB.TUI.Robot do
   end
 
   @doc """
+  Calls a drive function — an extension's `publish` or `stop` — where the
+  robot runs: inline here, or as a cast to `node`, so a 20 Hz drive tick
+  never waits on the network.
+  """
+  @spec drive({module(), atom()}, [term()], maybe_node()) :: term()
+  def drive({module, function}, args, nil), do: apply(module, function, args)
+  def drive({module, function}, args, node), do: Rpc.cast(node, module, function, args)
+
+  @doc """
   Whether `module.function/arity` exists where the robot runs: here, or on
   `node`, loading the module first.
   """

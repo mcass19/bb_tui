@@ -193,7 +193,7 @@ defmodule BB.TUI.Panels.StatusBar do
         Theme.dim_span(" help "),
         Theme.key_pill("q", :quit),
         Theme.dim_span(" quit ")
-      ] ++ freeze_keys(state.extensions, tab)
+      ] ++ drive_keys(state.extensions, tab) ++ freeze_keys(state.extensions, tab)
 
     case Enum.flat_map(state.extensions.binds, &bind_keys/1) do
       [] -> base
@@ -249,6 +249,9 @@ defmodule BB.TUI.Panels.StatusBar do
   end
 
   defp panel_keys(_, _), do: []
+
+  defp drive_keys(%{drive: %{}}, :drive), do: [Theme.key_pill("←↑↓→"), Theme.dim_span(" drive ")]
+  defp drive_keys(_extensions, _tab), do: []
 
   defp freeze_keys(extensions, tab) do
     cond do

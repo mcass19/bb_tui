@@ -349,6 +349,110 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "driving" do
+    setup do
+      Fixtures.stub_bb_modules()
+      test_pid = self()
+
+      Mimic.stub(BB.TUI.Test.Drive, :command, fn robot, t, r ->
+        send(test_pid, {:publish, robot, t, r})
+      end)
+
+      Mimic.stub(BB.TUI.Test.Drive, :stop, fn robot -> send(test_pid, {:stop, robot}) end)
+
+      {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+      # The turn scale reads [:yaw, :turn_rate].
+      state = State.update_parameters(state, [{[:yaw, :turn_rate], 2.0}])
+      %{state: put_in(state.ui.active_tab, {:extension, :drive})}
+    end
+
+    defp key(state, code, kind),
+      do: App.update({:event, %ExRatatui.Event.Key{code: code, kind: kind}}, state)
+
+    test "a drive key publishes at once and keeps ticking while held", %{state: state} do
+      assert {:noreply, state, render?: true} = key(state, "left", "press")
+      assert_received {:publish, BB.TUI.TestRobot, +0.0, 2.0}
+
+      assert %Subscription{interval_ms: 50} =
+               Enum.find(App.subscriptions(state), &(&1.id == :drive_tick))
+
+      assert {:noreply, _state, render?: false} = App.update({:info, :drive_tick}, state)
+      assert_received {:publish, _robot, +0.0, 2.0}
+    end
+
+    test "a release stops at once, and the drive stops ticking", %{state: state} do
+      {:noreply, state, _} = key(state, "up", "press")
+      assert_received {:publish, _robot, 1.0, +0.0}
+
+      assert {:noreply, state, render?: true} = key(state, "up", "release")
+      assert_received {:stop, BB.TUI.TestRobot}
+      assert state.drive.mode == :release
+      refute Enum.any?(App.subscriptions(state), &(&1.id == :drive_tick))
+    end
+
+    test "a repeat counts as holding the key", %{state: state} do
+      {:noreply, state, _} = key(state, "down", "press")
+      {:noreply, _state, _} = key(state, "down", "repeat")
+      assert_received {:publish, _robot, -1.0, +0.0}
+      assert_received {:publish, _robot, -1.0, +0.0}
+    end
+
+    test "quitting, leaving the tab, losing focus and ending the session all stop", %{
+      state: state
+    } do
+      {:noreply, driving, _} = key(state, "up", "press")
+
+      assert {:stop, _} = key(driving, "q", "press")
+      assert_received {:stop, _robot}
+
+      {:noreply, left} = key(driving, "]", "press")
+      refute left.drive.driving?
+      assert_received {:stop, _robot}
+
+      {:noreply, _} = App.update({:event, %ExRatatui.Event.FocusLost{}}, driving)
+      assert_received {:stop, _robot}
+
+      assert :ok = App.terminate(:normal, driving)
+      assert_received {:stop, _robot}
+
+      # Nothing held, nothing to stop.
+      assert :ok = App.terminate(:normal, state)
+      refute_received {:stop, _robot}
+    end
+
+    test "arrows drive only on the Drive tab", %{state: state} do
+      state = put_in(state.ui.active_tab, {:extension, :yaw})
+      assert {:noreply, ^state} = key(state, "up", "press")
+      refute_received {:publish, _, _, _}
+    end
+
+    test "under :node the drive functions are cast to the robot's node", %{state: state} do
+      test_pid = self()
+
+      Mimic.expect(BB.TUI.Rpc, :cast, fn :"robot@127.0.0.1", BB.TUI.Test.Drive, :command, args ->
+        send(test_pid, {:cast, args})
+        :ok
+      end)
+
+      {:noreply, _, _} = key(%{state | node: :"robot@127.0.0.1"}, "up", "press")
+      assert_received {:cast, [BB.TUI.TestRobot, 1.0, +0.0]}
+    end
+
+    test "the Drive tab shows the pad and the drive key pill", %{state: state} do
+      {:noreply, state, _} = key(state, "up", "press")
+      widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
+
+      assert Enum.any?(widgets, fn {w, _} ->
+               match?(%ExRatatui.Widgets.Paragraph{block: %{title: " Drive "}}, w)
+             end)
+
+      %ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}} =
+        StatusBar.render(state)
+
+      assert Enum.map_join(spans, "", & &1.content) =~ "drive"
+    end
+  end
+
   describe "extension tabs and keys" do
     setup do
       Fixtures.stub_bb_modules()
@@ -382,6 +486,16 @@ defmodule BB.TUI.AppTest do
 
       assert Enum.any?(widgets, fn {widget, _rect} ->
                match?(%ExRatatui.Widgets.Block{title: " Balance "}, widget)
+             end)
+
+      yaw =
+        App.render(put_in(state.ui.active_tab, {:extension, :yaw}), %ExRatatui.Frame{
+          width: 120,
+          height: 30
+        })
+
+      assert Enum.any?(yaw, fn {widget, _rect} ->
+               match?(%ExRatatui.Widgets.Block{title: " Yaw "}, widget)
              end)
 
       {_tab_bar, tabs_rect} = Enum.find(widgets, fn {widget, _rect} -> tab_bar?(widget) end)

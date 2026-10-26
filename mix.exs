@@ -151,6 +151,7 @@ defmodule BB.TUI.MixProject do
         "guides/transports.md": [title: "Transports"],
         "guides/keybindings.md": [title: "Keybindings"],
         "guides/extensions.md": [title: "Extensions"],
+        "guides/driving.md": [title: "Driving"],
         "documentation/dsls/DSL-BB.TUI.Extension.md": [title: "Extension DSL"],
         "guides/telemetry.md": [title: "Telemetry"],
         "CONTRIBUTING.md": [title: "Contributing"],

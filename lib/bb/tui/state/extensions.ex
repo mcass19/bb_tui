@@ -239,13 +239,19 @@ defmodule BB.TUI.State.Extensions do
       [drive: "Drive", yaw_rate: "Yaw rate", hardware: "Hardware"]
   """
   @spec tabs(t()) :: [{atom(), String.t()}]
-  def tabs(%__MODULE__{panels: panels}) do
-    panels
-    |> Enum.group_by(&tab_of/1)
-    |> then(fn by_tab ->
-      for tab <- panels |> Enum.map(&tab_of/1) |> Enum.uniq(),
-          do: {tab, tab_label(tab, Map.fetch!(by_tab, tab))}
-    end)
+  def tabs(%__MODULE__{panels: panels} = extensions) do
+    tabs =
+      panels
+      |> Enum.group_by(&tab_of/1)
+      |> then(fn by_tab ->
+        for tab <- panels |> Enum.map(&tab_of/1) |> Enum.uniq(),
+            do: {tab, tab_label(tab, Map.fetch!(by_tab, tab))}
+      end)
+
+    # A declared drive gets its tab even with no panels on it.
+    if extensions.drive && not List.keymember?(tabs, :drive, 0),
+      do: [{:drive, "Drive"} | tabs],
+      else: tabs
   end
 
   @doc """
@@ -554,6 +560,40 @@ defmodule BB.TUI.State.Extensions do
   end
 
   def record(state, _now, _filter), do: state
+
+  @doc """
+  The throttle and turn to publish for directions `throttle` and `turn`
+  (each -1, 0 or 1), scaled by the drive's `throttle_scale` and
+  `turn_scale`. A scale read from a parameter that isn't set, or isn't a
+  number, leaves its axis unscaled rather than zeroed.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.Source
+      iex> drive = %{throttle_scale: 0.5, turn_scale: Source.param([:yaw, :rate])}
+      iex> state = %BB.TUI.State{
+      ...>   parameters: %BB.TUI.State.Parameters{list: [{[:yaw, :rate], 2.0}]},
+      ...>   extensions: %BB.TUI.State.Extensions{drive: drive}
+      ...> }
+      iex> BB.TUI.State.Extensions.drive_command(state, 1, -1)
+      {0.5, -2.0}
+  """
+  @spec drive_command(map(), -1 | 0 | 1, -1 | 0 | 1) :: {float(), float()}
+  def drive_command(%{extensions: %__MODULE__{drive: drive}} = state, throttle, turn) do
+    {throttle * scale(state, drive.throttle_scale) * 1.0,
+     turn * scale(state, drive.turn_scale) * 1.0}
+  end
+
+  defp scale(_state, scale) when is_number(scale), do: scale
+
+  defp scale(state, %Source{} = source) do
+    readout = %Extension.Readout{label: "scale", source: source}
+
+    case Format.number_value(read(state, source), readout) do
+      nil -> 1.0
+      number -> number
+    end
+  end
 
   @doc """
   Freezes the charts at `now`, or lets them run again.
