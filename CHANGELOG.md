@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Jogging no longer fakes sensor readings on real hardware.** A joint without an actuator was jogged by publishing a synthetic `JointState` on `[:sensor, :simulated]`, whatever the robot was running on. On a balancing robot that joint is `lean`, measured by the IMU: `h`/`l` published a made-up angle next to the real one. The robot's simulation mode is now read on mount; outside simulation such joints are read-only, lose their `SIM` tag, and the status bar says `read-only: no actuator` in place of the jog keys. In simulation nothing changes. `bb_liveview` still jogs them on hardware.
+- **Joints whose actuator refuses position commands say so.** An actuator only accepts the payloads its driver lists in `command_payloads/1`, so a velocity-driven wheel answered every jog with `UnsupportedCommand`. On hardware the dashboard now reads each driver's list from the robot's DSL on mount (`BB.TUI.Robot.command_payloads/2`), and the first `UnsupportedCommand` an actuator answers with corrects it. Such joints show `velocity only` (or `no position command`) in place of the position bar, and the jog keys leave them alone.
+
 ## [0.8.0] - 2026-11-03
 
 ### Added

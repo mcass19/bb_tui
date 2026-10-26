@@ -686,4 +686,95 @@ defmodule BB.TUI.RobotTest do
       assert Robot.running_commands(@robot, @remote) == []
     end
   end
+
+  describe "command_payloads/2" do
+    @remote :"robot@127.0.0.1"
+
+    defmodule VelocityDriver do
+      @moduledoc false
+      def command_payloads(_opts), do: [BB.Message.Actuator.Command.Velocity]
+    end
+
+    defmodule OptsDriver do
+      @moduledoc false
+      def command_payloads(opts), do: Keyword.fetch!(opts, :payloads)
+    end
+
+    # base ─ wheel (left_motor) ─ hub ─ spin (spin_motor, bare module)
+    #      └ lean (no actuator)
+    defp topology(spin_driver \\ VelocityDriver) do
+      hub = %BB.Dsl.Link{
+        name: :hub,
+        joints: [
+          %BB.Dsl.Joint{
+            name: :spin,
+            actuators: [%BB.Dsl.Actuator{name: :spin_motor, child_spec: spin_driver}]
+          }
+        ]
+      }
+
+      [
+        %BB.Dsl.Link{
+          name: :base,
+          joints: [
+            %BB.Dsl.Joint{
+              name: :wheel,
+              link: hub,
+              actuators: [
+                %BB.Dsl.Actuator{
+                  name: :left_motor,
+                  child_spec: {OptsDriver, payloads: [BB.Message.Actuator.Command.Stop]}
+                }
+              ]
+            },
+            %BB.Dsl.Joint{name: :lean, actuators: []}
+          ]
+        }
+      ]
+    end
+
+    test "walks the topology and asks each driver with its declared options" do
+      Mimic.stub(BB.Dsl.Info, :topology, fn @robot -> topology() end)
+
+      assert Robot.command_payloads(@robot, nil) == %{
+               left_motor: [BB.Message.Actuator.Command.Stop],
+               spin_motor: [BB.Message.Actuator.Command.Velocity]
+             }
+    end
+
+    test "leaves out a driver that can't answer from its declared options" do
+      # A bare module gets `[]`, so OptsDriver's `fetch!` raises.
+      Mimic.stub(BB.Dsl.Info, :topology, fn @robot -> topology(OptsDriver) end)
+
+      assert Robot.command_payloads(@robot, nil) == %{
+               left_motor: [BB.Message.Actuator.Command.Stop]
+             }
+    end
+
+    test "is empty when the topology can't be read" do
+      Mimic.stub(BB.Dsl.Info, :topology, fn _ -> raise "no DSL" end)
+
+      assert Robot.command_payloads(@robot, nil) == %{}
+    end
+
+    test "asks the remote node for the topology and each driver's list" do
+      Mimic.stub(BB.TUI.Rpc, :call, fn
+        @remote, BB.Dsl.Info, :topology, [@robot] -> topology()
+        @remote, OptsDriver, :command_payloads, [opts] -> opts[:payloads]
+        @remote, VelocityDriver, :command_payloads, [[]] -> {:badrpc, :nodedown}
+      end)
+
+      assert Robot.command_payloads(@robot, @remote) == %{
+               left_motor: [BB.Message.Actuator.Command.Stop]
+             }
+    end
+
+    test "is empty when the remote topology call fails" do
+      Mimic.stub(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :topology, _ ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.command_payloads(@robot, @remote) == %{}
+    end
+  end
 end

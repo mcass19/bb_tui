@@ -11,6 +11,10 @@ defmodule BB.TUI.State do
   debouncing; `throttle.render_pending?`/`throttle.flush_ms` drive
   `BB.TUI.App`'s coalesced sensor re-render). See `BB.TUI.App` for the flow.
 
+  `simulation` is the robot's simulation mode, read once on mount (`nil` on
+  hardware); it decides what the jog keys do to a joint without an actuator
+  (see `jog_mode/2`).
+
   ## Examples
 
       iex> state = %BB.TUI.State{ui: %BB.TUI.State.UI{active_panel: :safety, show_help?: false}}
@@ -18,6 +22,7 @@ defmodule BB.TUI.State do
       :safety
   """
 
+  alias BB.Message.Actuator.Command
   alias BB.TUI.State.Commands
   alias BB.TUI.State.Events
   alias BB.TUI.State.Joints
@@ -36,6 +41,7 @@ defmodule BB.TUI.State do
     :robot,
     :robot_struct,
     node: nil,
+    simulation: nil,
     commands: %Commands{},
     parameters: %Parameters{},
     ui: %UI{},
@@ -53,6 +59,7 @@ defmodule BB.TUI.State do
           robot: module(),
           robot_struct: term(),
           node: node() | nil,
+          simulation: atom() | nil,
           commands: Commands.t(),
           parameters: Parameters.t(),
           ui: UI.t(),
@@ -1523,6 +1530,86 @@ defmodule BB.TUI.State do
       nil -> {nil, put_in(state.joints.jogs, Map.delete(jogs, actuator))}
       parked -> {parked, put_in(state.joints.jogs, Map.put(jogs, actuator, nil))}
     end
+  end
+
+  @doc """
+  Returns the actuator driving `joint_name`, or `nil` when it has none.
+
+  ## Examples
+
+      iex> robot = %{actuators: %{elbow_motor: %{joint: :elbow}}}
+      iex> BB.TUI.State.actuator_for_joint(robot, :elbow)
+      :elbow_motor
+      iex> BB.TUI.State.actuator_for_joint(robot, :wrist)
+      nil
+  """
+  @spec actuator_for_joint(term(), atom()) :: atom() | nil
+  def actuator_for_joint(%{actuators: actuators}, joint_name) do
+    Enum.find_value(actuators, fn {name, info} -> if info.joint == joint_name, do: name end)
+  end
+
+  def actuator_for_joint(_robot_struct, _joint_name), do: nil
+
+  @doc """
+  Returns how the jog keys move a joint.
+
+    * `:position` — its actuator takes position commands
+    * `:simulated` — no actuator, in simulation: a synthetic `JointState` moves it
+    * `:read_only` — no actuator, on hardware: something else drives it (an
+      estimator, a balancing controller), so jogging would only fake a reading
+    * `:velocity_only` / `:no_position` — its actuator refuses position
+      commands, and takes velocity ones or not
+
+  ## Examples
+
+      iex> robot = %{actuators: %{wheel_motor: %{joint: :wheel}}}
+      iex> state = %BB.TUI.State{robot_struct: robot, simulation: :kinematic}
+      iex> BB.TUI.State.jog_mode(state, :wheel)
+      :position
+      iex> BB.TUI.State.jog_mode(state, :lean)
+      :simulated
+      iex> state = %{state | simulation: nil}
+      iex> BB.TUI.State.jog_mode(state, :lean)
+      :read_only
+      iex> state = BB.TUI.State.put_command_payloads(state, :wheel_motor, [BB.Message.Actuator.Command.Velocity])
+      iex> BB.TUI.State.jog_mode(state, :wheel)
+      :velocity_only
+      iex> state = BB.TUI.State.put_command_payloads(state, :wheel_motor, [BB.Message.Actuator.Command.Position])
+      iex> BB.TUI.State.jog_mode(state, :wheel)
+      :position
+  """
+  @spec jog_mode(t(), atom()) ::
+          :position | :simulated | :read_only | :velocity_only | :no_position
+  def jog_mode(%__MODULE__{} = state, joint_name) do
+    case actuator_for_joint(state.robot_struct, joint_name) do
+      nil when state.simulation != nil -> :simulated
+      nil -> :read_only
+      actuator -> payload_mode(Map.get(state.joints.payloads, actuator))
+    end
+  end
+
+  defp payload_mode(nil), do: :position
+
+  defp payload_mode(payloads) do
+    cond do
+      Command.Position in payloads -> :position
+      Command.Velocity in payloads -> :velocity_only
+      true -> :no_position
+    end
+  end
+
+  @doc """
+  Records the command payloads an actuator accepts.
+
+  ## Examples
+
+      iex> state = BB.TUI.State.put_command_payloads(%BB.TUI.State{}, :wheel_motor, [BB.Message.Actuator.Command.Stop])
+      iex> state.joints.payloads
+      %{wheel_motor: [BB.Message.Actuator.Command.Stop]}
+  """
+  @spec put_command_payloads(t(), atom(), [module()]) :: t()
+  def put_command_payloads(%__MODULE__{} = state, actuator, payloads) do
+    put_in(state.joints.payloads[actuator], payloads)
   end
 
   @doc """

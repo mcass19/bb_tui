@@ -5,7 +5,10 @@ defmodule BB.TUI.Panels.Joints do
 
   Shows each joint's name, type (rev/pri/con), current position in
   human-readable units (degrees or mm), and a bar indicating position
-  within the joint's limits. Simulated joints are marked with a SIM tag.
+  within the joint's limits. In simulation, joints without an actuator are
+  marked with a SIM tag (the jog keys move them with a synthetic `JointState`);
+  joints whose actuator refuses position commands show `velocity only` (or
+  `no position command`) in place of the bar.
 
   Pure function — takes state, returns a widget struct.
   """
@@ -35,7 +38,7 @@ defmodule BB.TUI.Panels.Joints do
       ["Joint", "Type", "Position", "Target"]
   """
   @spec render(State.t(), boolean()) :: struct()
-  def render(%State{joints: %{entries: entries, selected: selected}}, focused?) do
+  def render(%State{joints: %{entries: entries, selected: selected}} = state, focused?) do
     rows =
       entries
       |> Enum.sort_by(fn {name, _} -> name end)
@@ -43,12 +46,13 @@ defmodule BB.TUI.Panels.Joints do
         %{position: pos, joint: joint} = joint_data
         target = Map.get(joint_data, :target)
         proximity = State.limit_proximity(pos, joint)
+        mode = State.jog_mode(state, name)
 
         [
-          name_span(name, joint),
+          name_span(name, mode),
           format_type(joint),
           position_span(pos, joint, proximity),
-          position_bar_line(pos, joint, proximity, target)
+          target_cell_line(mode, pos, joint, proximity, target)
         ]
       end)
 
@@ -222,7 +226,7 @@ defmodule BB.TUI.Panels.Joints do
 
   # ── Rich-text cell helpers ─────────────────────────────────
 
-  defp name_span(name, %{actuators: []}) do
+  defp name_span(name, :simulated) do
     %Line{
       spans: [
         %Span{content: to_string(name), style: %Style{fg: :white}},
@@ -231,7 +235,7 @@ defmodule BB.TUI.Panels.Joints do
     }
   end
 
-  defp name_span(name, _joint) do
+  defp name_span(name, _mode) do
     %Span{content: to_string(name), style: %Style{fg: :white}}
   end
 
@@ -252,11 +256,23 @@ defmodule BB.TUI.Panels.Joints do
   defp position_modifiers(:normal), do: []
   defp position_modifiers(_), do: [:bold]
 
+  # A joint whose actuator refuses position commands has no target to show.
+  defp target_cell_line(:velocity_only, _pos, _joint, _proximity, _target),
+    do: dim_line("velocity only")
+
+  defp target_cell_line(:no_position, _pos, _joint, _proximity, _target),
+    do: dim_line("no position command")
+
+  defp target_cell_line(_mode, pos, joint, proximity, target),
+    do: position_bar_line(pos, joint, proximity, target)
+
+  defp dim_line(text),
+    do: %Line{spans: [%Span{content: text, style: %Style{fg: Theme.dim_text()}}]}
+
   defp position_bar_line(nil, _joint, _proximity, _target), do: ""
 
-  defp position_bar_line(pos, _joint, _proximity, _target) when is_struct(pos) do
-    %Line{spans: [%Span{content: "read-only", style: %Style{fg: Theme.dim_text()}}]}
-  end
+  defp position_bar_line(pos, _joint, _proximity, _target) when is_struct(pos),
+    do: dim_line("read-only")
 
   defp position_bar_line(_pos, %{type: :continuous}, _proximity, _target), do: ""
 

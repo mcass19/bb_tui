@@ -120,7 +120,7 @@ defmodule BB.TUI.Robot do
   @spec list_bridges(module(), maybe_node()) :: [map()]
   def list_bridges(robot, nil) do
     if Code.ensure_loaded?(Info) and function_exported?(Info, :parameters, 1) do
-      sim_mode = local_simulation_mode(robot)
+      sim_mode = simulation_mode(robot, nil)
 
       robot
       |> Info.parameters()
@@ -133,7 +133,7 @@ defmodule BB.TUI.Robot do
   end
 
   def list_bridges(robot, node) do
-    sim_mode = remote_simulation_mode(robot, node)
+    sim_mode = simulation_mode(robot, node)
 
     case Rpc.call(node, BB.Dsl.Info, :parameters, [robot]) do
       {:badrpc, _} -> []
@@ -188,7 +188,12 @@ defmodule BB.TUI.Robot do
     end
   end
 
-  defp local_simulation_mode(robot) do
+  @doc """
+  Returns the robot's simulation mode (`:kinematic`, `:external`, …), or `nil`
+  on hardware. A runtime that can't be asked also reads as `nil`.
+  """
+  @spec simulation_mode(module(), maybe_node()) :: atom() | nil
+  def simulation_mode(robot, nil) do
     Runtime.simulation_mode(robot)
   rescue
     _ -> nil
@@ -196,11 +201,61 @@ defmodule BB.TUI.Robot do
     :exit, _ -> nil
   end
 
-  defp remote_simulation_mode(robot, node) do
+  def simulation_mode(robot, node) do
     case Rpc.call(node, BB.Robot.Runtime, :simulation_mode, [robot]) do
       {:badrpc, _} -> nil
       mode when is_atom(mode) -> mode
       _ -> nil
+    end
+  end
+
+  @doc """
+  Returns the command payloads each actuator's driver accepts, by actuator name.
+
+  bb has no way to ask a running actuator, so this walks the robot's topology
+  DSL and calls each driver's `c:BB.Actuator.command_payloads/1` with the
+  options it was declared with. A driver that derives its list from options
+  bb resolves at startup (parameter references, say) may raise or answer
+  differently here: such actuators are left out, and the real list arrives
+  with the first `BB.Error.State.UnsupportedCommand` they answer with.
+
+  Only meaningful on hardware: in simulation every actuator runs as
+  `BB.Sim.Actuator`, which accepts every built-in payload.
+  """
+  @spec command_payloads(module(), maybe_node()) :: %{atom() => [module()]}
+  def command_payloads(robot, node) do
+    case dsl_call(node, Info, :topology, [robot]) do
+      {:ok, links} when is_list(links) ->
+        for %{name: name, child_spec: spec} <- Enum.flat_map(links, &link_actuators/1),
+            {:ok, payloads} when is_list(payloads) <- [driver_payloads(spec, node)],
+            into: %{},
+            do: {name, payloads}
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp link_actuators(%{joints: joints}), do: Enum.flat_map(joints, &joint_actuators/1)
+
+  defp joint_actuators(%{actuators: actuators, link: nil}), do: actuators
+  defp joint_actuators(%{actuators: actuators, link: link}), do: actuators ++ link_actuators(link)
+
+  defp driver_payloads({module, opts}, node),
+    do: dsl_call(node, module, :command_payloads, [opts])
+
+  defp driver_payloads(module, node), do: dsl_call(node, module, :command_payloads, [[]])
+
+  defp dsl_call(nil, module, fun, args) do
+    {:ok, apply(module, fun, args)}
+  rescue
+    _ -> :error
+  end
+
+  defp dsl_call(node, module, fun, args) do
+    case Rpc.call(node, module, fun, args) do
+      {:badrpc, _} -> :error
+      result -> {:ok, result}
     end
   end
 

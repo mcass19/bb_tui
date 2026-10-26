@@ -56,10 +56,13 @@ defmodule BB.TUI.Test.Fixtures do
   `@nested_overrides`) are routed into it automatically.
   """
   def sample_state(overrides \\ %{}) do
+    # Kinematic by default, so an actuator-less joint jogs through the
+    # simulated `JointState` path; hardware tests pass `simulation: nil`.
     defaults = %{
       robot: BB.TUI.TestRobot,
       robot_struct: sample_robot_struct(),
-      node: nil
+      node: nil,
+      simulation: :kinematic
     }
 
     {nested, flat} = Map.split(overrides, Map.keys(@nested_overrides))
@@ -231,6 +234,12 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Parameter, :list, fn _robot, _opts -> [] end)
     Mimic.stub(BB.Parameter, :set, fn _robot, _path, _value -> :ok end)
     Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> [] end)
+    Mimic.stub(BB.Dsl.Info, :topology, fn _robot -> [] end)
+
+    Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn _robot ->
+      Keyword.get(overrides, :simulation, :kinematic)
+    end)
+
     Mimic.stub(BB.Command, :list, fn _robot -> Keyword.get(overrides, :running_commands, []) end)
 
     :ok
