@@ -12,6 +12,7 @@ defmodule BB.TUI.Panels.Events do
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Math.Vec3
+  alias BB.TUI.Errors
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Layout.Rect
@@ -217,7 +218,7 @@ defmodule BB.TUI.Panels.Events do
   | --------- | ------ |
   | timestamp | cyan   |
   | path      | blue (`Theme.path_style/0`) |
-  | summary   | white  |
+  | summary   | white, or yellow/red for a warning/error (see `summary_style/2`) |
 
   ## Examples
 
@@ -252,10 +253,42 @@ defmodule BB.TUI.Panels.Events do
         %Span{content: " ", style: %Style{}},
         %Span{content: path_str, style: Theme.path_style()},
         %Span{content: " ", style: %Style{}},
-        %Span{content: summary, style: %Style{fg: :white}}
+        %Span{content: summary, style: summary_style(path, message)}
       ]
     }
   end
+
+  @doc """
+  Returns the style for an event's summary, colored by severity when the event
+  reports a failure.
+
+  An actuator error takes its color from the reason's `BB.Error.Severity` —
+  yellow for a `:warning` such as a late answer, red otherwise. A failed
+  command and a `[:safety, :error]` hardware report are red. Everything else
+  is white.
+
+  ## Examples
+
+      iex> BB.TUI.Panels.Events.summary_style([:state_machine], %{payload: %{from: :armed, to: :idle}}).fg
+      :white
+
+      iex> BB.TUI.Panels.Events.summary_style([:actuator, :elbow], %{payload: %{error: :disarmed}}).fg
+      BB.TUI.Theme.red()
+
+      iex> pending = %BB.Error.State.CommandPending{actuator: :elbow, timeout_ms: 250}
+      iex> BB.TUI.Panels.Events.summary_style([:actuator, :elbow], %{payload: %{error: pending}}).fg
+      BB.TUI.Theme.yellow()
+  """
+  @spec summary_style(list(), term()) :: Style.t()
+  def summary_style([:actuator | _], %{payload: %{error: reason}}),
+    do: severity_style(Errors.severity(reason))
+
+  def summary_style([:command | _], %{payload: %{status: :failed}}), do: severity_style(:error)
+  def summary_style([:safety, :error | _], _message), do: severity_style(:critical)
+  def summary_style(_path, _message), do: %Style{fg: :white}
+
+  defp severity_style(:warning), do: %Style{fg: Theme.yellow()}
+  defp severity_style(_severity), do: %Style{fg: Theme.red()}
 
   # Prefer the consumer renderer registered for this path (longest-prefix
   # match). When a renderer matches and its `summarize/2` returns a string, use
@@ -371,6 +404,7 @@ defmodule BB.TUI.Panels.Events do
   defp format_value(other), do: format_scalar(other)
 
   defp format_scalar(f) when is_float(f), do: :erlang.float_to_binary(f, decimals: 3)
+  defp format_scalar(%{__exception__: true} = exception), do: Exception.message(exception)
 
   defp format_scalar(%Transform2D{x: x, y: y, theta: theta}) do
     "(#{compact(x)}, #{compact(y)}, #{:erlang.float_to_binary(theta * 180.0 / :math.pi(), decimals: 1)}°)"
@@ -425,6 +459,13 @@ defmodule BB.TUI.Panels.Events do
       iex> BB.TUI.Panels.Events.summarize([:actuator, :waist], %{payload: %{position: 1.57}})
       "waist \u{2190} position 1.570"
 
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: :disarmed}})
+      "elbow \u{2718} :disarmed"
+
+      iex> pending = %BB.Error.State.CommandPending{actuator: :elbow, command: Position, timeout_ms: 250}
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: pending}})
+      "elbow \u{26A0} Actuator :elbow has not answered Position within 250ms. The command is still queued and will most likely be applied"
+
       iex> waypoints = [[position: 0.0, time_from_start: 0], [position: 0.6, time_from_start: 400]]
       iex> BB.TUI.Panels.Events.summarize([:actuator, :shoulder], %{payload: %{waypoints: waypoints, repeat: 1}})
       "shoulder \u{2190} trajectory 2 waypoints over 400ms"
@@ -463,9 +504,12 @@ defmodule BB.TUI.Panels.Events do
     "#{from} \u{2192} #{to}"
   end
 
+  # A late answer (`BB.Error.State.CommandPending`, severity `:warning`) is not
+  # a refusal — the command is queued and will most likely still be applied —
+  # so it gets a warning mark rather than the cross.
   def summarize([:actuator | rest], %{payload: %{error: reason}}) do
     joint = Enum.map_join(rest, ".", &to_string/1)
-    "#{joint} \u{2718} #{error_text(reason)}"
+    "#{joint} #{severity_mark(Errors.severity(reason))} #{Errors.describe(reason)}"
   end
 
   def summarize([:actuator | rest], %{payload: %{position: position}})
@@ -497,7 +541,7 @@ defmodule BB.TUI.Panels.Events do
   def summarize([:command, name, _execution_id], %{
         payload: %{status: :failed, data: %{reason: reason}}
       }) do
-    "#{name} \u{2718} #{inspect(reason, limit: 30)}"
+    "#{name} \u{2718} #{Errors.describe(reason)}"
   end
 
   def summarize([:command, name, _execution_id], %{payload: %{status: :cancelled}}) do
@@ -517,8 +561,8 @@ defmodule BB.TUI.Panels.Events do
     inspect(message, pretty: false, limit: 30)
   end
 
-  defp error_text(%{__exception__: true} = exception), do: Exception.message(exception)
-  defp error_text(reason), do: inspect(reason, pretty: false, limit: 30)
+  defp severity_mark(:warning), do: "\u{26A0}"
+  defp severity_mark(_severity), do: "\u{2718}"
 
   # A trajectory runs once unless it says otherwise, so the common case
   # stays unadorned.

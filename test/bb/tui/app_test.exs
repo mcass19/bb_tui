@@ -13,6 +13,92 @@ defmodule BB.TUI.AppTest do
   setup :verify_on_exit!
   setup :set_mimic_private
 
+  describe "jog coalescing" do
+    setup do
+      Fixtures.stub_bb_modules(safety_state: :armed)
+
+      joints = %{
+        shoulder: %{
+          joint: %{name: :shoulder, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0
+        }
+      }
+
+      robot_struct =
+        Map.put(Fixtures.sample_robot_struct(), :actuators, %{shoulder_motor: %{joint: :shoulder}})
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed,
+          robot_struct: robot_struct
+        })
+
+      %{state: state}
+    end
+
+    test "a jog while one is in flight parks its target instead of sending", %{state: state} do
+      assert {:noreply, state, commands: [_send]} = press(state, "l")
+      assert state.joints.jogs == %{shoulder_motor: nil}
+
+      assert {:noreply, state} = press(state, "L")
+      assert state.joints.jogs == %{shoulder_motor: 0.2}
+      assert state.joints.entries.shoulder.target == 0.2
+    end
+
+    test "an answered jog sends the parked target, latest wins", %{state: state} do
+      Mimic.expect(BB.Actuator, :set_position, fn _robot, :shoulder_motor, pos, _opts ->
+        assert_in_delta pos, -0.2, 1.0e-9
+        :ok
+      end)
+
+      {:noreply, state, _} = press(state, "l")
+      {:noreply, state} = press(state, "L")
+      {:noreply, state} = press(state, "H")
+
+      assert {:noreply, state, opts} =
+               App.update({:info, {:actuator_result, :shoulder_motor, :ok}}, state)
+
+      assert opts[:render?] == false
+      assert [%ExRatatui.Command{kind: :async, fun: fun}] = opts[:commands]
+      assert fun.() == :ok
+      assert state.joints.jogs == %{shoulder_motor: nil}
+
+      assert {:noreply, state, opts} =
+               App.update({:info, {:actuator_result, :shoulder_motor, :ok}}, state)
+
+      refute opts[:commands]
+      assert state.joints.jogs == %{}
+    end
+
+    test "a late answer is logged and still sends the parked target", %{state: state} do
+      pending = %BB.Error.State.CommandPending{actuator: :shoulder_motor, timeout_ms: 250}
+
+      {:noreply, state, _} = press(state, "l")
+      {:noreply, state} = press(state, "L")
+
+      assert {:noreply, state, commands: [%ExRatatui.Command{kind: :async}]} =
+               App.update({:info, {:actuator_result, :shoulder_motor, {:error, pending}}}, state)
+
+      assert [{_ts, [:actuator, :shoulder_motor], %{payload: %{error: ^pending}}} | _] =
+               state.events.list
+    end
+
+    test "a parked target is dropped once the robot is disarmed", %{state: state} do
+      {:noreply, state, _} = press(state, "l")
+      {:noreply, state} = press(state, "L")
+      state = put_in(state.safety.state, :disarmed)
+
+      assert {:noreply, state, opts} =
+               App.update({:info, {:actuator_result, :shoulder_motor, :ok}}, state)
+
+      refute opts[:commands]
+      assert state.joints.jogs == %{}
+    end
+  end
+
   describe "mount/1" do
     test "initializes state from robot module" do
       Fixtures.stub_bb_modules()
@@ -690,7 +776,7 @@ defmodule BB.TUI.AppTest do
     test "{:actuator_result, _, {:error, reason}} appends a refusal to the event log" do
       state = Fixtures.sample_state(%{active_panel: :joints})
 
-      assert {:noreply, new_state} =
+      assert {:noreply, new_state, []} =
                App.update(
                  {:info, {:actuator_result, :shoulder_motor, {:error, :disarmed}}},
                  state
@@ -2519,5 +2605,9 @@ defmodule BB.TUI.AppTest do
     enter = %ExRatatui.Event.Key{code: "enter", kind: "press"}
     {:noreply, state} = App.update({:event, enter}, state)
     state
+  end
+
+  defp press(state, code) do
+    App.update({:event, %ExRatatui.Event.Key{code: code, kind: "press"}}, state)
   end
 end

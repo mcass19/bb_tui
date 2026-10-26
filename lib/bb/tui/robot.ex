@@ -319,11 +319,14 @@ defmodule BB.TUI.Robot do
 
   Uses `set_position/4`'s default `:pubsub` delivery, so the command is
   published for observers (it lands in the event log) and the actuator's
-  answer comes back as `:ok` or `{:error, reason}`. That answer arrives via
-  a `GenServer.call`, which blocks and exits if the actuator is dead or
-  wedged — so `BB.TUI.App` runs this through `ExRatatui.Command.async/2`
-  rather than inline, and the runtime's async runner turns such an exit into
-  `{:error, {:exit, reason}}`.
+  answer comes back as `:ok` or `{:error, reason}`, `reason` being a `BB.Error`
+  struct: a refusal, `BB.Error.State.ActuatorNotRunning` when the actuator has
+  no process, or `BB.Error.State.CommandPending` when it hasn't answered
+  within the jog timeout. That answer arrives via a `GenServer.call`, which
+  blocks for up to the timeout and exits if the actuator crashes while
+  handling the command — so `BB.TUI.App` runs this through
+  `ExRatatui.Command.async/2` rather than inline, and the runtime's async
+  runner turns such an exit into `{:error, {:exit, reason}}`.
   """
   @spec set_actuator(module(), atom(), number(), maybe_node()) :: term()
   def set_actuator(robot, actuator, position, nil) do
