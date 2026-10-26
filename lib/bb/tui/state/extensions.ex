@@ -15,12 +15,20 @@ defmodule BB.TUI.State.Extensions do
   `{:controller, name}`; `polling` is the controllers with a poll in flight.
   Joints and parameters are read from the rest of the session state, see
   `read/2`.
+
+  `series` holds the recent history behind each plot line and sparkline,
+  keyed `{panel, item_index, source_index}`; `series_sources` indexes them
+  by the source that feeds them, with the readout settings that turn its
+  value into a number. While `frozen_at` is set the charts stop at that
+  moment and nothing is recorded, so a fall stays on screen.
   """
 
   alias BB.TUI.Extension
+  alias BB.TUI.Extension.Format
   alias BB.TUI.Extension.Info
   alias BB.TUI.Extension.Panel
   alias BB.TUI.Extension.Source
+  alias BB.TUI.State.Series
 
   defstruct modules: [],
             panels: [],
@@ -31,7 +39,10 @@ defmodule BB.TUI.State.Extensions do
             topics: [],
             controllers: [],
             values: %{},
-            polling: MapSet.new()
+            polling: MapSet.new(),
+            series: %{},
+            series_sources: %{},
+            frozen_at: nil
 
   @type drive :: %{
           extension: module(),
@@ -52,8 +63,16 @@ defmodule BB.TUI.State.Extensions do
           topics: [[atom()]],
           controllers: [atom()],
           values: %{({:topic, [atom()]} | {:controller, atom()}) => term()},
-          polling: MapSet.t(atom())
+          polling: MapSet.t(atom()),
+          series: %{series_key() => Series.t()},
+          series_sources: %{Source.t() => [{series_key(), Extension.Readout.t()}]},
+          frozen_at: integer() | nil
         }
+
+  @type series_key :: {atom(), non_neg_integer(), non_neg_integer()}
+
+  # A sparkline shows the last 10 s of its readout.
+  @spark_window 10_000
 
   @doc """
   Merges `modules` into one set of extensions.
@@ -91,12 +110,12 @@ defmodule BB.TUI.State.Extensions do
       sources = sources(extensions)
 
       {:ok,
-       %{
+       reindex(%{
          extensions
          | topics: Source.subscribe_paths(sources),
            controllers:
              for(%Source{type: :controller, target: name} <- sources, uniq: true, do: name)
-       }}
+       })}
     end
   end
 
@@ -267,6 +286,23 @@ defmodule BB.TUI.State.Extensions do
     do: name |> Atom.to_string() |> String.replace("_", " ") |> String.capitalize()
 
   @doc """
+  Whether tab `tab` shows any chart.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.{Panel, Plot}
+      iex> ext = %BB.TUI.State.Extensions{panels: [%Panel{name: :a, items: [%Plot{label: "x"}]}, %Panel{name: :b}]}
+      iex> {BB.TUI.State.Extensions.plots_on?(ext, :a), BB.TUI.State.Extensions.plots_on?(ext, :b)}
+      {true, false}
+  """
+  @spec plots_on?(t(), atom()) :: boolean()
+  def plots_on?(%__MODULE__{} = extensions, tab) do
+    extensions
+    |> panels_on(tab)
+    |> Enum.any?(fn panel -> Enum.any?(panel.items, &match?(%Extension.Plot{}, &1)) end)
+  end
+
+  @doc """
   The hint for the robot's runtime state, or `nil` when no extension has one.
 
   ## Examples
@@ -424,4 +460,129 @@ defmodule BB.TUI.State.Extensions do
   defp dig(value, []), do: value
   defp dig(%{} = map, [key | rest]), do: dig(Map.get(map, key), rest)
   defp dig(_value, _path), do: nil
+
+  @doc """
+  Rebuilds the series and their index from `panels`: one series per plot
+  line, with the plot's unit and scale, and one per readout drawn with a
+  sparkline. `build/1` does this; it is public for code that assembles
+  panels by hand.
+  """
+  @spec reindex(t()) :: t()
+  def reindex(%__MODULE__{panels: panels} = extensions) do
+    plotted =
+      for %Panel{name: name, items: items} <- panels,
+          {item, index} <- Enum.with_index(items),
+          entry <- plotted_item(name, index, item),
+          do: entry
+
+    %{
+      extensions
+      | series: Map.new(plotted, fn {key, _readout, window} -> {key, Series.new(window)} end),
+        series_sources:
+          Enum.group_by(plotted, fn {_key, readout, _window} -> readout.source end, fn
+            {key, readout, _window} -> {key, readout}
+          end)
+    }
+  end
+
+  defp plotted_item(panel, index, %Extension.Plot{} = plot) do
+    for {source, line} <- Enum.with_index(plot.sources) do
+      readout = %Extension.Readout{
+        label: plot.label,
+        source: source,
+        unit: plot.unit,
+        scale: plot.scale
+      }
+
+      {{panel, index, line}, readout, plot.window}
+    end
+  end
+
+  defp plotted_item(panel, index, %Extension.Readout{spark: true} = readout),
+    do: [{{panel, index, 0}, readout, @spark_window}]
+
+  defp plotted_item(_panel, _index, _readout), do: []
+
+  @doc """
+  The topic paths among `topics` that `path` matches (see `put_message/3`).
+
+  ## Examples
+
+      iex> ext = %BB.TUI.State.Extensions{topics: [[:sensor, :imu], [:drive]]}
+      iex> BB.TUI.State.Extensions.matching_topics(ext, [:sensor, :base, :imu])
+      [[:sensor, :imu]]
+  """
+  @spec matching_topics(t(), [term()]) :: [[atom()]]
+  def matching_topics(%__MODULE__{topics: topics}, path),
+    do: Enum.filter(topics, &topic_matches?(&1, path))
+
+  @doc """
+  Records, at `now`, a sample of every plotted source `filter` selects, read
+  from the session `state` as it is now. Each series converts the value
+  with its own unit and scale; values that aren't numbers, and everything
+  while the charts are frozen, are skipped.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.{Panel, Plot, Source}
+      iex> panel = %Panel{name: :p, items: [%Plot{label: "lean", sources: [Source.joint(:lean)], window: 1_000}]}
+      iex> ext = BB.TUI.State.Extensions.reindex(%BB.TUI.State.Extensions{panels: [panel]})
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: %{lean: %{position: 0.5}}}, extensions: ext}
+      iex> state = BB.TUI.State.Extensions.record(state, 100, &(&1.type == :joint))
+      iex> state.extensions.series |> Map.fetch!({:p, 0, 0}) |> BB.TUI.State.Series.values()
+      [0.5]
+  """
+  @spec record(map(), integer(), (Source.t() -> boolean())) :: map()
+  def record(
+        %{extensions: %__MODULE__{frozen_at: nil, series_sources: by_source}} = state,
+        now,
+        filter
+      )
+      when map_size(by_source) > 0 do
+    series =
+      for {source, entries} <- by_source,
+          filter.(source),
+          value = read(state, source),
+          {key, readout} <- entries,
+          number = Format.number_value(value, readout),
+          is_number(number),
+          reduce: state.extensions.series do
+        series -> Map.update!(series, key, &Series.push(&1, now, number))
+      end
+
+    %{state | extensions: %{state.extensions | series: series}}
+  end
+
+  def record(state, _now, _filter), do: state
+
+  @doc """
+  Freezes the charts at `now`, or lets them run again.
+
+  ## Examples
+
+      iex> ext = BB.TUI.State.Extensions.toggle_freeze(%BB.TUI.State.Extensions{}, 500)
+      iex> ext.frozen_at
+      500
+      iex> BB.TUI.State.Extensions.toggle_freeze(ext, 900).frozen_at
+      nil
+  """
+  @spec toggle_freeze(t(), integer()) :: t()
+  def toggle_freeze(%__MODULE__{frozen_at: nil} = extensions, now),
+    do: %{extensions | frozen_at: now}
+
+  def toggle_freeze(%__MODULE__{} = extensions, _now), do: %{extensions | frozen_at: nil}
+
+  @doc """
+  The moment the charts end at: `now`, or when they were frozen.
+
+  ## Examples
+
+      iex> BB.TUI.State.Extensions.chart_time(%BB.TUI.State.Extensions{frozen_at: 5}, 9)
+      5
+      iex> BB.TUI.State.Extensions.chart_time(%BB.TUI.State.Extensions{}, 9)
+      9
+  """
+  @spec chart_time(t(), integer()) :: integer()
+  def chart_time(%__MODULE__{frozen_at: nil}, now), do: now
+  def chart_time(%__MODULE__{frozen_at: frozen_at}, _now), do: frozen_at
 end

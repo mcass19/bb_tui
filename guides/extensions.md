@@ -60,13 +60,27 @@ A `controller` source reads the map the controller answers `handle_call(:inspect
 
 ## On screen
 
-Each tab holding extension panels joins the tab bar after Visualization, in the order the panels were declared: a panel alone on its tab names the tab after its title, panels sharing a `tab` share it, and `tab :drive` puts a panel on the Drive tab. A tab lays its panels out in rows of up to three, each a table of its readouts and plots. Until live charts land, a plot shows the latest value of each of its sources.
+Each tab holding extension panels joins the tab bar after Visualization, in the order the panels were declared: a panel alone on its tab names the tab after its title, panels sharing a `tab` share it, and `tab :drive` puts a panel on the Drive tab. A tab lays its panels out in rows of up to three. Inside a panel each readout takes a line, and plots share the rest of the height.
 
 Controllers are only polled while a tab reading them is on screen, so a dashboard left on the Control Panel costs the robot nothing.
 
 A bound key runs its command from any tab, the same way Enter does in the commands panel: one command at a time, and a refusal — the wrong state for it, say — shows as that command's result. A bind naming a command the robot doesn't have logs an `:unknown_command` error.
 
 The hint for the robot's current runtime state takes a line under the title bar. A state without a hint leaves the layout as it is.
+
+## Charts
+
+A `plot` draws a live line chart: one coloured braille line per source, a legend naming each by the field it reads, the x axis in seconds before now over the plot's `window` (10 s by default), and a y axis fitted to the data unless `y_range` fixes it. `unit:` and `scale:` work as they do on a readout and apply to every line, so a lean in radians plots in degrees:
+
+```elixir
+plot "lean vs target", [joint(:lean), controller(:pid_balancer, :target)],
+  unit: :degree,
+  window: 5_000
+```
+
+A readout with `spark: true` gets a sparkline of its last 10 seconds beside its value.
+
+Charts are fed as their sources change — a topic at the rate it is published, joints with their sensor messages, a controller with each poll, a parameter when it is set — and keep at most 1000 samples a line, so a 200 Hz topic can't grow them without bound. `Space` freezes every chart on the tab and stops recording, so a moment (a fall, a spike) stays on screen to look at; the readouts keep updating, and `Space` again lets the charts run.
 
 ## Units and formatting
 

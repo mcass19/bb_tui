@@ -162,6 +162,8 @@ plot "lean vs target", [joint(:lean), controller(:balancer, :target)]
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`window`](#panels-panel-plot-window){: #panels-panel-plot-window } | `pos_integer` | `10000` | How much history the chart shows, in milliseconds. |
+| [`unit`](#panels-panel-plot-unit){: #panels-panel-plot-unit } | `any` |  | Unit every line is shown in, as for a readout. |
+| [`scale`](#panels-panel-plot-scale){: #panels-panel-plot-scale } | `number` |  | Multiplies every value before it is plotted. |
 | [`y_range`](#panels-panel-plot-y_range){: #panels-panel-plot-y_range } | `{number, number}` |  | A fixed `{min, max}` for the y axis; follows the data when unset. |
 
 

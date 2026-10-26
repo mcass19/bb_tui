@@ -37,6 +37,27 @@ defmodule BB.TUI.Test.Extension do
   end
 end
 
+defmodule BB.TUI.Test.PlotExtension do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  panels do
+    panel :scope do
+      readout "lean", joint(:shoulder), spark: true
+      readout "label", param([:identity, :label])
+
+      plot "all",
+           [
+             joint(:shoulder),
+             topic([:sensor, :wheel], :x),
+             controller(:balancer, :lean),
+             param([:yaw, :rate])
+           ],
+           unit: :degree
+    end
+  end
+end
+
 defmodule BB.TUI.Test.EmptyExtension do
   @moduledoc false
   use BB.TUI.Extension

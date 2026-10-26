@@ -10,8 +10,10 @@ defmodule BB.TUI.AppTest do
   alias BB.TUI.App
   alias BB.TUI.Extension.Source
   alias BB.TUI.Panels.Events
+  alias BB.TUI.Panels.StatusBar
   alias BB.TUI.Panels.TabBar
   alias BB.TUI.State
+  alias BB.TUI.State.Series
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
   alias ExRatatui.Subscription
@@ -272,6 +274,81 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "extension charts" do
+    setup do
+      Fixtures.stub_bb_modules()
+
+      {:ok, state, _opts} =
+        App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.PlotExtension])
+
+      %{state: put_in(state.ui.active_tab, {:extension, :scope})}
+    end
+
+    defp samples(state, line),
+      do: state.extensions.series |> Map.fetch!({:scope, 2, line}) |> Series.values()
+
+    test "record each source when it changes, in the plot's unit", %{state: state} do
+      joint = %{payload: %{names: [:shoulder], positions: [:math.pi()]}}
+      {:noreply, state, _} = App.update({:info, {:bb, [:sensor, :shoulder], joint}}, state)
+      assert samples(state, 0) == [180.0]
+
+      wheel = %{payload: %{x: :math.pi() / 2}}
+      {:noreply, state, _} = App.update({:info, {:bb, [:sensor, :base, :wheel], wheel}}, state)
+      assert_in_delta hd(samples(state, 1)), 90.0, 1.0e-9
+
+      {:noreply, state, _} =
+        App.update({:info, {:controller_state, :balancer, {:ok, %{lean: 0.0}}}}, state)
+
+      assert samples(state, 2) == [0.0]
+
+      Mimic.stub(BB.Parameter, :list, fn _robot, _opts ->
+        [{[:yaw, :rate], 0.0}, {[:identity, :label], "x"}]
+      end)
+
+      {:noreply, state} =
+        App.update({:info, {:bb, [:param, :yaw, :rate], %{payload: %{}}}}, state)
+
+      assert samples(state, 3) == [0.0]
+    end
+
+    test "a message no plotted source reads records nothing", %{state: state} do
+      {:noreply, after_state, _} =
+        App.update({:info, {:bb, [:sensor, :imu], %{payload: %{x: 1}}}}, state)
+
+      assert after_state.extensions.series == state.extensions.series
+    end
+
+    test "space freezes the charts and stops recording; again resumes", %{state: state} do
+      {:noreply, state} = press(state, " ")
+      assert is_integer(state.extensions.frozen_at)
+
+      joint = %{payload: %{names: [:shoulder], positions: [1.0]}}
+      {:noreply, frozen, _} = App.update({:info, {:bb, [:sensor, :shoulder], joint}}, state)
+      assert samples(frozen, 0) == []
+
+      {:noreply, state} = press(state, " ")
+      assert state.extensions.frozen_at == nil
+    end
+
+    test "the status bar offers space while the tab has charts", %{state: state} do
+      text = fn state ->
+        %ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}} =
+          StatusBar.render(state)
+
+        Enum.map_join(spans, "", & &1.content)
+      end
+
+      assert text.(state) =~ "space"
+      assert text.(state) =~ "freeze"
+
+      {:noreply, frozen} = press(state, " ")
+      assert text.(frozen) =~ "resume"
+
+      plain = %{state | extensions: %{state.extensions | panels: []}}
+      refute text.(plain) =~ "freeze"
+    end
+  end
+
   describe "extension tabs and keys" do
     setup do
       Fixtures.stub_bb_modules()
@@ -304,7 +381,7 @@ defmodule BB.TUI.AppTest do
       widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
 
       assert Enum.any?(widgets, fn {widget, _rect} ->
-               match?(%ExRatatui.Widgets.Table{block: %{title: " Balance "}}, widget)
+               match?(%ExRatatui.Widgets.Block{title: " Balance "}, widget)
              end)
 
       {_tab_bar, tabs_rect} = Enum.find(widgets, fn {widget, _rect} -> tab_bar?(widget) end)

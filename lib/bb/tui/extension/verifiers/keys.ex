@@ -9,8 +9,9 @@ defmodule BB.TUI.Extension.Verifiers.Keys do
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
 
+  # `" "` freezes the charts on an extension tab.
   @reserved_keys ~w(q ? a d f [ ] - + = 1 2 3 4 5 j k h l H L c p t r y n m) ++
-                   ~w(enter tab back_tab esc backspace up down left right)
+                   ~w(enter tab back_tab esc backspace up down left right) ++ [" "]
 
   @doc false
   # Kept here rather than in `BB.TUI.Extension` (which delegates to it) so

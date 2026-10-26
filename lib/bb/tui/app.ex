@@ -294,7 +294,7 @@ defmodule BB.TUI.App do
   end
 
   defp render_body(%{ui: %{active_tab: {:extension, tab}}} = state, main) do
-    Panels.Extension.render_tab(state, tab, main)
+    Panels.Extension.render_tab(state, tab, main, now_ms())
   end
 
   defp render_body(%{ui: %{active_tab: :visualization}} = state, main) do
@@ -577,6 +577,15 @@ defmodule BB.TUI.App do
   def update({:event, %Event.Key{code: code, kind: "press"}}, state)
       when is_map_key(state.extensions.bound, code) do
     run_bound_command(state, Map.fetch!(state.extensions.bound, code))
+  end
+
+  # Space freezes an extension tab's charts — and stops recording — so a
+  # moment (a fall, a spike) stays on screen; space again lets them run.
+  def update(
+        {:event, %Event.Key{code: " ", kind: "press"}},
+        %{ui: %{active_tab: {:extension, _}}} = state
+      ) do
+    {:noreply, %{state | extensions: State.Extensions.toggle_freeze(state.extensions, now_ms())}}
   end
 
   # The Control Panel's panel keys don't reach past their tab: on an
@@ -945,7 +954,14 @@ defmodule BB.TUI.App do
   def update({:info, {:controller_state, name, result}}, state) do
     extensions = State.Extensions.finish_poll(state.extensions, name, result)
     changed? = extensions.values != state.extensions.values
-    {:noreply, %{state | extensions: extensions}, render?: changed?}
+
+    state =
+      record_extensions(
+        %{state | extensions: extensions},
+        &(&1.type == :controller and &1.target == name)
+      )
+
+    {:noreply, state, render?: changed?}
   end
 
   def update({:info, :sensor_flush}, state) do
@@ -1028,6 +1044,7 @@ defmodule BB.TUI.App do
     state =
       state
       |> State.update_configurations(configurations)
+      |> record_extensions(&(&1.type == :joint and Map.has_key?(configurations, &1.target)))
       |> State.update_power(payload)
       |> State.append_event(path, msg)
       |> State.mark_render_pending()
@@ -1041,6 +1058,7 @@ defmodule BB.TUI.App do
     state =
       state
       |> State.update_parameters(parameters)
+      |> record_extensions(&(&1.type == :param))
       |> State.append_event(path, msg)
 
     {:noreply, state}
@@ -1079,10 +1097,20 @@ defmodule BB.TUI.App do
     {:noreply, State.append_event(state, path, msg)}
   end
 
-  defp observe_extension_topics(state, path, %{payload: payload}),
-    do: %{state | extensions: State.Extensions.put_message(state.extensions, path, payload)}
+  defp observe_extension_topics(state, path, %{payload: payload}) do
+    state = %{state | extensions: State.Extensions.put_message(state.extensions, path, payload)}
+
+    case State.Extensions.matching_topics(state.extensions, path) do
+      [] -> state
+      topics -> record_extensions(state, &(&1.type == :topic and &1.target in topics))
+    end
+  end
 
   defp observe_extension_topics(state, _path, _msg), do: state
+
+  defp record_extensions(state, filter), do: State.Extensions.record(state, now_ms(), filter)
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
 
   defp route_message(state, path, %{payload: payload} = msg) do
     case State.renderer_for(state, path) do

@@ -182,17 +182,18 @@ defmodule BB.TUI.Panels.StatusBar do
     "#{:erlang.float_to_binary(voltage / 1, decimals: 1)}V"
   end
 
-  # On an extension tab the panel keys don't apply: offer `[`/`]` to move on
-  # and the extensions' own keys.
-  defp key_hints(%State{ui: %{active_tab: {:extension, _}}} = state) do
-    base = [
-      Theme.key_pill("[ ]"),
-      Theme.dim_span(" tab "),
-      Theme.key_pill("?"),
-      Theme.dim_span(" help "),
-      Theme.key_pill("q", :quit),
-      Theme.dim_span(" quit ")
-    ]
+  # On an extension tab the panel keys don't apply: offer `[`/`]` to move on,
+  # space to freeze its charts, and the extensions' own keys.
+  defp key_hints(%State{ui: %{active_tab: {:extension, tab}}} = state) do
+    base =
+      [
+        Theme.key_pill("[ ]"),
+        Theme.dim_span(" tab "),
+        Theme.key_pill("?"),
+        Theme.dim_span(" help "),
+        Theme.key_pill("q", :quit),
+        Theme.dim_span(" quit ")
+      ] ++ freeze_keys(state.extensions, tab)
 
     case Enum.flat_map(state.extensions.binds, &bind_keys/1) do
       [] -> base
@@ -248,6 +249,14 @@ defmodule BB.TUI.Panels.StatusBar do
   end
 
   defp panel_keys(_, _), do: []
+
+  defp freeze_keys(extensions, tab) do
+    cond do
+      not State.Extensions.plots_on?(extensions, tab) -> []
+      extensions.frozen_at -> [Theme.key_pill("space"), Theme.dim_span(" resume ")]
+      true -> [Theme.key_pill("space"), Theme.dim_span(" freeze ")]
+    end
+  end
 
   defp bind_keys(bind),
     do: [Theme.key_pill(bind.key), Theme.dim_span(" #{bind.label || bind.command} ")]

@@ -58,7 +58,7 @@ defmodule BB.TUI.Extension do
   @doc """
   The keys bb_tui handles itself, which an extension's `bind` can't take:
   the global keys, panel navigation, the arrows used for jogging and driving,
-  and each panel's own keys.
+  space (which freezes an extension tab's charts), and each panel's own keys.
 
   ## Examples
 
