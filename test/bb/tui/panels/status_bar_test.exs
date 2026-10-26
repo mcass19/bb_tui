@@ -157,6 +157,29 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert text(StatusBar.render(state)) =~ "adjust"
     end
 
+    test "on an extension tab offers tab switching and the bound keys" do
+      binds = [
+        %BB.TUI.Extension.Bind{key: "s", command: :stand, label: "stand up"},
+        %BB.TUI.Extension.Bind{key: "w", command: :wobble}
+      ]
+
+      state = %{
+        Fixtures.sample_state(%{active_panel: :joints})
+        | extensions: %BB.TUI.State.Extensions{binds: binds}
+      }
+
+      txt = text(StatusBar.render(put_in(state.ui.active_tab, {:extension, :yaw})))
+
+      assert txt =~ "[ ]"
+      assert txt =~ " s "
+      assert txt =~ "stand up"
+      assert txt =~ "wobble"
+      refute txt =~ "select"
+
+      plain = %{state | extensions: %BB.TUI.State.Extensions{}}
+      refute text(StatusBar.render(put_in(plain.ui.active_tab, {:extension, :yaw}))) =~ "stand"
+    end
+
     test "shows joints adjustment hints when disarming" do
       state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :disarming})
       txt = text(StatusBar.render(state))

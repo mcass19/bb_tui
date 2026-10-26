@@ -10,6 +10,7 @@ defmodule BB.TUI.AppTest do
   alias BB.TUI.App
   alias BB.TUI.Extension.Source
   alias BB.TUI.Panels.Events
+  alias BB.TUI.Panels.TabBar
   alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
@@ -225,23 +226,25 @@ defmodule BB.TUI.AppTest do
       %{state: state}
     end
 
-    test "polls the controllers the sources read, 4 times a second", %{state: state} do
-      assert Subscription.interval(:controller_poll, 250, :poll_controllers) in App.subscriptions(
-               state
-             )
+    test "polls the controllers on the visible tab, 4 times a second", %{state: state} do
+      poll = Subscription.interval(:controller_poll, 250, :poll_controllers)
 
-      refute Enum.any?(App.subscriptions(Fixtures.sample_state()), &(&1.id == :controller_poll))
+      refute poll in App.subscriptions(state)
+      assert poll in App.subscriptions(put_in(state.ui.active_tab, {:extension, :drive}))
+      assert poll in App.subscriptions(put_in(state.ui.active_tab, {:extension, :yaw}))
     end
 
-    test "a poll asks each controller once until it answers", %{state: state} do
+    test "a poll asks each visible controller once until it answers", %{state: state} do
       Mimic.stub(BB.Process, :call, fn _robot, name, :inspect, _timeout -> %{name: name} end)
+      state = put_in(state.ui.active_tab, {:extension, :drive})
 
       assert {:noreply, state, opts} = App.update({:info, :poll_controllers}, state)
       assert opts[:render?] == false
-      assert [%ExRatatui.Command{fun: fun, mapper: mapper}, _yaw] = opts[:commands]
+      # The :balance panel sits on the drive tab; :yaw is on a tab of its own.
+      assert [%ExRatatui.Command{fun: fun, mapper: mapper}] = opts[:commands]
       assert mapper.(fun.()) == {:controller_state, :balancer, {:ok, %{name: :balancer}}}
 
-      # Both are still out: the next tick sends nothing.
+      # Still out: the next tick sends nothing.
       assert {:noreply, state, opts} = App.update({:info, :poll_controllers}, state)
       assert opts[:commands] == []
 
@@ -266,6 +269,96 @@ defmodule BB.TUI.AppTest do
 
       source = Source.topic([:sensor, :wheel], [:velocity, :x])
       assert State.Extensions.read(state, source) == 0.3
+    end
+  end
+
+  describe "extension tabs and keys" do
+    setup do
+      Fixtures.stub_bb_modules()
+      {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+      %{state: state}
+    end
+
+    test "[ and ] cycle through the extension tabs", %{state: state} do
+      assert State.tabs(state) == [
+               :control,
+               :visualization,
+               {:extension, :drive},
+               {:extension, :yaw}
+             ]
+
+      {:noreply, state} = press(state, "]")
+      {:noreply, state} = press(state, "]")
+      assert state.ui.active_tab == {:extension, :drive}
+
+      {:noreply, state} = press(state, "]")
+      {:noreply, state} = press(state, "]")
+      assert state.ui.active_tab == :control
+
+      {:noreply, state} = press(state, "[")
+      assert state.ui.active_tab == {:extension, :yaw}
+    end
+
+    test "an extension tab renders its panels and the tab bar fits every tab", %{state: state} do
+      state = put_in(state.ui.active_tab, {:extension, :drive})
+      widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
+
+      assert Enum.any?(widgets, fn {widget, _rect} ->
+               match?(%ExRatatui.Widgets.Table{block: %{title: " Balance "}}, widget)
+             end)
+
+      {_tab_bar, tabs_rect} = Enum.find(widgets, fn {widget, _rect} -> tab_bar?(widget) end)
+      assert tabs_rect.width == TabBar.width(State.tab_labels(state))
+    end
+
+    test "the hint for the runtime state takes a line under the title bar", %{state: state} do
+      state = put_in(state.safety.runtime, :idle)
+      widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
+
+      assert {%ExRatatui.Widgets.Paragraph{text: " ▸ s to stand"}, %{y: 1, height: 1}} =
+               Enum.find(widgets, fn {widget, _rect} ->
+                 match?(%ExRatatui.Widgets.Paragraph{text: " ▸ " <> _}, widget)
+               end)
+
+      no_hint =
+        App.render(put_in(state.safety.runtime, :armed), %ExRatatui.Frame{width: 120, height: 30})
+
+      refute Enum.any?(no_hint, fn {w, _} ->
+               match?(%ExRatatui.Widgets.Paragraph{text: " ▸ " <> _}, w)
+             end)
+    end
+
+    test "a bound key runs its command, from any tab", %{state: state} do
+      Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :stand, %{} -> {:ok, self()} end)
+
+      state = %{
+        state
+        | commands: %{
+            state.commands
+            | available: [%{name: :stand, allowed_states: [:idle], arguments: []}]
+          }
+      }
+
+      state = put_in(state.ui.active_tab, {:extension, :yaw})
+
+      assert {:noreply, state, commands: [%ExRatatui.Command{kind: :async}]} = press(state, "s")
+      assert state.commands.executing == :stand
+
+      # One at a time, as from the commands panel.
+      assert {:noreply, ^state} = press(state, "s")
+    end
+
+    test "a bound key for a command the robot doesn't have says so", %{state: state} do
+      assert {:noreply, state} = press(state, "s")
+
+      assert [{_ts, [:command, :stand], %{payload: %{error: :unknown_command}}} | _] =
+               state.events.list
+    end
+
+    test "panel keys do nothing on an extension tab", %{state: state} do
+      state = %{state | ui: %{state.ui | active_tab: {:extension, :yaw}, active_panel: :joints}}
+      assert {:noreply, ^state} = press(state, "l")
+      assert {:noreply, ^state} = press(state, "tab")
     end
   end
 
@@ -3050,6 +3143,11 @@ defmodule BB.TUI.AppTest do
     {:noreply, state} = App.update({:event, enter}, state)
     state
   end
+
+  defp tab_bar?(%ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}}),
+    do: Enum.any?(spans, &(&1.content == " Control Panel "))
+
+  defp tab_bar?(_widget), do: false
 
   defp press(state, code) do
     App.update({:event, %ExRatatui.Event.Key{code: code, kind: "press"}}, state)

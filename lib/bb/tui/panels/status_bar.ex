@@ -182,6 +182,24 @@ defmodule BB.TUI.Panels.StatusBar do
     "#{:erlang.float_to_binary(voltage / 1, decimals: 1)}V"
   end
 
+  # On an extension tab the panel keys don't apply: offer `[`/`]` to move on
+  # and the extensions' own keys.
+  defp key_hints(%State{ui: %{active_tab: {:extension, _}}} = state) do
+    base = [
+      Theme.key_pill("[ ]"),
+      Theme.dim_span(" tab "),
+      Theme.key_pill("?"),
+      Theme.dim_span(" help "),
+      Theme.key_pill("q", :quit),
+      Theme.dim_span(" quit ")
+    ]
+
+    case Enum.flat_map(state.extensions.binds, &bind_keys/1) do
+      [] -> base
+      binds -> base ++ [Theme.dim_span("  ") | binds]
+    end
+  end
+
   defp key_hints(%State{ui: %{active_panel: panel}, safety: %{state: safety}} = state) do
     base =
       [
@@ -230,6 +248,9 @@ defmodule BB.TUI.Panels.StatusBar do
   end
 
   defp panel_keys(_, _), do: []
+
+  defp bind_keys(bind),
+    do: [Theme.key_pill(bind.key), Theme.dim_span(" #{bind.label || bind.command} ")]
 
   # While armed, the jog keys are offered only for a joint they can move; any
   # other joint says why it stays put.

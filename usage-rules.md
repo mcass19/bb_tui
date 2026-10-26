@@ -160,6 +160,10 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
 - `bind` can't take bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`);
   the compiler rejects it.
 - Only one extension per session may declare `drive`.
+- Readout `unit:` values are bb unit atoms and assume the source is in SI units
+  (radians, metres); use `scale:` for anything else. Controller sources are
+  polled at 4 Hz only while their tab is visible — don't rely on them for
+  anything time-critical.
 
 ## Rendering custom payloads
 

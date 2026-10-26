@@ -22,7 +22,7 @@ defmodule BB.TUI.Panels.Help do
   ## Global
 
   - `q` — Quit
-  - `[` / `]` — Switch top-level tab (Control Panel / Visualization)
+  - `[` / `]` — Switch top-level tab (Control Panel / Visualization / extension tabs)
   - `Tab` — Cycle to the next panel
   - `Shift+Tab` — Cycle to the previous panel
   - `1` / `2` / `3` / `4` / `5` — Jump directly to the panel whose
@@ -110,11 +110,19 @@ defmodule BB.TUI.Panels.Help do
       ...>   BB.TUI.Panels.Help.render(5)
       iex> md =~ "## Global"
       true
+
+  Keys an extension bound get a section of their own:
+
+      iex> bind = %BB.TUI.Extension.Bind{key: "s", command: :stand, label: "stand up"}
+      iex> %ExRatatui.Widgets.Popup{content: %ExRatatui.Widgets.Markdown{content: md}} =
+      ...>   BB.TUI.Panels.Help.render(0, [bind])
+      iex> md =~ "- `s` — stand up"
+      true
   """
-  @spec render(non_neg_integer()) :: struct()
-  def render(scroll_offset \\ 0) do
+  @spec render(non_neg_integer(), [BB.TUI.Extension.Bind.t()]) :: struct()
+  def render(scroll_offset \\ 0, binds \\ []) do
     content = %Markdown{
-      content: @help_markdown,
+      content: bind_section(binds) <> @help_markdown,
       wrap: true,
       scroll: {scroll_offset, 0}
     }
@@ -139,6 +147,13 @@ defmodule BB.TUI.Panels.Help do
   """
   @spec markdown() :: String.t()
   def markdown, do: @help_markdown
+
+  defp bind_section([]), do: ""
+
+  defp bind_section(binds) do
+    lines = Enum.map_join(binds, "\n", &"- `#{&1.key}` — #{&1.label || &1.command}")
+    "## Robot keys\n\n" <> lines <> "\n\n"
+  end
 
   defp title_line do
     %Line{

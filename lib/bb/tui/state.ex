@@ -76,6 +76,9 @@ defmodule BB.TUI.State do
           viz: Viz.t()
         }
 
+  @typedoc "A top-level tab: the two built-ins, or an extension's."
+  @type tab :: :control | :visualization | {:extension, atom()}
+
   @panels [:safety, :commands, :joints, :events, :parameters]
 
   @doc """
@@ -89,18 +92,35 @@ defmodule BB.TUI.State do
   @spec panels() :: [atom()]
   def panels, do: @panels
 
-  @tabs [:control, :visualization]
-
   @doc """
-  Returns the ordered list of top-level tabs.
+  Returns the ordered list of top-level tabs: Control Panel and
+  Visualization, then one `{:extension, name}` per extension tab.
 
   ## Examples
 
-      iex> BB.TUI.State.tabs()
+      iex> BB.TUI.State.tabs(%BB.TUI.State{})
       [:control, :visualization]
+
+      iex> extensions = %BB.TUI.State.Extensions{panels: [%BB.TUI.Extension.Panel{name: :balance}]}
+      iex> BB.TUI.State.tabs(%BB.TUI.State{extensions: extensions})
+      [:control, :visualization, {:extension, :balance}]
   """
-  @spec tabs() :: [atom()]
-  def tabs, do: @tabs
+  @spec tabs(t()) :: [tab()]
+  def tabs(%__MODULE__{} = state), do: Enum.map(tab_labels(state), &elem(&1, 0))
+
+  @doc """
+  The top-level tabs with the labels the tab bar shows.
+
+  ## Examples
+
+      iex> BB.TUI.State.tab_labels(%BB.TUI.State{})
+      [control: "Control Panel", visualization: "Visualization"]
+  """
+  @spec tab_labels(t()) :: [{tab(), String.t()}]
+  def tab_labels(%__MODULE__{extensions: extensions}) do
+    [control: "Control Panel", visualization: "Visualization"] ++
+      for {name, label} <- Extensions.tabs(extensions), do: {{:extension, name}, label}
+  end
 
   @doc """
   Switches to the next top-level tab, wrapping around.
@@ -117,8 +137,9 @@ defmodule BB.TUI.State do
   """
   @spec next_tab(t()) :: t()
   def next_tab(%__MODULE__{ui: %{active_tab: current}} = state) do
-    idx = Enum.find_index(@tabs, &(&1 == current)) || 0
-    next = Enum.at(@tabs, rem(idx + 1, length(@tabs)))
+    tabs = tabs(state)
+    idx = Enum.find_index(tabs, &(&1 == current)) || 0
+    next = Enum.at(tabs, rem(idx + 1, length(tabs)))
     %{state | ui: %{state.ui | active_tab: next}}
   end
 
@@ -133,9 +154,10 @@ defmodule BB.TUI.State do
   """
   @spec prev_tab(t()) :: t()
   def prev_tab(%__MODULE__{ui: %{active_tab: current}} = state) do
-    count = length(@tabs)
-    idx = Enum.find_index(@tabs, &(&1 == current)) || 0
-    prev = Enum.at(@tabs, rem(idx - 1 + count, count))
+    tabs = tabs(state)
+    count = length(tabs)
+    idx = Enum.find_index(tabs, &(&1 == current)) || 0
+    prev = Enum.at(tabs, rem(idx - 1 + count, count))
     %{state | ui: %{state.ui | active_tab: prev}}
   end
 
