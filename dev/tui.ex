@@ -50,7 +50,7 @@ defmodule Dev.TUI do
   end
 
   hints do
-    state :disarmed, "a to arm, then hold the arrows to drive"
-    state :idle, "w to wobble, arrows to drive"
+    state :disarmed, "a to arm; on Drive, t takes the wheel and the arrows drive"
+    state :idle, "w to wobble; on Drive, t takes the wheel"
   end
 end

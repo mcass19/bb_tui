@@ -160,7 +160,9 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
 - `bind` can't take bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`);
   the compiler rejects it.
 - Only one extension per session may declare `drive`. Driving happens only on
-  the Drive tab with the arrow keys; bb_tui calls `stop` on release, quit,
+  the Drive tab with the arrow keys, and only for the session holding the
+  pilot lease (`t`, `BB.TUI.Pilot`) — one driver per robot across all
+  connected nodes; bb_tui calls `stop` on release, quit,
   leaving the tab, focus loss and session end, but the robot must still keep
   its own dead-man timeout — a dropped connection is invisible to bb_tui.
 - Readout `unit:` values are bb unit atoms and assume the source is in SI units

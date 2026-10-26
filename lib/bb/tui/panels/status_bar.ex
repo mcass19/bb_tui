@@ -250,7 +250,14 @@ defmodule BB.TUI.Panels.StatusBar do
 
   defp panel_keys(_, _), do: []
 
-  defp drive_keys(%{drive: %{}}, :drive), do: [Theme.key_pill("←↑↓→"), Theme.dim_span(" drive ")]
+  defp drive_keys(%{drive: %{}}, :drive),
+    do: [
+      Theme.key_pill("t"),
+      Theme.dim_span(" wheel "),
+      Theme.key_pill("←↑↓→"),
+      Theme.dim_span(" drive ")
+    ]
+
   defp drive_keys(_extensions, _tab), do: []
 
   defp freeze_keys(extensions, tab) do

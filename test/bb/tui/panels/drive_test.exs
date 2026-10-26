@@ -38,6 +38,16 @@ defmodule BB.TUI.Panels.DriveTest do
     assert text =~ "repeat (no key releases)"
   end
 
+  test "shows who has the wheel" do
+    mine = state(%State.Drive{lease: :mine}) |> Drive.render(@area, 0) |> pad_text()
+    assert mine =~ "you have the wheel"
+
+    other = %State.Drive{lease: {:other, :pilot@laptop, ~N[2026-10-26 12:34:56]}}
+    text = state(other) |> Drive.render(@area, 0) |> pad_text()
+    assert text =~ "driven by pilot@laptop"
+    assert text =~ "since 12:34:56"
+  end
+
   test "says when it has seen key releases" do
     text = state(%State.Drive{mode: :release}) |> Drive.render(@area, 0) |> pad_text()
     assert text =~ "release"

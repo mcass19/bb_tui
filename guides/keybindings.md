@@ -24,7 +24,8 @@ An extension (see the [Extensions guide](extensions.md)) adds tabs of its own af
 
 | Key | Action |
 |---|---|
-| `←` `↑` `↓` `→` | On the Drive tab: hold to drive, let go to stop (see the [Driving guide](driving.md)) |
+| `t` | On the Drive tab: take the wheel (the pilot lease), or hand it back |
+| `←` `↑` `↓` `→` | On the Drive tab, with the wheel: hold to drive, let go to stop (see the [Driving guide](driving.md)) |
 | `Space` | Freeze the tab's charts, to look at a moment (a fall, a spike) without it scrolling away; again to resume. Nothing is recorded while frozen, and readouts keep updating |
 
 ## Visualization tab

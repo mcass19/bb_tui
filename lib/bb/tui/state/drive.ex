@@ -31,7 +31,7 @@ defmodule BB.TUI.State.Drive do
     "right" => {:turn, -1}
   }
 
-  defstruct mode: :inference, held: %{}, driving?: false
+  defstruct mode: :inference, held: %{}, driving?: false, lease: :free
 
   @type axis :: :throttle | :turn
   @type t :: %__MODULE__{
@@ -44,8 +44,16 @@ defmodule BB.TUI.State.Drive do
               last_at: integer()
             }
           },
-          driving?: boolean()
+          driving?: boolean(),
+          lease: lease()
         }
+
+  @typedoc """
+  The pilot lease (see `BB.TUI.Pilot`) as this session last saw it: its own,
+  free, or another session's — with that session's node and when this one
+  first saw it there.
+  """
+  @type lease :: :mine | :free | {:other, node(), NaiveDateTime.t()}
 
   @type action :: {:publish, -1 | 0 | 1, -1 | 0 | 1} | :stop | :idle
 
@@ -173,6 +181,31 @@ defmodule BB.TUI.State.Drive do
     do: {:stop, %{drive | held: %{}, driving?: false}}
 
   def halt(%__MODULE__{} = drive), do: {:idle, %{drive | held: %{}}}
+
+  @doc """
+  Records who holds the pilot lease, as `BB.TUI.Pilot.holder/1` reports
+  it at `at` (a wall-clock time). Another session's lease keeps the time it
+  was first seen, so "since" doesn't move while it stays the same.
+
+  ## Examples
+
+      iex> alias BB.TUI.State.Drive
+      iex> at = ~N[2026-10-26 12:00:00]
+      iex> drive = Drive.observe_lease(%Drive{}, {:other, :"robot@goatbot"}, at)
+      iex> Drive.observe_lease(drive, {:other, :"robot@goatbot"}, ~N[2026-10-26 12:05:00]).lease
+      {:other, :"robot@goatbot", ~N[2026-10-26 12:00:00]}
+      iex> Drive.observe_lease(drive, :mine, at).lease
+      :mine
+  """
+  @spec observe_lease(t(), :mine | :free | {:other, node()}, NaiveDateTime.t()) :: t()
+  def observe_lease(%__MODULE__{lease: {:other, node, _since}} = drive, {:other, node}, _at),
+    do: drive
+
+  def observe_lease(%__MODULE__{} = drive, {:other, node}, at),
+    do: %{drive | lease: {:other, node, at}}
+
+  def observe_lease(%__MODULE__{} = drive, lease, _at) when lease in [:mine, :free],
+    do: %{drive | lease: lease}
 
   @doc """
   Whether a key is held or a stop is still owed — while this is true, the
