@@ -7,6 +7,8 @@ defmodule BB.TUI.State.Extensions do
   declarations came in, `hints` maps a runtime state to its banner, and
   `drive` holds the one extension allowed to declare driving.
 
+  `bound` maps each bound key to its bind, for the key handler's guard.
+
   `topics` and `controllers` are what the sources read: the topic paths
   whose latest payload is kept, and the controllers whose `:inspect` state
   is polled. `values` holds those, keyed `{:topic, path}` and
@@ -23,6 +25,7 @@ defmodule BB.TUI.State.Extensions do
   defstruct modules: [],
             panels: [],
             binds: [],
+            bound: %{},
             hints: %{},
             drive: nil,
             topics: [],
@@ -43,6 +46,7 @@ defmodule BB.TUI.State.Extensions do
           modules: [module()],
           panels: [Panel.t()],
           binds: [Extension.Bind.t()],
+          bound: %{String.t() => Extension.Bind.t()},
           hints: %{atom() => String.t()},
           drive: drive() | nil,
           topics: [[atom()]],
@@ -79,6 +83,7 @@ defmodule BB.TUI.State.Extensions do
         modules: modules,
         panels: panels,
         binds: binds,
+        bound: Map.new(binds, &{&1.key, &1}),
         hints: Map.new(Enum.flat_map(modules, &Info.hints/1), &{&1.state, &1.text}),
         drive: drive
       }
@@ -198,6 +203,107 @@ defmodule BB.TUI.State.Extensions do
   end
 
   @doc """
+  The extensions' tabs, in the order their panels were declared, as
+  `{name, label}`. A panel's tab is its `tab`, or its own name; a tab
+  holding one panel of the same name is labelled with that panel's title.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.Panel
+      iex> ext = %BB.TUI.State.Extensions{panels: [
+      ...>   %Panel{name: :balance, title: "Balance", tab: :drive},
+      ...>   %Panel{name: :yaw_rate},
+      ...>   %Panel{name: :wheels, tab: :hardware},
+      ...>   %Panel{name: :power, tab: :hardware}
+      ...> ]}
+      iex> BB.TUI.State.Extensions.tabs(ext)
+      [drive: "Drive", yaw_rate: "Yaw rate", hardware: "Hardware"]
+  """
+  @spec tabs(t()) :: [{atom(), String.t()}]
+  def tabs(%__MODULE__{panels: panels}) do
+    panels
+    |> Enum.group_by(&tab_of/1)
+    |> then(fn by_tab ->
+      for tab <- panels |> Enum.map(&tab_of/1) |> Enum.uniq(),
+          do: {tab, tab_label(tab, Map.fetch!(by_tab, tab))}
+    end)
+  end
+
+  @doc """
+  The panels on tab `tab`, in declaration order.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.Panel
+      iex> ext = %BB.TUI.State.Extensions{panels: [%Panel{name: :a, tab: :t}, %Panel{name: :b}, %Panel{name: :c, tab: :t}]}
+      iex> ext |> BB.TUI.State.Extensions.panels_on(:t) |> Enum.map(& &1.name)
+      [:a, :c]
+  """
+  @spec panels_on(t(), atom()) :: [Panel.t()]
+  def panels_on(%__MODULE__{panels: panels}, tab), do: Enum.filter(panels, &(tab_of(&1) == tab))
+
+  defp tab_of(%Panel{tab: nil, name: name}), do: name
+  defp tab_of(%Panel{tab: tab}), do: tab
+
+  defp tab_label(:drive, _panels), do: "Drive"
+  defp tab_label(name, [%Panel{name: name} = panel]), do: panel_title(panel)
+  defp tab_label(name, _panels), do: humanize(name)
+
+  @doc """
+  A panel's title: its `title`, or its name made readable.
+
+  ## Examples
+
+      iex> BB.TUI.State.Extensions.panel_title(%BB.TUI.Extension.Panel{name: :yaw_rate})
+      "Yaw rate"
+      iex> BB.TUI.State.Extensions.panel_title(%BB.TUI.Extension.Panel{name: :yaw, title: "Heading"})
+      "Heading"
+  """
+  @spec panel_title(Panel.t()) :: String.t()
+  def panel_title(%Panel{title: title}) when is_binary(title), do: title
+  def panel_title(%Panel{name: name}), do: humanize(name)
+
+  defp humanize(name),
+    do: name |> Atom.to_string() |> String.replace("_", " ") |> String.capitalize()
+
+  @doc """
+  The hint for the robot's runtime state, or `nil` when no extension has one.
+
+  ## Examples
+
+      iex> ext = %BB.TUI.State.Extensions{hints: %{idle: "s to stand"}}
+      iex> BB.TUI.State.Extensions.hint(ext, :idle)
+      "s to stand"
+      iex> BB.TUI.State.Extensions.hint(ext, :armed)
+      nil
+  """
+  @spec hint(t(), atom()) :: String.t() | nil
+  def hint(%__MODULE__{hints: hints}, runtime_state), do: Map.get(hints, runtime_state)
+
+  @doc """
+  The controllers read by the panels on tab `tab` — the ones worth polling
+  while it is on screen.
+
+  ## Examples
+
+      iex> alias BB.TUI.Extension.{Panel, Readout, Source}
+      iex> ext = %BB.TUI.State.Extensions{panels: [
+      ...>   %Panel{name: :a, items: [%Readout{source: Source.controller(:balancer, :lean)}]},
+      ...>   %Panel{name: :b, items: [%Readout{source: Source.controller(:yaw, :heading)}]}
+      ...> ]}
+      iex> BB.TUI.State.Extensions.controllers_on(ext, :b)
+      [:yaw]
+  """
+  @spec controllers_on(t(), atom()) :: [atom()]
+  def controllers_on(%__MODULE__{} = extensions, tab) do
+    for panel <- panels_on(extensions, tab),
+        item <- panel.items,
+        %Source{type: :controller, target: name} <- item_sources(item),
+        uniq: true,
+        do: name
+  end
+
+  @doc """
   Keeps `payload` for every topic source whose path `path` matches.
 
   A source path matches a message published on it, and — since bb publishes
@@ -232,17 +338,17 @@ defmodule BB.TUI.State.Extensions do
   defp topic_matches?(_topic, _path), do: false
 
   @doc """
-  The controllers to poll now: every controller a source reads that has no
-  poll in flight. They are marked in flight until `finish_poll/3`.
+  The controllers to poll now: those of `controllers` with no poll in
+  flight. They are marked in flight until `finish_poll/3`.
 
   ## Examples
 
-      iex> ext = %BB.TUI.State.Extensions{controllers: [:balancer, :yaw]}
-      iex> {[:balancer, :yaw], ext} = BB.TUI.State.Extensions.start_polls(ext)
-      iex> {[], _ext} = BB.TUI.State.Extensions.start_polls(ext)
+      iex> ext = %BB.TUI.State.Extensions{}
+      iex> {[:balancer, :yaw], ext} = BB.TUI.State.Extensions.start_polls(ext, [:balancer, :yaw])
+      iex> {[], _ext} = BB.TUI.State.Extensions.start_polls(ext, [:balancer, :yaw])
   """
-  @spec start_polls(t()) :: {[atom()], t()}
-  def start_polls(%__MODULE__{controllers: controllers, polling: polling} = extensions) do
+  @spec start_polls(t(), [atom()]) :: {[atom()], t()}
+  def start_polls(%__MODULE__{polling: polling} = extensions, controllers) do
     due = Enum.reject(controllers, &MapSet.member?(polling, &1))
     {due, %{extensions | polling: MapSet.union(polling, MapSet.new(due))}}
   end
@@ -254,7 +360,7 @@ defmodule BB.TUI.State.Extensions do
 
   ## Examples
 
-      iex> {_due, ext} = BB.TUI.State.Extensions.start_polls(%BB.TUI.State.Extensions{controllers: [:yaw]})
+      iex> {_due, ext} = BB.TUI.State.Extensions.start_polls(%BB.TUI.State.Extensions{}, [:yaw])
       iex> ext = BB.TUI.State.Extensions.finish_poll(ext, :yaw, {:ok, %{heading: 0.5}})
       iex> {ext.values, MapSet.to_list(ext.polling)}
       {%{{:controller, :yaw} => %{heading: 0.5}}, []}

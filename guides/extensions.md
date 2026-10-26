@@ -58,6 +58,16 @@ A `topic` source keeps the latest payload published on its path. Sensors and act
 
 A `controller` source reads the map the controller answers `handle_call(:inspect, ...)` with. Controllers publish nothing, so the dashboard polls them, four times a second and never more than one call per controller at a time; one that isn't running, doesn't answer `:inspect` or takes longer than 200 ms shows its readouts as `-` until it answers again. Any map works, missing keys included.
 
+## On screen
+
+Each tab holding extension panels joins the tab bar after Visualization, in the order the panels were declared: a panel alone on its tab names the tab after its title, panels sharing a `tab` share it, and `tab :drive` puts a panel on the Drive tab. A tab lays its panels out in rows of up to three, each a table of its readouts and plots. Until live charts land, a plot shows the latest value of each of its sources.
+
+Controllers are only polled while a tab reading them is on screen, so a dashboard left on the Control Panel costs the robot nothing.
+
+A bound key runs its command from any tab, the same way Enter does in the commands panel: one command at a time, and a refusal — the wrong state for it, say — shows as that command's result. A bind naming a command the robot doesn't have logs an `:unknown_command` error.
+
+The hint for the robot's current runtime state takes a line under the title bar. A state without a hint leaves the layout as it is.
+
 ## Units and formatting
 
 `unit:` names the unit a readout is shown in, as a bb unit atom (`:degree`, `:centimeter_per_second`, `:volt`). A plain number is taken to be in SI units, the way bb works — radians, metres, metres per second — so `joint(:lean), unit: :degree` shows degrees; a unit-typed parameter converts from its own unit. An unknown unit fails at compile time.

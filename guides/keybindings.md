@@ -7,7 +7,7 @@ The dashboard is fully keyboard-driven. Global keys work from any panel; the res
 | Key | Action |
 |---|---|
 | `q` | Quit |
-| `[` `]` | Switch top-level tab (Control Panel / Visualization) |
+| `[` `]` | Switch top-level tab (Control Panel / Visualization / extension tabs) |
 | `Tab` | Cycle to the next panel (Control Panel tab) |
 | `Shift+Tab` | Cycle to the previous panel (Control Panel tab) |
 | `1` `2` `3` `4` `5` | Jump directly to the panel whose title shows `[N]` |
@@ -17,6 +17,10 @@ The dashboard is fully keyboard-driven. Global keys work from any panel; the res
 | `f` | Force disarm (error state only) |
 
 Each panel's title carries a bold-cyan `[N]` badge that mirrors the number key for that panel: `[1]` Safety, `[2]` Commands, `[3]` Joints, `[4]` Events, `[5]` Parameters.
+
+## Extension tabs
+
+An extension (see the [Extensions guide](extensions.md)) adds tabs of its own after Visualization. They show live readouts only, so the Control Panel's panel keys don't reach them: `h`/`l` on an extension tab never jogs the joint selected back on the Control Panel. The global keys above still work, and so do the keys an extension binds to robot commands — from every tab. The status bar lists them on an extension tab, and the help overlay under "Robot keys".
 
 ## Visualization tab
 

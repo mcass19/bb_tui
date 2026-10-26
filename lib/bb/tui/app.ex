@@ -262,19 +262,39 @@ defmodule BB.TUI.App do
       ])
 
     # Title bar: brand on the left, top-level tabs on the right
+    tabs = State.tab_labels(state)
+
     [brand_area, tabs_area] =
       Layout.split(title_bar_area, :horizontal, [
         {:min, 0},
-        {:length, 32}
+        {:length, Panels.TabBar.width(tabs)}
       ])
 
     chrome = [
       {Panels.TitleBar.render(state), brand_area},
-      {Panels.TabBar.render(state.ui.active_tab), tabs_area},
+      {Panels.TabBar.render(tabs, state.ui.active_tab), tabs_area},
       {Panels.StatusBar.render(state), status_bar_area}
     ]
 
-    maybe_add_popup(chrome ++ render_body(state, main), state, full)
+    {hint, main} = split_hint(state, main)
+    maybe_add_popup(chrome ++ hint ++ render_body(state, main), state, full)
+  end
+
+  # An extension's hint for the robot's runtime state takes a line under the
+  # title bar; without one the layout is unchanged.
+  defp split_hint(state, main) do
+    case State.Extensions.hint(state.extensions, state.safety.runtime) do
+      nil ->
+        {[], main}
+
+      hint ->
+        [hint_area, rest] = Layout.split(main, :vertical, [{:length, 1}, {:min, 0}])
+        {[{Panels.Hint.render(hint), hint_area}], rest}
+    end
+  end
+
+  defp render_body(%{ui: %{active_tab: {:extension, tab}}} = state, main) do
+    Panels.Extension.render_tab(state, tab, main)
   end
 
   defp render_body(%{ui: %{active_tab: :visualization}} = state, main) do
@@ -547,6 +567,22 @@ defmodule BB.TUI.App do
     else
       {:noreply, state}
     end
+  end
+
+  # ── Update — extension keys ──────────────────────────────────
+
+  # A key an extension bound runs its command from any tab, through the same
+  # path as the commands panel; a refusal (wrong state, already running)
+  # comes back as that command's result.
+  def update({:event, %Event.Key{code: code, kind: "press"}}, state)
+      when is_map_key(state.extensions.bound, code) do
+    run_bound_command(state, Map.fetch!(state.extensions.bound, code))
+  end
+
+  # The Control Panel's panel keys don't reach past their tab: on an
+  # extension tab, `h`/`l` must not jog a joint nobody can see.
+  def update({:event, %Event.Key{kind: "press"}}, %{ui: %{active_tab: {:extension, _}}} = state) do
+    {:noreply, state}
   end
 
   # ── Update — events panel keys ───────────────────────────────
@@ -901,7 +937,7 @@ defmodule BB.TUI.App do
   # One `:inspect` per controller per tick, skipping any whose last poll is
   # still out, so a slow controller never piles polls up.
   def update({:info, :poll_controllers}, state) do
-    {due, extensions} = State.Extensions.start_polls(state.extensions)
+    {due, extensions} = State.Extensions.start_polls(state.extensions, visible_controllers(state))
     commands = Enum.map(due, &inspect_controller_command(state, &1))
     {:noreply, %{state | extensions: extensions}, commands: commands, render?: false}
   end
@@ -950,10 +986,18 @@ defmodule BB.TUI.App do
   # nothing — at 4 Hz, enough to read and gentle on a small board.
   @controller_poll_ms 250
 
-  defp controller_poll_subscriptions(%State{extensions: %{controllers: [_ | _]}}),
-    do: [Subscription.interval(:controller_poll, @controller_poll_ms, :poll_controllers)]
+  # Only while a tab reading controllers is on screen.
+  defp controller_poll_subscriptions(state) do
+    case visible_controllers(state) do
+      [] -> []
+      _ -> [Subscription.interval(:controller_poll, @controller_poll_ms, :poll_controllers)]
+    end
+  end
 
-  defp controller_poll_subscriptions(_state), do: []
+  defp visible_controllers(%State{ui: %{active_tab: {:extension, tab}}} = state),
+    do: State.Extensions.controllers_on(state.extensions, tab)
+
+  defp visible_controllers(_state), do: []
 
   # ── Helpers ──────────────────────────────────────────────────
 
@@ -1091,8 +1135,12 @@ defmodule BB.TUI.App do
   defp needs_throbber?(%State{safety: %{state: :disarming}}), do: true
   defp needs_throbber?(_), do: false
 
-  defp maybe_add_popup(panels, %{ui: %{show_help?: true, help_scroll_offset: offset}}, full) do
-    panels ++ [{Panels.Help.render(offset), full}]
+  defp maybe_add_popup(
+         panels,
+         %{ui: %{show_help?: true, help_scroll_offset: offset}} = state,
+         full
+       ) do
+    panels ++ [{Panels.Help.render(offset, state.extensions.binds), full}]
   end
 
   defp maybe_add_popup(panels, %{safety: %{confirm_force_disarm?: true}}, full) do
@@ -1432,6 +1480,21 @@ defmodule BB.TUI.App do
 
       _ ->
         {:noreply, state}
+    end
+  end
+
+  defp run_bound_command(state, %{command: name}) do
+    case Enum.find(state.commands.available, &(&1.name == name)) do
+      nil ->
+        {:noreply,
+         State.append_event(state, [:command, name], %{payload: %{error: :unknown_command}})}
+
+      _cmd when state.commands.executing != nil ->
+        {:noreply, state}
+
+      cmd ->
+        {:noreply, State.start_command(state, name),
+         commands: [execute_command_command(state, cmd, %{})]}
     end
   end
 
