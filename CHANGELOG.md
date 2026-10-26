@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The `bb` dependency is now `~> 0.33`** and **`ex_ratatui` is now `~> 0.18`.** bb 0.31.1–0.33 add the running-command registry and the structured actuator errors the entries below build on. ex_ratatui 0.18 ships a native NIF for OTP 29, resizes pixel images with a bicubic filter (sharper text in the browser's Visualization tab), and keeps `Viewport3D` correctly sized after a terminal font change.
 
+- **A late jog reads as a warning, not a refusal.** With a 250ms jog timeout, a slow actuator answers with bb's `CommandPending`: the command is still queued and will most likely be applied. The event log used to mark it `✘` like a real refusal; it now shows `⚠` in yellow, picked from the error's `BB.Error.Severity`. Refusals stay `✘` and turn red, as do failed commands and `[:safety, :error]` hardware reports, so problems stand out in a busy log.
+
+- **Each actuator has at most one jog in flight.** Every key autorepeat used to send its own `set_position`, and an actuator applies every command it receives in order, so one that fell behind kept working through stale targets after the key was released. Targets that arrive while a jog is in flight are now parked, latest wins, and sent once it is answered; a parked target is dropped if the robot has been disarmed meanwhile.
+
+### Fixed
+
+- **Command errors are readable.** bb reports a failed or refused command as a `BB.Error` struct, which the Commands panel's result line and the event log's `failed` summary rendered through `inspect` (`✖ %BB.Error.State.NotArmed{...}`). Both now show the error's message, and the event detail pane renders exception fields the same way.
+
 ## [0.7.1] - 2026-10-05
 
 ### Changed

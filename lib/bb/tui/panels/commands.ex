@@ -16,6 +16,7 @@ defmodule BB.TUI.Panels.Commands do
   Pure function — takes state, returns a widget struct.
   """
 
+  alias BB.TUI.Errors
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Style
@@ -48,7 +49,7 @@ defmodule BB.TUI.Panels.Commands do
     result_line =
       case state.commands.result do
         {:ok, result} -> [result_line(:ok, "✔ #{inspect(result, limit: 50)}")]
-        {:error, reason} -> [result_line(:error, "✖ #{inspect(reason, limit: 50)}")]
+        {:error, reason} -> [result_line(:error, "✖ #{Errors.describe(reason, 50)}")]
         nil -> []
       end
 

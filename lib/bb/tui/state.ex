@@ -1359,6 +1359,57 @@ defmodule BB.TUI.State do
   end
 
   @doc """
+  Claims the jog slot for an actuator, or parks the position behind the jog
+  already in flight.
+
+  Returns `{:send, state}` when no jog is in flight for `actuator`, so the
+  caller sends `position` now. Otherwise returns `{:queued, state}` with
+  `position` replacing any position parked earlier: a jog is a stream of
+  targets of which only the latest matters, and an actuator queues every
+  command it is sent, so sending each one would leave a slow actuator working
+  through stale targets.
+
+  ## Examples
+
+      iex> {:send, state} = BB.TUI.State.request_jog(%BB.TUI.State{}, :elbow_motor, 0.1)
+      iex> {:queued, state} = BB.TUI.State.request_jog(state, :elbow_motor, 0.2)
+      iex> {:queued, state} = BB.TUI.State.request_jog(state, :elbow_motor, 0.3)
+      iex> state.joints.jogs
+      %{elbow_motor: 0.3}
+  """
+  @spec request_jog(t(), atom(), float()) :: {:send | :queued, t()}
+  def request_jog(%__MODULE__{joints: %{jogs: jogs}} = state, actuator, position) do
+    action = if Map.has_key?(jogs, actuator), do: :queued, else: :send
+    parked = if action == :queued, do: position
+
+    {action, put_in(state.joints.jogs, Map.put(jogs, actuator, parked))}
+  end
+
+  @doc """
+  Releases an actuator's jog slot once its jog has been answered.
+
+  Returns `{position, state}` when a position was parked behind the finished
+  jog — the slot stays claimed and the caller sends that position next — or
+  `{nil, state}` with the slot freed.
+
+  ## Examples
+
+      iex> {:send, state} = BB.TUI.State.request_jog(%BB.TUI.State{}, :elbow_motor, 0.1)
+      iex> {:queued, state} = BB.TUI.State.request_jog(state, :elbow_motor, 0.3)
+      iex> {0.3, state} = BB.TUI.State.finish_jog(state, :elbow_motor)
+      iex> {nil, state} = BB.TUI.State.finish_jog(state, :elbow_motor)
+      iex> state.joints.jogs
+      %{}
+  """
+  @spec finish_jog(t(), atom()) :: {float() | nil, t()}
+  def finish_jog(%__MODULE__{joints: %{jogs: jogs}} = state, actuator) do
+    case Map.get(jogs, actuator) do
+      nil -> {nil, put_in(state.joints.jogs, Map.delete(jogs, actuator))}
+      parked -> {parked, put_in(state.joints.jogs, Map.put(jogs, actuator, nil))}
+    end
+  end
+
+  @doc """
   Computes the step size for a joint based on its limits.
 
   Returns `(upper - lower) / 100` for joints with limits, or a default
