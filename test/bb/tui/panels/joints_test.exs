@@ -3,7 +3,10 @@ defmodule BB.TUI.Panels.JointsTest do
   doctest BB.TUI.Panels.Joints
 
   alias BB.Math.Transform2D
+  alias BB.Message.Actuator.Command.Stop
+  alias BB.Message.Actuator.Command.Velocity
   alias BB.TUI.Panels.Joints
+  alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Text.{Line, Span}
   alias ExRatatui.Widgets.Table
@@ -16,6 +19,18 @@ defmodule BB.TUI.Panels.JointsTest do
   defp cell_text(%Span{content: c}), do: c
   defp cell_text(s) when is_binary(s), do: s
 
+  defp wrist_joint do
+    %{
+      wrist: %{
+        joint: %{name: :wrist, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+        position: 0.0
+      }
+    }
+  end
+
+  defp wrist_robot,
+    do: %{Fixtures.sample_robot_struct() | actuators: %{wrist_motor: %{joint: :wrist}}}
+
   describe "render/2" do
     test "renders a table with joint data" do
       state = Fixtures.sample_state()
@@ -27,7 +42,7 @@ defmodule BB.TUI.Panels.JointsTest do
     end
 
     test "rows are sorted by joint name" do
-      state = Fixtures.sample_state()
+      state = Fixtures.sample_state(%{simulation: nil})
       widget = Joints.render(state, false)
 
       [first_row | _] = widget.rows
@@ -111,25 +126,13 @@ defmodule BB.TUI.Panels.JointsTest do
       state = Fixtures.sample_state(%{joints: joints})
       widget = Joints.render(state, false)
 
-      [%Line{spans: spans} | _] = widget.rows |> hd() |> Enum.filter(&match?(%Line{}, &1))
+      %Line{spans: spans} = widget.rows |> hd() |> Enum.at(3)
       marker = Enum.find(spans, &(&1.content == "\u{25CF}"))
       assert marker.style.fg == :green
     end
 
-    test "shows SIM tag (yellow) for simulated joints" do
-      joints = %{
-        wrist: %{
-          joint: %{
-            name: :wrist,
-            type: :revolute,
-            actuators: [],
-            limits: %{lower: -1.0, upper: 1.0}
-          },
-          position: 0.0
-        }
-      }
-
-      state = Fixtures.sample_state(%{joints: joints})
+    test "shows SIM tag (yellow) for actuator-less joints in simulation" do
+      state = Fixtures.sample_state(%{joints: wrist_joint()})
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
@@ -137,24 +140,42 @@ defmodule BB.TUI.Panels.JointsTest do
       assert cell_text(hd(row)) =~ "SIM"
     end
 
-    test "does not show SIM tag for joints with actuator" do
-      joints = %{
-        wrist: %{
-          joint: %{
-            name: :wrist,
-            type: :revolute,
-            actuators: [:some_actuator],
-            limits: %{lower: -1.0, upper: 1.0}
-          },
-          position: 0.0
-        }
-      }
-
-      state = Fixtures.sample_state(%{joints: joints})
+    test "does not show SIM tag for actuator-less joints on hardware" do
+      state = Fixtures.sample_state(%{joints: wrist_joint(), simulation: nil})
       widget = Joints.render(state, false)
 
       row = hd(widget.rows)
       assert cell_text(hd(row)) == "wrist"
+      # Still shows where the joint is, only nothing to jog.
+      assert cell_text(Enum.at(row, 3)) =~ "\u{25CF}"
+    end
+
+    test "does not show SIM tag for joints with actuator" do
+      state = Fixtures.sample_state(%{joints: wrist_joint(), robot_struct: wrist_robot()})
+      widget = Joints.render(state, false)
+
+      row = hd(widget.rows)
+      assert cell_text(hd(row)) == "wrist"
+    end
+
+    test "marks a joint whose actuator takes velocity but not position" do
+      state =
+        %{joints: wrist_joint(), robot_struct: wrist_robot(), simulation: nil}
+        |> Fixtures.sample_state()
+        |> State.put_command_payloads(:wrist_motor, [Velocity, Stop])
+
+      [row] = Joints.render(state, false).rows
+      assert cell_text(Enum.at(row, 3)) == "velocity only"
+    end
+
+    test "marks a joint whose actuator takes neither position nor velocity" do
+      state =
+        %{joints: wrist_joint(), robot_struct: wrist_robot(), simulation: nil}
+        |> Fixtures.sample_state()
+        |> State.put_command_payloads(:wrist_motor, [Stop])
+
+      [row] = Joints.render(state, false).rows
+      assert cell_text(Enum.at(row, 3)) == "no position command"
     end
 
     test "handles nil position" do

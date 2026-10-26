@@ -125,6 +125,7 @@ defmodule BB.TUI.App do
 
   use ExRatatui.App, runtime: :reducer
 
+  alias BB.Error.State.UnsupportedCommand
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Robot.Joint
@@ -184,17 +185,23 @@ defmodule BB.TUI.App do
 
     commands = Robot.discover_commands(robot, node)
     bridges = Robot.list_bridges(robot, node)
+    simulation = Robot.simulation_mode(robot, node)
+
+    # In simulation every actuator runs as `BB.Sim.Actuator`, which takes
+    # position commands whatever its declared driver accepts.
+    payloads = if simulation, do: %{}, else: Robot.command_payloads(robot, node)
 
     state =
       %State{
         robot: robot,
         robot_struct: robot_struct,
         node: node,
+        simulation: simulation,
         safety: %State.Safety{
           state: Robot.safety_state(robot, node),
           runtime: Robot.runtime_state(robot, node)
         },
-        joints: %State.Joints{entries: joints},
+        joints: %State.Joints{entries: joints, payloads: payloads},
         commands: %State.Commands{available: commands},
         renderers: renderers
       }
@@ -890,6 +897,7 @@ defmodule BB.TUI.App do
       state
       |> State.append_event([:actuator, actuator], %{payload: %{error: reason}})
       |> forget_refused_target(actuator, reason)
+      |> learn_payloads(actuator, reason)
       |> continue_jog(actuator)
 
     {:noreply, state, commands}
@@ -1057,28 +1065,45 @@ defmodule BB.TUI.App do
       %{position: pos} when not is_number(pos) ->
         {:noreply, state}
 
-      %{joint: joint} = joint_data ->
-        step = State.joint_step(joint) * multiplier
-        base = State.jog_base(joint_data)
-
-        new_pos =
-          case direction do
-            :increase -> base + step
-            :decrease -> base - step
-          end
-          |> State.clamp_position(joint)
-
-        actuator = find_actuator_for_joint(state.robot_struct, name)
-        state = State.set_joint_target(state, name, new_pos)
-
-        if actuator do
-          jog(state, actuator, new_pos)
-        else
-          publish_simulated_position(state.robot, name, new_pos, state.node)
-          {:noreply, State.set_joint_position(state, name, new_pos)}
-        end
+      joint_data ->
+        jog_joint(state, name, joint_data, State.jog_mode(state, name), direction, multiplier)
     end
   end
+
+  # A read-only or position-refusing joint stays put: the status bar says why.
+  defp jog_joint(state, name, %{joint: joint} = joint_data, mode, direction, multiplier)
+       when mode in [:position, :simulated] do
+    step = State.joint_step(joint) * multiplier
+    base = State.jog_base(joint_data)
+
+    new_pos =
+      case direction do
+        :increase -> base + step
+        :decrease -> base - step
+      end
+      |> State.clamp_position(joint)
+
+    state = State.set_joint_target(state, name, new_pos)
+
+    case mode do
+      :position ->
+        jog(state, State.actuator_for_joint(state.robot_struct, name), new_pos)
+
+      :simulated ->
+        publish_simulated_position(state.robot, name, new_pos, state.node)
+        {:noreply, State.set_joint_position(state, name, new_pos)}
+    end
+  end
+
+  defp jog_joint(state, _name, _joint_data, _mode, _direction, _multiplier), do: {:noreply, state}
+
+  # The refusal carries the payloads the actuator really accepts, which beats
+  # whatever its DSL declaration suggested on mount.
+  defp learn_payloads(state, actuator, %UnsupportedCommand{supported: supported})
+       when is_list(supported),
+       do: State.put_command_payloads(state, actuator, supported)
+
+  defp learn_payloads(state, _actuator, _reason), do: state
 
   defp forget_refused_target(state, actuator, reason) do
     joint = find_joint_for_actuator(state, actuator)
@@ -1156,17 +1181,6 @@ defmodule BB.TUI.App do
   defp default_configuration(%{type: :planar}), do: Transform2D.identity()
   defp default_configuration(%{type: :floating}), do: Transform.identity()
   defp default_configuration(_joint), do: 0.0
-
-  defp find_actuator_for_joint(%{actuators: actuators}, joint_name) do
-    actuators
-    |> Enum.find(fn {_name, info} -> info.joint == joint_name end)
-    |> case do
-      {actuator_name, _info} -> actuator_name
-      nil -> nil
-    end
-  end
-
-  defp find_actuator_for_joint(_, _joint_name), do: nil
 
   defp refresh_selected_tab(state) do
     case State.selected_parameter_tab(state) do

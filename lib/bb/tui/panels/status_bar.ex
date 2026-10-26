@@ -197,6 +197,7 @@ defmodule BB.TUI.Panels.StatusBar do
       case panel do
         :parameters -> parameters_keys(state)
         :commands -> commands_keys(state)
+        :joints -> joints_keys(state, safety)
         _ -> panel_keys(panel, safety)
       end
 
@@ -228,22 +229,42 @@ defmodule BB.TUI.Panels.StatusBar do
     ]
   end
 
-  defp panel_keys(:joints, safety) when safety in [:armed, :disarming] do
-    [
-      Theme.key_pill("j/k"),
-      Theme.dim_span(" select "),
-      Theme.key_pill("h/l"),
-      Theme.dim_span(" adjust "),
-      Theme.key_pill("H/L"),
-      Theme.dim_span(" 10× ")
-    ]
-  end
-
-  defp panel_keys(:joints, _safety) do
-    [Theme.key_pill("j/k"), Theme.dim_span(" select ")]
-  end
-
   defp panel_keys(_, _), do: []
+
+  # While armed, the jog keys are offered only for a joint they can move; any
+  # other joint says why it stays put.
+  defp joints_keys(state, safety) when safety in [:armed, :disarming] do
+    select = [Theme.key_pill("j/k"), Theme.dim_span(" select ")]
+
+    case selected_jog_mode(state) do
+      :read_only ->
+        select ++ [Theme.dim_span(" read-only: no actuator ")]
+
+      :velocity_only ->
+        select ++ [Theme.dim_span(" velocity only ")]
+
+      :no_position ->
+        select ++ [Theme.dim_span(" takes no position commands ")]
+
+      _jogs ->
+        select ++
+          [
+            Theme.key_pill("h/l"),
+            Theme.dim_span(" adjust "),
+            Theme.key_pill("H/L"),
+            Theme.dim_span(" 10× ")
+          ]
+    end
+  end
+
+  defp joints_keys(_state, _safety), do: [Theme.key_pill("j/k"), Theme.dim_span(" select ")]
+
+  defp selected_jog_mode(state) do
+    case State.selected_joint_name(state) do
+      nil -> nil
+      name -> State.jog_mode(state, name)
+    end
+  end
 
   defp commands_keys(state) do
     base = [

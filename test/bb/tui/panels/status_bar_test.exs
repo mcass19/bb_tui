@@ -2,7 +2,10 @@ defmodule BB.TUI.Panels.StatusBarTest do
   use ExUnit.Case, async: true
   doctest BB.TUI.Panels.StatusBar
 
+  alias BB.Message.Actuator.Command.Stop
+  alias BB.Message.Actuator.Command.Velocity
   alias BB.TUI.Panels.StatusBar
+  alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Text.Line
   alias ExRatatui.Widgets.Paragraph
@@ -12,6 +15,16 @@ defmodule BB.TUI.Panels.StatusBarTest do
   # text content is what users actually read.
   defp text(%Paragraph{text: %Line{spans: spans}}) do
     Enum.map_join(spans, "", & &1.content)
+  end
+
+  # The first sample joint (`elbow`, sorted) driven by an actuator that takes
+  # only `payloads`.
+  defp state_with_payloads(payloads) do
+    robot = %{Fixtures.sample_robot_struct() | actuators: %{elbow_motor: %{joint: :elbow}}}
+
+    %{active_panel: :joints, safety_state: :armed, simulation: nil, robot_struct: robot}
+    |> Fixtures.sample_state()
+    |> State.put_command_payloads(:elbow_motor, payloads)
   end
 
   describe "render/1" do
@@ -113,6 +126,35 @@ defmodule BB.TUI.Panels.StatusBarTest do
       assert txt =~ "adjust"
       assert txt =~ "H/L"
       assert txt =~ "10×"
+    end
+
+    test "says why a read-only joint doesn't jog on hardware" do
+      state =
+        Fixtures.sample_state(%{active_panel: :joints, safety_state: :armed, simulation: nil})
+
+      txt = text(StatusBar.render(state))
+
+      assert txt =~ "read-only: no actuator"
+      refute txt =~ "adjust"
+    end
+
+    test "says a velocity-only joint doesn't jog" do
+      txt = state_with_payloads([Velocity, Stop]) |> StatusBar.render() |> text()
+
+      assert txt =~ "velocity only"
+      refute txt =~ "adjust"
+    end
+
+    test "says a joint taking no position or velocity commands doesn't jog" do
+      txt = state_with_payloads([Stop]) |> StatusBar.render() |> text()
+
+      assert txt =~ "takes no position commands"
+      refute txt =~ "adjust"
+    end
+
+    test "offers the jog keys when no joint is selected" do
+      state = Fixtures.sample_state(%{active_panel: :joints, safety_state: :armed, joints: %{}})
+      assert text(StatusBar.render(state)) =~ "adjust"
     end
 
     test "shows joints adjustment hints when disarming" do

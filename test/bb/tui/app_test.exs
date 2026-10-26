@@ -3,8 +3,10 @@ defmodule BB.TUI.AppTest do
   use Mimic
   doctest BB.TUI
 
+  alias BB.Error.State.UnsupportedCommand
   alias BB.Math.Transform
   alias BB.Math.Transform2D
+  alias BB.Message.Actuator.Command
   alias BB.TUI.App
   alias BB.TUI.Panels.Events
   alias BB.TUI.State
@@ -145,7 +147,94 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "jog modes" do
+    setup do
+      Fixtures.stub_bb_modules(safety_state: :armed)
+
+      joints = %{
+        lean: %{
+          joint: %{name: :lean, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: nil
+        },
+        wheel: %{
+          joint: %{name: :wheel, type: :revolute, limits: %{lower: -1.0, upper: 1.0}},
+          position: 0.0,
+          target: nil
+        }
+      }
+
+      robot_struct =
+        Map.put(Fixtures.sample_robot_struct(), :actuators, %{wheel_motor: %{joint: :wheel}})
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :joints,
+          joints: joints,
+          joint_selected: 0,
+          safety_state: :armed,
+          robot_struct: robot_struct,
+          simulation: nil
+        })
+
+      %{state: state}
+    end
+
+    test "on hardware an actuator-less joint is read-only: no fake reading", %{state: state} do
+      Mimic.reject(BB, :publish, 3)
+
+      assert {:noreply, state} = press(state, "l")
+      assert state.joints.entries.lean.position == 0.0
+      assert state.joints.entries.lean.target == nil
+    end
+
+    test "a joint whose actuator refuses positions doesn't jog", %{state: state} do
+      Mimic.reject(BB.Actuator, :set_position, 4)
+      state = State.put_command_payloads(state, :wheel_motor, [Command.Velocity, Command.Stop])
+      state = put_in(state.joints.selected, 1)
+
+      assert {:noreply, state} = press(state, "l")
+      assert state.joints.entries.wheel.target == nil
+      assert state.joints.jogs == %{}
+    end
+
+    test "an UnsupportedCommand refusal records what the actuator accepts", %{state: state} do
+      state = put_in(state.joints.selected, 1)
+      {:noreply, state, _} = press(state, "l")
+
+      refusal = %UnsupportedCommand{
+        actuator: :wheel_motor,
+        command: Command.Position,
+        supported: [Command.Hold, Command.Stop, Command.Velocity]
+      }
+
+      {:noreply, state, _} =
+        App.update({:info, {:actuator_result, :wheel_motor, {:error, refusal}}}, state)
+
+      assert State.jog_mode(state, :wheel) == :velocity_only
+      assert state.joints.entries.wheel.target == nil
+    end
+  end
+
   describe "mount/1" do
+    test "on hardware reads each actuator's command payloads from the DSL" do
+      Fixtures.stub_bb_modules(simulation: nil)
+      Mimic.stub(BB.Dsl.Info, :topology, fn _robot -> [wheel_link()] end)
+
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
+      assert state.simulation == nil
+      assert state.joints.payloads == %{wheel_motor: [Command.Velocity]}
+    end
+
+    test "in simulation leaves payloads alone: every actuator takes positions" do
+      Fixtures.stub_bb_modules(simulation: :kinematic)
+      Mimic.reject(BB.Dsl.Info, :topology, 1)
+
+      assert {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
+      assert state.simulation == :kinematic
+      assert state.joints.payloads == %{}
+    end
+
     test "initializes state from robot module" do
       Fixtures.stub_bb_modules()
 
@@ -2850,6 +2939,23 @@ defmodule BB.TUI.AppTest do
 
   defp press(state, code) do
     App.update({:event, %ExRatatui.Event.Key{code: code, kind: "press"}}, state)
+  end
+
+  defmodule VelocityDriver do
+    @moduledoc false
+    def command_payloads(_opts), do: [BB.Message.Actuator.Command.Velocity]
+  end
+
+  defp wheel_link do
+    %BB.Dsl.Link{
+      name: :base,
+      joints: [
+        %BB.Dsl.Joint{
+          name: :wheel,
+          actuators: [%BB.Dsl.Actuator{name: :wheel_motor, child_spec: {VelocityDriver, []}}]
+        }
+      ]
+    }
   end
 
   defp running_entry(name, started_at \\ DateTime.utc_now()) do
