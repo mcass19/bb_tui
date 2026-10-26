@@ -563,7 +563,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "x", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       refute new_state.events.show_detail?
     end
 
@@ -574,7 +574,54 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state()
       event = %ExRatatui.Event.Key{code: "a", kind: "press"}
 
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
+    end
+
+    # An arm or disarm may run a whole arm/disarm command, so it must not
+    # block the process that owns the terminal.
+    test "a runs the arm off the event loop" do
+      state = Fixtures.sample_state()
+      event = %ExRatatui.Event.Key{code: "a", kind: "press"}
+
+      assert {:noreply, ^state, commands: [%ExRatatui.Command{kind: :async} = cmd]} =
+               App.update({:event, event}, state)
+
+      assert cmd.mapper.(:ok) == {:robot_write, [:safety, :arm], :ok}
+    end
+
+    test "a refused arm lands in the event log" do
+      Fixtures.stub_bb_modules()
+      Mimic.expect(BB.Safety, :arm, fn _robot -> {:error, :in_error} end)
+
+      state = Fixtures.sample_state()
+      event = %ExRatatui.Event.Key{code: "a", kind: "press"}
+
+      assert {:noreply, new_state} = drive(state, {:event, event})
+
+      assert [{_ts, [:safety, :arm], %{payload: %{error: :in_error}}}] = new_state.events.list
+    end
+
+    test "an accepted write is dropped without a render" do
+      state = Fixtures.sample_state()
+
+      assert {:noreply, ^state, render?: false} =
+               App.update({:info, {:robot_write, [:safety, :arm], :ok}}, state)
+    end
+
+    test "a remote call that fails over :rpc is logged instead of crashing the dashboard" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn _node, BB.Safety, :disarm, _args ->
+        {:badrpc, :nodedown}
+      end)
+
+      state = %{Fixtures.sample_state() | node: :"robot@127.0.0.1"}
+      event = %ExRatatui.Event.Key{code: "d", kind: "press"}
+
+      assert {:noreply, new_state} = drive(state, {:event, event})
+
+      assert [{_ts, [:safety, :disarm], %{payload: %{error: {:exception, message}}}}] =
+               new_state.events.list
+
+      assert message =~ ":nodedown"
     end
 
     test "d key calls BB.Safety.disarm" do
@@ -584,14 +631,14 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state()
       event = %ExRatatui.Event.Key{code: "d", kind: "press"}
 
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
     end
 
     test "f key shows force disarm popup when in error state" do
       state = Fixtures.sample_state(%{safety_state: :error})
       event = %ExRatatui.Event.Key{code: "f", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert new_state.safety.confirm_force_disarm?
     end
 
@@ -599,7 +646,7 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state(%{safety_state: :armed})
       event = %ExRatatui.Event.Key{code: "f", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       refute new_state.safety.confirm_force_disarm?
     end
 
@@ -610,7 +657,7 @@ defmodule BB.TUI.AppTest do
       state = Fixtures.sample_state(%{confirm_force_disarm: true})
       event = %ExRatatui.Event.Key{code: "y", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       refute new_state.safety.confirm_force_disarm?
     end
 
@@ -1603,7 +1650,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "h/left decreases integer parameter" do
@@ -1618,7 +1665,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "h", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "right arrow increases float parameter by 0.1" do
@@ -1636,7 +1683,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "right", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "left arrow decreases float parameter by 0.1" do
@@ -1654,7 +1701,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "left", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "L key increases integer parameter by 10" do
@@ -1669,7 +1716,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "H key decreases integer parameter by 10" do
@@ -1684,7 +1731,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "H", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "L key increases float parameter by 1.0" do
@@ -1702,7 +1749,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "enter toggles boolean parameter" do
@@ -1717,7 +1764,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "enter toggles boolean parameter from false to true" do
@@ -1732,7 +1779,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "enter does nothing for non-boolean parameter" do
@@ -1743,7 +1790,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
 
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
     end
 
     test "parameter adjustment does nothing for atom values" do
@@ -1754,7 +1801,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
     end
 
     test "l/right scales float step to 1% of declared range" do
@@ -1779,7 +1826,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "L scales float step to 10% of declared range" do
@@ -1804,7 +1851,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "l/right clamps float value at upper bound" do
@@ -1828,7 +1875,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "h/left clamps integer value at lower bound" do
@@ -1849,7 +1896,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "H", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "l/right scales integer step to 1% of declared range" do
@@ -1871,7 +1918,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "l/right steps a unit parameter by 1% of its converted range" do
@@ -1905,7 +1952,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "L clamps a unit parameter at a bound declared in another unit" do
@@ -1939,7 +1986,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "unit parameter without bounds steps by the default and stays a unit" do
@@ -1965,7 +2012,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "h", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "l cycles an {:in, values} parameter to the next allowed value" do
@@ -1983,7 +2030,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "h cycles an {:in, values} parameter backwards with wrap-around" do
@@ -2001,7 +2048,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "h", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "enter on a string parameter opens the editor instead of writing" do
@@ -2020,7 +2067,7 @@ defmodule BB.TUI.AppTest do
       state =
         Enum.reduce(["q", "a", "d", "t"], state, fn code, acc ->
           event = %ExRatatui.Event.Key{code: code, kind: "press"}
-          assert {:noreply, next} = App.update({:event, event}, acc)
+          assert {:noreply, next} = drive(acc, {:event, event})
           next
         end)
 
@@ -2033,11 +2080,11 @@ defmodule BB.TUI.AppTest do
       state = editing_state("ab")
 
       backspace = %ExRatatui.Event.Key{code: "backspace", kind: "press"}
-      {:noreply, state} = App.update({:event, backspace}, state)
+      {:noreply, state} = drive(state, {:event, backspace})
       assert state.parameters.editing.buffer == "a"
 
       esc = %ExRatatui.Event.Key{code: "esc", kind: "press"}
-      {:noreply, state} = App.update({:event, esc}, state)
+      {:noreply, state} = drive(state, {:event, esc})
       assert state.parameters.editing == nil
     end
 
@@ -2047,7 +2094,7 @@ defmodule BB.TUI.AppTest do
       state = editing_state("ab")
 
       up = %ExRatatui.Event.Key{code: "up", kind: "press"}
-      assert {:noreply, state} = App.update({:event, up}, state)
+      assert {:noreply, state} = drive(state, {:event, up})
       assert state.parameters.editing.buffer == "ab"
       assert state.parameters.selected == 0
     end
@@ -2060,7 +2107,7 @@ defmodule BB.TUI.AppTest do
       state =
         Enum.reduce(["b", "enter"], state, fn code, acc ->
           event = %ExRatatui.Event.Key{code: code, kind: "press"}
-          {:noreply, next} = App.update({:event, event}, acc)
+          {:noreply, next} = drive(acc, {:event, event})
           next
         end)
 
@@ -2074,7 +2121,7 @@ defmodule BB.TUI.AppTest do
       assert state.parameters.editing.buffer == ":fast"
 
       enter = %ExRatatui.Event.Key{code: "enter", kind: "press"}
-      assert {:noreply, state} = App.update({:event, enter}, state)
+      assert {:noreply, state} = drive(state, {:event, enter})
       assert state.parameters.editing == nil
     end
 
@@ -2088,7 +2135,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert new_state.parameters.tab_selected == 0
       assert new_state.parameters.remote == %{}
     end
@@ -2110,7 +2157,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert new_state.parameters.tab_selected == 1
       assert new_state.parameters.selected == 0
       assert [%{id: "ROLL_P"}] = new_state.parameters.remote.mavlink
@@ -2132,7 +2179,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert new_state.parameters.remote.mavlink == {:error, :nodedown}
     end
 
@@ -2163,7 +2210,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       # Cache reflects the refresh fired after :ok.
       assert [%{value: 0.11}] = new_state.parameters.remote.mavlink
     end
@@ -2186,7 +2233,7 @@ defmodule BB.TUI.AppTest do
         })
 
       event = %ExRatatui.Event.Key{code: "L", kind: "press"}
-      assert {:noreply, _} = App.update({:event, event}, state)
+      assert {:noreply, _} = drive(state, {:event, event})
     end
 
     test "Enter on a bridge tab toggles a boolean remote param" do
@@ -2212,8 +2259,65 @@ defmodule BB.TUI.AppTest do
         })
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert [%{value: false}] = new_state.parameters.remote.mavlink
+    end
+
+    test "a refused parameter write lands in the event log under its path" do
+      Fixtures.stub_bb_modules()
+      Mimic.expect(BB.Parameter, :set, fn _robot, [:count], 2 -> {:error, :read_only} end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameters: [{[:count], 1}],
+          param_selected: 0
+        })
+
+      assert {:noreply, new_state} =
+               drive(state, {:event, %ExRatatui.Event.Key{code: "l", kind: "press"}})
+
+      assert [{_ts, [:param, :count], %{payload: %{error: :read_only}}}] = new_state.events.list
+    end
+
+    test "a refused bridge write lands in the event log under the bridge" do
+      Fixtures.stub_bb_modules()
+
+      Mimic.expect(BB.Parameter, :set_remote, fn _, :mavlink, "PITCH_P", _ ->
+        {:error, :nodedown}
+      end)
+
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 1,
+          remote_parameters: %{mavlink: [%{id: "PITCH_P", value: 0.10, min: 0.0, max: 1.0}]},
+          param_selected: 0
+        })
+
+      assert {:noreply, new_state} =
+               drive(state, {:event, %ExRatatui.Event.Key{code: "l", kind: "press"}})
+
+      assert [{_ts, [:bridge, :mavlink, "PITCH_P"], %{payload: %{error: :nodedown}}}] =
+               new_state.events.list
+    end
+
+    test "cycling to a bridge tab fetches its list off the event loop" do
+      state =
+        Fixtures.sample_state(%{
+          active_panel: :parameters,
+          parameter_tabs: [:local, {:bridge, :mavlink}],
+          parameter_tab_selected: 0
+        })
+
+      event = %ExRatatui.Event.Key{code: "t", kind: "press"}
+
+      assert {:noreply, new_state, commands: [%ExRatatui.Command{kind: :async} = cmd]} =
+               App.update({:event, event}, state)
+
+      assert new_state.parameters.tab_selected == 1
+      assert cmd.mapper.([]) == {:remote_parameters, :mavlink, []}
     end
 
     test "remote set returning {:error, _} leaves the cache untouched" do
@@ -2234,7 +2338,7 @@ defmodule BB.TUI.AppTest do
         })
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert new_state.parameters.remote.mavlink == remote
     end
 
@@ -2251,7 +2355,7 @@ defmodule BB.TUI.AppTest do
         })
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
     end
 
     test "remote Enter is a no-op for a non-boolean remote param" do
@@ -2267,7 +2371,7 @@ defmodule BB.TUI.AppTest do
         })
 
       event = %ExRatatui.Event.Key{code: "enter", kind: "press"}
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
     end
 
     test "t key cycling back to :local does not call list_remote" do
@@ -2282,7 +2386,7 @@ defmodule BB.TUI.AppTest do
       # No Mimic.expect — if list_remote were called the test would fail.
       event = %ExRatatui.Event.Key{code: "t", kind: "press"}
 
-      assert {:noreply, new_state} = App.update({:event, event}, state)
+      assert {:noreply, new_state} = drive(state, {:event, event})
       assert new_state.parameters.tab_selected == 0
     end
 
@@ -2305,7 +2409,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, _new_state} = App.update({:event, event}, state)
+      assert {:noreply, _new_state} = drive(state, {:event, event})
     end
 
     test "parameter adjustment does nothing with empty parameters" do
@@ -2314,7 +2418,7 @@ defmodule BB.TUI.AppTest do
 
       event = %ExRatatui.Event.Key{code: "l", kind: "press"}
 
-      assert {:noreply, ^state} = App.update({:event, event}, state)
+      assert {:noreply, ^state} = drive(state, {:event, event})
     end
 
     test "ignores unknown events" do
@@ -2712,5 +2816,33 @@ defmodule BB.TUI.AppTest do
       category: :default,
       started_at: started_at
     }
+  end
+
+  # Runs `App.update/2` the way the reducer runtime does: each async command
+  # the transition returns is run here, in the test process (so Mimic
+  # expectations apply), a raise or exit is turned into the error the
+  # runtime's async runner reports, and the mapped result is fed back
+  # through `update/2`.
+  defp drive(state, msg) do
+    case App.update(msg, state) do
+      {:noreply, state, opts} ->
+        opts
+        |> Keyword.get(:commands, [])
+        |> Enum.reduce({:noreply, state}, fn
+          %ExRatatui.Command{kind: :async, fun: fun, mapper: mapper}, {:noreply, acc} ->
+            drive(acc, {:info, mapper.(run_async(fun))})
+        end)
+
+      {:noreply, state} ->
+        {:noreply, state}
+    end
+  end
+
+  defp run_async(fun) do
+    fun.()
+  rescue
+    exception -> {:error, {:exception, Exception.message(exception)}}
+  catch
+    :exit, reason -> {:error, {:exit, reason}}
   end
 end

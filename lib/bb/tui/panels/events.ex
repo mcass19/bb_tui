@@ -22,6 +22,9 @@ defmodule BB.TUI.Panels.Events do
   alias ExRatatui.Widgets.List, as: WidgetList
   alias ExRatatui.Widgets.Scrollbar
 
+  # Paths `BB.TUI.App` logs a refusal under, as `%{payload: %{error: reason}}`.
+  @refusal_roots [:actuator, :param, :bridge, :safety]
+
   @doc """
   Renders the events panel as a List widget with formatted event entries.
   Newest events appear first. Scrollable with j/k when focused.
@@ -262,8 +265,10 @@ defmodule BB.TUI.Panels.Events do
   Returns the style for an event's summary, colored by severity when the event
   reports a failure.
 
-  An actuator error takes its color from the reason's `BB.Error.Severity` —
-  yellow for a `:warning` such as a late answer, red otherwise. A failed
+  A refusal of something this dashboard sent — a jog, a parameter or bridge
+  write, an arm or disarm — takes its color from the reason's
+  `BB.Error.Severity`: yellow for a `:warning` such as a late answer, red
+  otherwise. A failed
   command and a `[:safety, :error]` hardware report are red, except a
   command that failed with `:cancelled`, which is how bb reports a
   cancellation. Everything else is white.
@@ -281,8 +286,9 @@ defmodule BB.TUI.Panels.Events do
       BB.TUI.Theme.yellow()
   """
   @spec summary_style(list(), term()) :: Style.t()
-  def summary_style([:actuator | _], %{payload: %{error: reason}}),
-    do: severity_style(Errors.severity(reason))
+  def summary_style([root | _], %{payload: %{error: reason} = payload})
+      when root in @refusal_roots and not is_struct(payload),
+      do: severity_style(Errors.severity(reason))
 
   def summary_style([:command | _], %{payload: %{status: :failed, data: %{reason: :cancelled}}}),
     do: %Style{fg: :white}
@@ -466,6 +472,15 @@ defmodule BB.TUI.Panels.Events do
       iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: :disarmed}})
       "elbow \u{2718} :disarmed"
 
+      iex> BB.TUI.Panels.Events.summarize([:safety, :arm], %{payload: %{error: :in_error}})
+      "arm \u{2718} :in_error"
+
+      iex> BB.TUI.Panels.Events.summarize([:param, :motion, :max_speed], %{payload: %{error: :out_of_range}})
+      "motion.max_speed \u{2718} :out_of_range"
+
+      iex> BB.TUI.Panels.Events.summarize([:bridge, :mavlink, "PITCH_P"], %{payload: %{error: :timeout}})
+      "mavlink.PITCH_P \u{2718} :timeout"
+
       iex> pending = %BB.Error.State.CommandPending{actuator: :elbow, command: Position, timeout_ms: 250}
       iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: pending}})
       "elbow \u{26A0} Actuator :elbow has not answered Position within 250ms. The command is still queued and will most likely be applied"
@@ -511,12 +526,16 @@ defmodule BB.TUI.Panels.Events do
     "#{from} \u{2192} #{to}"
   end
 
-  # A late answer (`BB.Error.State.CommandPending`, severity `:warning`) is not
-  # a refusal — the command is queued and will most likely still be applied —
-  # so it gets a warning mark rather than the cross.
-  def summarize([:actuator | rest], %{payload: %{error: reason}}) do
-    joint = Enum.map_join(rest, ".", &to_string/1)
-    "#{joint} #{severity_mark(Errors.severity(reason))} #{Errors.describe(reason)}"
+  # A refusal of something this dashboard sent, logged by `BB.TUI.App` under
+  # the path the write was aimed at. A late answer
+  # (`BB.Error.State.CommandPending`, severity `:warning`) is not a refusal —
+  # the command is queued and will most likely still be applied — so it gets
+  # a warning mark rather than the cross. The struct guard keeps bb's own
+  # `[:safety, :error]` hardware reports, which carry an `error` field, out.
+  def summarize([root | rest], %{payload: %{error: reason} = payload})
+      when root in @refusal_roots and not is_struct(payload) do
+    target = Enum.map_join(rest, ".", &to_string/1)
+    "#{target} #{severity_mark(Errors.severity(reason))} #{Errors.describe(reason)}"
   end
 
   def summarize([:actuator | rest], %{payload: %{position: position}})
