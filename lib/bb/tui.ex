@@ -167,9 +167,10 @@ defmodule BB.TUI do
       the dashboard has something animating; the runtime diffs the
       result so the timer only runs when needed.
 
-  Long-running command execution is owned by the runtime via
-  `ExRatatui.Command.async/2`, batched with `Command.send_after/2`
-  for the timeout. Both reach the reducer as `{:info, _}` messages.
+  Every call that waits on the robot — command execution and its
+  await, jogs, safety actions, parameter and bridge writes — runs
+  through `ExRatatui.Command.async/2`, and its result reaches the
+  reducer as an `{:info, _}` message.
   Fast, fire-and-forget robot calls (arm / disarm / set_actuator /
   set_parameter / publish) are invoked inline from `update/2`.
 
