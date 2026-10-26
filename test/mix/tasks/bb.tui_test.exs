@@ -78,6 +78,28 @@ defmodule Mix.Tasks.Bb.TuiTest do
       Task.await(task, 1_000)
     end
 
+    test "--extension, repeated, forwards each module" do
+      task =
+        Task.async(fn ->
+          Tui.run([
+            "--robot",
+            "BB.TUI.TestRobot",
+            "--extension",
+            "BB.TUI.Test.Extension",
+            "--extension",
+            "BB.TUI.Test.LaterHints"
+          ])
+        end)
+
+      assert_receive {:app_started, opts}, 1_000
+      assert opts[:extensions] == [BB.TUI.Test.Extension, BB.TUI.Test.LaterHints]
+
+      assert_receive {:app_pid, pid}
+      send(pid, :stop)
+
+      Task.await(task, 1_000)
+    end
+
     test "--ssh sets transport: :ssh with default port and auto_host_key" do
       task =
         Task.async(fn ->

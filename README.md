@@ -22,6 +22,7 @@ Terminal-based dashboard for [Beam Bots](https://github.com/beam-bots) robots. B
 - **Keyboard-driven navigation** — `[`/`]` to switch between the Control Panel and Visualization tabs, Tab to cycle panels, number keys to jump, vim-style `j`/`k`/`h`/`l` within panels
 - **Four transports** — local terminal, SSH (multiple isolated operator sessions), Erlang distribution (attach a thin renderer to a TUI running on the robot node), and the browser (`use BB.TUI.Live` in a Phoenix LiveView, via the optional `phoenix_ex_ratatui` dependency)
 - **Runtime inspection** — snapshot, trace, and inject events into a running TUI via `ExRatatui.Runtime`
+- **Robot and kit extensions** — a `use BB.TUI.Extension` module, passed as `extensions:`, declares hold-to-drive, panels of live readouts and plots, keys bound to commands, and per-state hints for a particular robot; bb_tui renders them with its own widgets and never names the kit. See the [Extensions guide](guides/extensions.md)
 - **Extensible rendering** — register `BB.TUI.Renderer` modules per PubSub path prefix (`:renderers`) to render a consumer's own payloads in the event log and status bar, without bb_tui depending on their structs
 - **Mix task** — `mix bb.tui --robot MyApp.Robot` for standalone launch
 - **Headless test suite** — full coverage using Mimic and ExRatatui's test backend
@@ -155,6 +156,7 @@ Exercising the SSH, browser, and Erlang-distribution transports against the simu
 | Guide | Description |
 |---|---|
 | [Transports](guides/transports.md) | Serve the dashboard over SSH or in the browser, attach over Erlang distribution, inspect a running session, and test each transport locally |
+| [Extensions](guides/extensions.md) | Add a robot's drive, panels, key binds and hints with a `BB.TUI.Extension`, and wire it into every transport |
 | [Keybindings](guides/keybindings.md) | Full per-panel key reference, including command argument editing, parameter stepping, and inline parameter editing |
 | [Telemetry](guides/telemetry.md) | `:telemetry` events for mount, input, dispatch, and frames — logging and `Telemetry.Metrics` |
 

@@ -23,7 +23,8 @@ defmodule Dev.Application do
       },
       # After the robot: registers the fixed-set `gait.pattern` parameter.
       {Dev.GaitSelector, robot: Dev.TestRobot},
-      {ExRatatui.Distributed.Listener, mod: BB.TUI.App, app_opts: [robot: Dev.TestRobot]},
+      {ExRatatui.Distributed.Listener,
+       mod: BB.TUI.App, app_opts: [robot: Dev.TestRobot, extensions: [Dev.TUI]]},
       # Browser dashboard at http://localhost:4040 (see Dev.Web.Endpoint).
       Dev.Web.Endpoint
     ]

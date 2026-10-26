@@ -55,7 +55,7 @@ defmodule BB.TUI do
   monitor the same robot simultaneously.
 
   For Nerves devices already running `nerves_ssh`, plug into the existing
-  daemon as a subsystem instead — see `subsystem/1`.
+  daemon as a subsystem instead — see `subsystem/2`.
 
   See `ExRatatui.SSH.Daemon` for the full list of SSH options.
 
@@ -231,6 +231,9 @@ defmodule BB.TUI do
       registered prefix (longest prefix wins) is rendered by the consumer's
       module — the dashboard never inspects the payload itself. Default `%{}`
       (no renderers). See `BB.TUI.Renderer`.
+    * `:extensions` — `BB.TUI.Extension` modules adding drive, panels, key
+      binds and hints for this robot (default `[]`). At most one may declare
+      a drive. See the [Extensions guide](extensions.md).
     * `:test_mode` — `{width, height}` tuple for headless testing
       (optional).
 
@@ -238,6 +241,9 @@ defmodule BB.TUI do
 
       # Local
       BB.TUI.run(MyApp.Robot)
+
+      # With a robot's extension
+      BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
 
       # Remote — render here, data from there
       Node.connect(:"robot@192.168.1.42")
@@ -278,6 +284,7 @@ defmodule BB.TUI do
     * `:subscribe_paths` — PubSub paths the dashboard subscribes to,
       overriding the default control-plane set (see `run/2`).
     * `:renderers` — consumer `BB.TUI.Renderer` map (see `run/2`).
+    * `:extensions` — `BB.TUI.Extension` modules (see `run/2`).
     * `:test_mode` — `{width, height}` tuple for headless testing
       (optional).
 
@@ -327,6 +334,8 @@ defmodule BB.TUI do
       forwarded to each client's `mount/1` (see `run/2`).
     * `:renderers` — consumer `BB.TUI.Renderer` map, forwarded to each
       client's `mount/1` (see `run/2`).
+    * `:extensions` — `BB.TUI.Extension` modules, forwarded to each
+      client's `mount/1` (see `run/2`).
 
   All other OTP `:ssh.daemon/2` options are forwarded as-is.
 
@@ -365,6 +374,9 @@ defmodule BB.TUI do
   `:ssh.daemon/2`) and the dashboard should be added as an SSH
   subsystem instead of spinning up a separate daemon.
 
+  `opts` reach every session's `mount/1`, as `start_ssh/2`'s app options
+  do: `:node`, `:subscribe_paths`, `:renderers` and `:extensions`.
+
   ## Nerves example
 
       # config/runtime.exs
@@ -374,7 +386,7 @@ defmodule BB.TUI do
         config :nerves_ssh,
           subsystems: [
             :ssh_sftpd.subsystem_spec(cwd: ~c"/"),
-            BB.TUI.subsystem(MyApp.Robot)
+            BB.TUI.subsystem(MyApp.Robot, extensions: [MyApp.TUI])
           ]
       end
 
@@ -397,12 +409,15 @@ defmodule BB.TUI do
       iex> Keyword.fetch!(args, :subsystem)
       true
 
+      iex> {_name, {_mod, args}} = BB.TUI.subsystem(SomeRobot, extensions: [SomeRobot.TUI])
+      iex> Keyword.fetch!(args, :app_opts)
+      [robot: SomeRobot, extensions: [SomeRobot.TUI]]
+
   """
-  @spec subsystem(module()) :: {charlist(), {module(), keyword()}}
-  def subsystem(robot) when is_atom(robot) do
+  @spec subsystem(module(), keyword()) :: {charlist(), {module(), keyword()}}
+  def subsystem(robot, opts \\ []) when is_atom(robot) and is_list(opts) do
     {name, {mod, args}} = ExRatatui.SSH.subsystem(BB.TUI.App)
-    args = Keyword.update(args, :app_opts, [robot: robot], &Keyword.put(&1, :robot, robot))
-    {name, {mod, args}}
+    {name, {mod, Keyword.put(args, :app_opts, Keyword.put(opts, :robot, robot))}}
   end
 
   @doc """
@@ -436,7 +451,7 @@ defmodule BB.TUI do
     to: ExRatatui.Telemetry,
     as: :detach_default_logger
 
-  # Moves :robot, :node, :subscribe_paths and :renderers into :app_opts so they
+  # Moves :robot, :node, :subscribe_paths, :renderers and :extensions into :app_opts so they
   # reach each SSH client's mount/1 via the daemon. The daemon passes :app_opts
   # to every spawned channel's Server, which forwards them to mount/1. App-level
   # options must travel through this channel rather than staying at the top
@@ -445,6 +460,7 @@ defmodule BB.TUI do
     {node, opts} = Keyword.pop(opts, :node)
     {subscribe_paths, opts} = Keyword.pop(opts, :subscribe_paths)
     {renderers, opts} = Keyword.pop(opts, :renderers)
+    {extensions, opts} = Keyword.pop(opts, :extensions)
 
     app_opts =
       Keyword.get(opts, :app_opts, [])
@@ -452,6 +468,7 @@ defmodule BB.TUI do
       |> maybe_put(:node, node)
       |> maybe_put(:subscribe_paths, subscribe_paths)
       |> maybe_put(:renderers, renderers)
+      |> maybe_put(:extensions, extensions)
 
     Keyword.put(opts, :app_opts, app_opts)
   end

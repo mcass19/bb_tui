@@ -25,6 +25,7 @@ defmodule BB.TUI.State do
   alias BB.Message.Actuator.Command
   alias BB.TUI.State.Commands
   alias BB.TUI.State.Events
+  alias BB.TUI.State.Extensions
   alias BB.TUI.State.Joints
   alias BB.TUI.State.Parameters
   alias BB.TUI.State.Power
@@ -47,6 +48,7 @@ defmodule BB.TUI.State do
     ui: %UI{},
     events: %Events{},
     joints: %Joints{},
+    extensions: %Extensions{},
     safety: %Safety{},
     power: %Power{},
     renderers: %{},
@@ -65,6 +67,7 @@ defmodule BB.TUI.State do
           ui: UI.t(),
           events: Events.t(),
           joints: Joints.t(),
+          extensions: Extensions.t(),
           safety: Safety.t(),
           power: Power.t(),
           renderers: %{optional([atom()]) => module()},

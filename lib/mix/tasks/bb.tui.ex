@@ -23,6 +23,8 @@ defmodule Mix.Tasks.Bb.Tui do
       dashboard session.
     * `--port` — (optional) TCP port for the SSH daemon (default 2222).
       Ignored unless `--ssh` is set.
+    * `--extension` — (optional, repeatable) A `BB.TUI.Extension` module
+      to load, e.g. `--extension MyApp.TUI`.
 
   ## Examples
 
@@ -32,6 +34,9 @@ defmodule Mix.Tasks.Bb.Tui do
       # Remote — render here, data from there
       $ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \\
           --robot MyApp.Robot --node robot@192.168.1.42
+
+      # With the robot's extension
+      $ mix bb.tui --robot MyApp.Robot --extension MyApp.TUI
 
       # SSH daemon — accessible from any SSH client
       $ mix bb.tui --robot MyApp.Robot --ssh
@@ -88,7 +93,13 @@ defmodule Mix.Tasks.Bb.Tui do
   def run(args) do
     {opts, _rest} =
       OptionParser.parse!(args,
-        strict: [robot: :string, node: :string, ssh: :boolean, port: :integer]
+        strict: [
+          robot: :string,
+          node: :string,
+          ssh: :boolean,
+          port: :integer,
+          extension: :keep
+        ]
       )
 
     robot =
@@ -104,6 +115,12 @@ defmodule Mix.Tasks.Bb.Tui do
       case Keyword.get(opts, :node) do
         nil -> []
         node_str -> [node: String.to_atom(node_str)]
+      end
+
+    tui_opts =
+      case Keyword.get_values(opts, :extension) do
+        [] -> tui_opts
+        names -> Keyword.put(tui_opts, :extensions, Enum.map(names, &Module.concat([&1])))
       end
 
     tui_opts =

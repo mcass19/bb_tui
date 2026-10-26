@@ -55,3 +55,23 @@ Readouts, plots and drive scales read their values from sources:
 | `param([:yaw, :turn_rate])` | a robot parameter's current value |
 
 The full option reference, generated from the DSL itself, is [the Extension DSL](DSL-BB.TUI.Extension.md).
+
+## Wiring it in
+
+Every way of starting the dashboard takes the same `:extensions` list:
+
+| Transport | Where the option goes |
+|---|---|
+| IEx / scripts | `BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])` |
+| Supervised | `{BB.TUI, robot: MyApp.Robot, extensions: [MyApp.TUI]}` |
+| SSH daemon | `BB.TUI.start_ssh(MyApp.Robot, port: 2222, extensions: [MyApp.TUI])` |
+| `nerves_ssh` subsystem | `BB.TUI.subsystem(MyApp.Robot, extensions: [MyApp.TUI])` |
+| Browser | `use BB.TUI.Live, robot: MyApp.Robot, extensions: [MyApp.TUI]` |
+| Distributed attach | `{ExRatatui.Distributed.Listener, mod: BB.TUI.App, app_opts: [robot: MyApp.Robot, extensions: [MyApp.TUI]]}` |
+| Mix task | `mix bb.tui --robot MyApp.Robot --extension MyApp.TUI` |
+
+Several extensions can be combined, a kit's and a robot's say: their panels, binds and hints are merged in the order given. Only one may declare a `drive`, and two can't bind the same key or name the same panel; the session refuses to start rather than guess.
+
+The dashboard subscribes to the topics the extensions' `topic/2` sources read, unless a subscription already covers them (`[:sensor]` covers `[:sensor, :imu]`).
+
+A drive's functions are checked when the session starts, where they will run: under `node:`, on the robot's node. A module that only exists on the robot passes the compile-time check and is caught there instead.

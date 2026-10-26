@@ -6,5 +6,5 @@ defmodule Dev.Web.RobotLive do
   clients.
   """
 
-  use BB.TUI.Live, robot: Dev.TestRobot
+  use BB.TUI.Live, robot: Dev.TestRobot, extensions: [Dev.TUI]
 end

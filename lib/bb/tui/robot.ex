@@ -210,6 +210,19 @@ defmodule BB.TUI.Robot do
   end
 
   @doc """
+  Whether `module.function/arity` exists where the robot runs: here, or on
+  `node`, loading the module first.
+  """
+  @spec exported?(module(), atom(), arity(), maybe_node()) :: boolean()
+  def exported?(module, function, arity, nil),
+    do: Code.ensure_loaded?(module) and function_exported?(module, function, arity)
+
+  def exported?(module, function, arity, node) do
+    Rpc.call(node, Code, :ensure_loaded?, [module]) == true and
+      Rpc.call(node, :erlang, :function_exported, [module, function, arity]) == true
+  end
+
+  @doc """
   Returns the command payloads each actuator's driver accepts, by actuator name.
 
   bb has no way to ask a running actuator, so this walks the robot's topology

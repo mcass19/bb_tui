@@ -75,7 +75,7 @@ if Application.spec(:nerves_ssh) do
   config :nerves_ssh,
     subsystems: [
       :ssh_sftpd.subsystem_spec(cwd: ~c"/"),
-      BB.TUI.subsystem(MyApp.Robot)
+      BB.TUI.subsystem(MyApp.Robot, extensions: [MyApp.TUI])
     ]
 end
 ```

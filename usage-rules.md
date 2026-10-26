@@ -120,7 +120,46 @@ mix igniter.install bb_tui --robot MyApp.Robot --web
 | `:node` | `nil` | Connected remote node. All robot data is fetched from it via `:rpc.call/4` and PubSub is relayed back |
 | `:subscribe_paths` | control-plane set | PubSub paths to subscribe to. Narrow it (`[[:state_machine], [:command]]`) to avoid a high-rate sensor firehose |
 | `:renderers` | `%{}` | `%{path_prefix => module}` map of `BB.TUI.Renderer` implementations |
+| `:extensions` | `[]` | `BB.TUI.Extension` modules: drive, panels, key binds, hints. At most one may declare a drive |
 | `:test_mode` | `nil` | `{width, height}` for headless testing |
+
+## Extending the dashboard for a robot
+
+Robot- or kit-specific UI goes in a separate `use BB.TUI.Extension` module,
+never in the robot module and never as a fork of bb_tui:
+
+```elixir
+defmodule MyApp.TUI do
+  use BB.TUI.Extension
+
+  drive do
+    publish {MyKit.Drive, :command}   # called as command(robot, throttle, turn)
+    stop {MyKit.Drive, :stop}         # called as stop(robot)
+  end
+
+  panels do
+    panel :balance do
+      readout "lean", joint(:lean), unit: :degree, decimals: 1
+      plot "lean vs target", [joint(:lean), controller(:balancer, :target)]
+    end
+  end
+
+  keys do
+    bind "s", command: :stand
+  end
+end
+
+BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
+```
+
+- Pass it as `extensions:` everywhere: `run/2`, `start/2`, `start_ssh/2`,
+  `subsystem/2`, `use BB.TUI.Live`, a distributed listener's `app_opts`,
+  `mix bb.tui --extension`.
+- Sources are `joint/1`, `controller/2` (a field of the controller's
+  `:inspect` state), `topic/2` and `param/1`. There is no `inspect/2`.
+- `bind` can't take bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`);
+  the compiler rejects it.
+- Only one extension per session may declare `drive`.
 
 ## Rendering custom payloads
 
