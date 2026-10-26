@@ -61,8 +61,8 @@ defmodule BB.TUI.MixProject do
 
   defp deps do
     [
-      {:bb, bb_dep("~> 0.31")},
-      {:ex_ratatui, "~> 0.17"},
+      {:bb, bb_dep("~> 0.33")},
+      {:ex_ratatui, "~> 0.18"},
 
       # Optional
       {:phoenix_ex_ratatui, "~> 0.3", optional: true},

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `bb` dependency is now `~> 0.33`** and **`ex_ratatui` is now `~> 0.18`.** bb 0.31.1–0.33 add the running-command registry and the structured actuator errors the entries below build on. ex_ratatui 0.18 ships a native NIF for OTP 29, resizes pixel images with a bicubic filter (sharper text in the browser's Visualization tab), and keeps `Viewport3D` correctly sized after a terminal font change.
+
 ## [0.7.1] - 2026-10-05
 
 ### Changed
