@@ -14,8 +14,10 @@ defmodule Dev.TrajectoryHandler do
   joints panel and the 3D view show the arm moving *through* the waypoints
   rather than snapping between targets.
 
-  The dev robot declares no actuators — like `Dev.MoveHandler`, the burst of
-  `JointState` messages stands in for a driver following the trajectory.
+  `BB.Sim.Actuator` only follows position commands, so the trajectories are
+  published for observers rather than sent to the `shoulder` and `elbow`
+  actuators, and the burst of `JointState` messages stands in for a driver
+  following them.
   Waypoints carry no `velocity` or `acceleration`, which `bb` 0.29 made
   optional: pace is the driver's business, and here that is the interpolation
   below.

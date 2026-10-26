@@ -129,6 +129,7 @@ defmodule BB.TUI.App do
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Robot.Joint
+  alias BB.TUI.Errors
   alias BB.TUI.Panels
   alias BB.TUI.Robot
   alias BB.TUI.State
@@ -879,15 +880,17 @@ defmodule BB.TUI.App do
     {:noreply, state, [render?: false] ++ commands}
   end
 
-  # Anything else lands in the event log, and the target keeps the asked-for
-  # value: a refusal (`NotArmed`, `StaleEpoch`, …), an actuator that isn't
-  # running, a late answer (`CommandPending`, a warning — the command is queued
-  # and will most likely be applied), or the async runner's trapped exit from
-  # an actuator that crashed while handling the command.
+  # Anything else lands in the event log: a refusal (`NotArmed`, `StaleEpoch`,
+  # …), an actuator that isn't running, a late answer (`CommandPending`, a
+  # warning — the command is queued and will most likely be applied), or the
+  # async runner's trapped exit from an actuator that crashed while handling
+  # the command. Only a late answer keeps the joint's target: the others mean
+  # the joint isn't going there, so the next jog steps from where it is.
   def update({:info, {:actuator_result, actuator, {:error, reason}}}, state) do
     {state, commands} =
       state
       |> State.append_event([:actuator, actuator], %{payload: %{error: reason}})
+      |> forget_refused_target(actuator, reason)
       |> continue_jog(actuator)
 
     {:noreply, state, commands}
@@ -1053,13 +1056,14 @@ defmodule BB.TUI.App do
       %{position: pos} when not is_number(pos) ->
         {:noreply, state}
 
-      %{position: pos, joint: joint} ->
+      %{joint: joint} = joint_data ->
         step = State.joint_step(joint) * multiplier
+        base = State.jog_base(joint_data)
 
         new_pos =
           case direction do
-            :increase -> pos + step
-            :decrease -> pos - step
+            :increase -> base + step
+            :decrease -> base - step
           end
           |> State.clamp_position(joint)
 
@@ -1074,6 +1078,23 @@ defmodule BB.TUI.App do
         end
     end
   end
+
+  defp forget_refused_target(state, actuator, reason) do
+    joint = find_joint_for_actuator(state, actuator)
+
+    if joint && Errors.severity(reason) != :warning,
+      do: State.set_joint_target(state, joint, nil),
+      else: state
+  end
+
+  defp find_joint_for_actuator(%State{robot_struct: %{actuators: actuators}}, actuator) do
+    case Map.get(actuators, actuator) do
+      %{joint: joint} -> joint
+      _ -> nil
+    end
+  end
+
+  defp find_joint_for_actuator(_state, _actuator), do: nil
 
   # One jog in flight per actuator. An actuator applies every command it is
   # sent, in order — one answered late (`CommandPending`) is still queued, not

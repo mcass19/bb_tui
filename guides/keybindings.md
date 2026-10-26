@@ -79,6 +79,8 @@ Enum-typed args (`{:in, [...]}` in the Spark schema) render as `‹ value ›` c
 | `L` | Increase position (10% step) |
 | `H` | Decrease position (10% step) |
 
+Each step moves the joint's commanded target — the hollow marker on its position bar — so holding a key keeps stepping ahead of a joint that is still travelling. The marker clears once the joint arrives, or when a jog is refused or the robot is disarmed, and the next step starts from where the joint is. A joint with an actuator has at most one jog in flight; one without (marked `SIM`) is moved by a simulated `JointState`.
+
 ## Parameters panel
 
 | Key | Action |
