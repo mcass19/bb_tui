@@ -2787,11 +2787,10 @@ defmodule BB.TUI.AppTest do
                App.subscriptions(state)
     end
 
-    test "throbber tick subscription while a command is executing" do
-      state = Fixtures.sample_state(%{safety_state: :armed, executing_command: :running})
-
-      assert [%ExRatatui.Subscription{id: :throbber, kind: :interval, interval_ms: 100}] =
-               App.subscriptions(state)
+    # A running command's badge is static, so it needs no redraw ticks.
+    test "no throbber tick while a command is executing" do
+      state = Fixtures.sample_state(%{safety_state: :armed, executing_command: :home})
+      assert App.subscriptions(state) == []
     end
 
     test ":throbber_tick info increments the throbber step" do

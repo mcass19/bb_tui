@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Each actuator has at most one jog in flight.** Every key autorepeat used to send its own `set_position`, and an actuator applies every command it receives in order, so one that fell behind kept working through stale targets after the key was released. Targets that arrive while a jog is in flight are now parked, latest wins, and sent once it is answered; a parked target is dropped if the robot has been disarmed meanwhile.
 
+- **A running command no longer redraws the dashboard ten times a second.** The 100ms spinner tick ran for as long as a command this dashboard started was executing, though nothing on screen animates for it — the commands panel's `⏳ Running` badge is static. It now runs only for the safety panel's disarming spinner.
+
 - **Holding a key on a parameter logs where it ended up.** The event log's debounce dropped repeats of a parameter change within a second, so holding `l` logged the first step and hid the rest. A repeat now replaces its earlier row.
 
 ### Fixed
