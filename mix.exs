@@ -31,7 +31,13 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.InstantCommand,
           BB.TUI.Test.SlowCommand,
           BB.TUI.Test.Servo,
-          BB.TUI.Test.PeerHelper
+          BB.TUI.Test.PeerHelper,
+          # extension fixtures, and the DSL builder modules Spark generates
+          # (they run at compile time)
+          BB.TUI.Test.Drive,
+          BB.TUI.Test.Extension,
+          BB.TUI.Test.EmptyExtension,
+          ~r/^BB\.TUI\.Extension\.Dsl\./
         ]
       ],
       dialyzer: [
@@ -70,6 +76,7 @@ defmodule BB.TUI.MixProject do
     [
       {:bb, bb_dep("~> 0.33")},
       {:ex_ratatui, "~> 0.18"},
+      {:spark, "~> 2.7"},
 
       # Optional
       {:phoenix_ex_ratatui, "~> 0.3", optional: true},
@@ -137,12 +144,15 @@ defmodule BB.TUI.MixProject do
         "README.md": [title: "Overview"],
         "guides/transports.md": [title: "Transports"],
         "guides/keybindings.md": [title: "Keybindings"],
+        "guides/extensions.md": [title: "Extensions"],
+        "documentation/dsls/DSL-BB.TUI.Extension.md": [title: "Extension DSL"],
         "guides/telemetry.md": [title: "Telemetry"],
         "CONTRIBUTING.md": [title: "Contributing"],
         "CHANGELOG.md": [title: "Changelog"]
       ],
       groups_for_extras: [
-        Guides: Path.wildcard("guides/*.md")
+        Guides: Path.wildcard("guides/*.md"),
+        Reference: ["documentation/dsls/DSL-BB.TUI.Extension.md"]
       ],
       groups_for_modules: [
         Core: [
@@ -181,6 +191,19 @@ defmodule BB.TUI.MixProject do
         Visualization: [
           BB.TUI.Panels.Visualization,
           BB.TUI.Viz.RobotScene
+        ],
+        Extensions: [
+          BB.TUI.Extension,
+          BB.TUI.Extension.Dsl,
+          BB.TUI.Extension.Info,
+          BB.TUI.Extension.Source,
+          BB.TUI.Extension.Panel,
+          BB.TUI.Extension.Readout,
+          BB.TUI.Extension.Plot,
+          BB.TUI.Extension.Bind,
+          BB.TUI.Extension.Hint,
+          BB.TUI.Extension.Verifiers.Drive,
+          BB.TUI.Extension.Verifiers.Keys
         ],
         Robot: [
           BB.TUI.Robot,

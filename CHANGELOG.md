@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Extensions: `use BB.TUI.Extension`.** A robot or kit declares, in a module of its own, what the dashboard should add for it: a hold-to-drive `drive` (the `publish`/`stop` functions bb_tui calls, scales, rate), `panels` of `readout`s and `plot`s fed by `joint/1`, `controller/2`, `topic/2` and `param/1` sources, `keys` binding a key to a robot command, and per-state `hints`. It is a Spark DSL: binds on bb_tui's own keys and drive functions with the wrong arity fail at compile time, `BB.TUI.Extension.Info` reads the declarations back, and the new [Extensions](guides/extensions.md) guide and generated [Extension DSL](documentation/dsls/DSL-BB.TUI.Extension.md) reference cover it. `spark` is now a direct dependency. Formatter users get the DSL without parens through `import_deps: [:bb_tui]`.
+
 ### Fixed
 
 - **Jogging no longer fakes sensor readings on real hardware.** A joint without an actuator was jogged by publishing a synthetic `JointState` on `[:sensor, :simulated]`, whatever the robot was running on. On a balancing robot that joint is `lean`, measured by the IMU: `h`/`l` published a made-up angle next to the real one. The robot's simulation mode is now read on mount; outside simulation such joints are read-only, lose their `SIM` tag, and the status bar says `read-only: no actuator` in place of the jog keys. In simulation nothing changes. `bb_liveview` still jogs them on hardware.

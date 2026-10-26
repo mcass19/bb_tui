@@ -54,6 +54,10 @@ jobs:
       - run: mix credo --strict
         if: ${{ matrix.lint }}
 
+      # The Extension DSL reference is generated; fail if it's stale.
+      - run: mix spark.cheat_sheets --extensions BB.TUI.Extension.Dsl --check
+        if: ${{ matrix.lint }}
+
       - run: mix compile --warnings-as-errors
 
       - run: mix xref graph --format cycles --fail-above 0

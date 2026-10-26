@@ -63,6 +63,7 @@ Before submitting a PR, make sure the full check suite passes (this is what CI r
 mix format --check-formatted
 mix deps.unlock --check-unused
 mix credo --strict
+mix spark.cheat_sheets --extensions BB.TUI.Extension.Dsl --check
 mix compile --warnings-as-errors
 mix xref graph --format cycles --fail-above 0
 mix dialyzer
