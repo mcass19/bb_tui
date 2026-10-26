@@ -470,6 +470,23 @@ defmodule BB.TUI.StateTest do
     end
   end
 
+  describe "update_safety/3 and joint targets" do
+    test "leaving the armed states clears every joint's target" do
+      entries = %{
+        elbow: %{joint: %{}, position: 0.0, target: 0.5},
+        wrist: %{joint: %{}, position: 0.0, target: nil}
+      }
+
+      state = %State{joints: %State.Joints{entries: entries}}
+
+      assert State.update_safety(state, :disarming, :disarming).joints.entries.elbow.target == 0.5
+
+      disarmed = State.update_safety(state, :disarmed, :disarmed)
+      assert disarmed.joints.entries.elbow.target == nil
+      assert disarmed.joints.entries.wrist == entries.wrist
+    end
+  end
+
   describe "scroll_down/1 and scroll_up/1" do
     test "scrolls within bounds" do
       events = Enum.map(1..10, &{DateTime.utc_now(), [:test], %{i: &1}})

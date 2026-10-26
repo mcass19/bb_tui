@@ -420,7 +420,21 @@ defmodule BB.TUI.State do
   """
   @spec update_safety(t(), atom(), atom()) :: t()
   def update_safety(%__MODULE__{} = state, safety_state, runtime_state) do
-    %{state | safety: %{state.safety | state: safety_state, runtime: runtime_state}}
+    state = %{state | safety: %{state.safety | state: safety_state, runtime: runtime_state}}
+
+    # A disarm drops whatever the joints were travelling towards, so a jog
+    # after re-arming starts from where they really are.
+    if safety_state in [:armed, :disarming], do: state, else: clear_joint_targets(state)
+  end
+
+  defp clear_joint_targets(%__MODULE__{joints: %{entries: entries}} = state) do
+    entries =
+      Map.new(entries, fn
+        {name, %{target: target} = data} when target != nil -> {name, %{data | target: nil}}
+        entry -> entry
+      end)
+
+    put_in(state.joints.entries, entries)
   end
 
   @doc """
@@ -430,6 +444,10 @@ defmodule BB.TUI.State do
   are silently ignored. Values are stored verbatim — a float for single-DoF
   joints, a `BB.Math.Transform2D` for planar, a `BB.Math.Transform` for
   floating.
+
+  A joint that reaches its commanded target — within half a jog step — has
+  the target cleared, so the panel's target marker goes away and the next jog
+  steps from the measured position again (see `jog_base/1`).
 
   ## Examples
 
@@ -442,19 +460,59 @@ defmodule BB.TUI.State do
       iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
       iex> BB.TUI.State.update_configurations(state, %{base: BB.Math.Transform2D.new(1.0, 2.0, 0.0)}).joints.entries.base.position
       %BB.Math.Transform2D{x: 1.0, y: 2.0, theta: 0.0}
+
+      iex> joint = %{limits: %{lower: -1.0, upper: 1.0}}
+      iex> entries = %{elbow: %{joint: joint, position: 0.0, target: 0.5}}
+      iex> state = %BB.TUI.State{joints: %BB.TUI.State.Joints{entries: entries}}
+      iex> BB.TUI.State.update_configurations(state, %{elbow: 0.3}).joints.entries.elbow.target
+      0.5
+      iex> BB.TUI.State.update_configurations(state, %{elbow: 0.495}).joints.entries.elbow.target
+      nil
   """
   @spec update_configurations(t(), %{atom() => float() | struct()}) :: t()
   def update_configurations(%__MODULE__{joints: %{entries: entries}} = state, new_configurations) do
     updated =
       Map.new(entries, fn {name, joint_data} ->
         case Map.fetch(new_configurations, name) do
-          {:ok, configuration} -> {name, %{joint_data | position: configuration}}
+          {:ok, configuration} -> {name, settle_target(%{joint_data | position: configuration})}
           :error -> {name, joint_data}
         end
       end)
 
     %{state | joints: %{state.joints | entries: updated}}
   end
+
+  defp settle_target(%{target: target, position: position, joint: joint} = joint_data)
+       when is_number(target) and is_number(position) do
+    if abs(position - target) <= joint_step(joint) / 2,
+      do: %{joint_data | target: nil},
+      else: joint_data
+  end
+
+  defp settle_target(joint_data), do: joint_data
+
+  @doc """
+  Returns the position a jog steps from: the joint's commanded target while
+  it is still travelling towards one, otherwise its measured position.
+
+  Stepping from the measured position alone loses every keypress made while
+  the joint is moving — under key autorepeat each one re-sends the same
+  target, so holding a key moves one step.
+
+  ## Examples
+
+      iex> BB.TUI.State.jog_base(%{position: 0.1, target: 0.4})
+      0.4
+
+      iex> BB.TUI.State.jog_base(%{position: 0.1, target: nil})
+      0.1
+
+      iex> BB.TUI.State.jog_base(%{position: 0.1})
+      0.1
+  """
+  @spec jog_base(map()) :: number() | term()
+  def jog_base(%{target: target}) when is_number(target), do: target
+  def jog_base(%{position: position}), do: position
 
   @doc """
   Records the latest battery or power telemetry from a sensor payload.

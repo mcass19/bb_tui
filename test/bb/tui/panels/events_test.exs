@@ -222,7 +222,7 @@ defmodule BB.TUI.Panels.EventsTest do
       msg = %{payload: %{waypoints: trajectory_waypoints(), repeat: 5}}
 
       assert Events.summarize([:actuator, :arm, :shoulder], msg) ==
-               "arm.shoulder \u{2190} trajectory 3 waypoints over 400ms \u{00D7}5"
+               "shoulder \u{2190} trajectory 3 waypoints over 400ms \u{00D7}5"
     end
 
     test "summarizes a trajectory whose repeat count is absent" do
@@ -271,6 +271,51 @@ defmodule BB.TUI.Panels.EventsTest do
 
       refute summary =~ "\u{2718}"
       assert summary =~ "HardwareError"
+    end
+
+    test "names an actuator by its last path segment, not its topology path" do
+      path = [:actuator, :base_link, :elbow, :elbow_servo]
+
+      assert Events.summarize(path, %{
+               payload: %BB.Message.Actuator.Command.Velocity{velocity: 0.5}
+             }) ==
+               "elbow_servo \u{2190} velocity 0.500"
+
+      assert Events.summarize(path, %{payload: %BB.Message.Actuator.Command.Effort{effort: 1.2}}) ==
+               "elbow_servo \u{2190} effort 1.200"
+
+      assert Events.summarize(path, %{
+               payload: %BB.Message.Actuator.Command.Stop{mode: :decelerate}
+             }) ==
+               "elbow_servo \u{2190} stop (decelerate)"
+
+      assert Events.summarize(path, %{payload: %BB.Message.Actuator.Command.Hold{}}) ==
+               "elbow_servo \u{2190} hold"
+
+      end_motion = %BB.Message.Actuator.EndMotion{position: 0.5, reason: :completed}
+
+      assert Events.summarize(path, %{payload: end_motion}) ==
+               "elbow_servo stopped at 0.500 (completed)"
+
+      unknown = %BB.Message.Actuator.EndMotion{position: nil, reason: :stopped}
+
+      assert Events.summarize(path, %{payload: unknown}) ==
+               "elbow_servo stopped at nil (stopped)"
+    end
+
+    test "shortens actuator and sensor topology paths in the row" do
+      ts = ~U[2026-01-15 18:23:12.000Z]
+      motion = %BB.Message.Actuator.BeginMotion{initial_position: 0.0, target_position: 0.5}
+
+      assert Events.format_event(
+               {ts, [:actuator, :base_link, :elbow, :elbow_servo], %{payload: motion}}
+             ) =~
+               "actuator.elbow_servo"
+
+      assert Events.format_event(
+               {ts, [:sensor, :base_link, :elbow, :elbow_position],
+                %{payload: %{names: [:elbow], positions: [0.5]}}}
+             ) =~ "sensor.elbow_position "
     end
 
     test "falls back to inspect for unknown payloads" do

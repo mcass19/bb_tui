@@ -12,6 +12,12 @@ defmodule BB.TUI.Panels.Events do
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Math.Vec3
+  alias BB.Message.Actuator.BeginMotion
+  alias BB.Message.Actuator.Command.Effort
+  alias BB.Message.Actuator.Command.Hold
+  alias BB.Message.Actuator.Command.Stop
+  alias BB.Message.Actuator.Command.Velocity
+  alias BB.Message.Actuator.EndMotion
   alias BB.TUI.Errors
   alias BB.TUI.State
   alias BB.TUI.Theme
@@ -441,11 +447,21 @@ defmodule BB.TUI.Panels.Events do
   # bb's command pubsub paths look like `[:command, :move, #Reference<…>]`.
   # The execution_id reference is internal correlation and doesn't render
   # via String.Chars, so drop reference segments and stringify the rest.
+  #
+  # Actuators and sensors publish under their full topology path
+  # (`[:actuator, :base_link, :waist, …, :elbow, :elbow_servo]`), which would
+  # push the summary off the row. Their names are unique within a robot, so
+  # the root and the name say everything.
+  defp format_path([root | [_, _ | _] = rest]) when root in [:actuator, :sensor],
+    do: format_path([root, List.last(rest)])
+
   defp format_path(path) do
     path
     |> Enum.reject(&is_reference/1)
     |> Enum.map_join(".", &to_string/1)
   end
+
+  defp component_name(rest), do: rest |> List.last() |> to_string()
 
   defp format_goal(goal) when map_size(goal) == 0, do: "(no args)"
 
@@ -468,6 +484,10 @@ defmodule BB.TUI.Panels.Events do
 
       iex> BB.TUI.Panels.Events.summarize([:actuator, :waist], %{payload: %{position: 1.57}})
       "waist \u{2190} position 1.570"
+
+      iex> motion = %BB.Message.Actuator.BeginMotion{initial_position: 0.0, target_position: 0.5}
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :base_link, :elbow, :elbow_servo], %{payload: motion})
+      "elbow_servo moving 0.000 \u{2192} 0.500"
 
       iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: :disarmed}})
       "elbow \u{2718} :disarmed"
@@ -538,19 +558,39 @@ defmodule BB.TUI.Panels.Events do
     "#{target} #{severity_mark(Errors.severity(reason))} #{Errors.describe(reason)}"
   end
 
+  # What the actuator reports back: the motion it started for a command, and
+  # (from drivers that report it) where and why that motion ended.
+  def summarize([:actuator | rest], %{payload: %BeginMotion{} = motion}) do
+    "#{component_name(rest)} moving #{decimal(motion.initial_position)} \u{2192} " <>
+      decimal(motion.target_position)
+  end
+
+  def summarize([:actuator | rest], %{payload: %EndMotion{position: position, reason: reason}}),
+    do: "#{component_name(rest)} stopped at #{decimal(position)} (#{reason})"
+
   def summarize([:actuator | rest], %{payload: %{position: position}})
       when is_number(position) do
-    joint = Enum.map_join(rest, ".", &to_string/1)
-    "#{joint} \u{2190} position #{:erlang.float_to_binary(position / 1, decimals: 3)}"
+    "#{component_name(rest)} \u{2190} position #{decimal(position)}"
   end
 
   def summarize([:actuator | rest], %{payload: %{waypoints: [_ | _] = waypoints} = payload}) do
-    joint = Enum.map_join(rest, ".", &to_string/1)
     duration = waypoints |> List.last() |> Enum.into(%{}) |> Map.get(:time_from_start, 0)
 
-    "#{joint} \u{2190} trajectory #{length(waypoints)} waypoints over #{duration}ms" <>
+    "#{component_name(rest)} \u{2190} trajectory #{length(waypoints)} waypoints over #{duration}ms" <>
       format_repeat(Map.get(payload, :repeat))
   end
+
+  def summarize([:actuator | rest], %{payload: %Velocity{velocity: velocity}}),
+    do: "#{component_name(rest)} \u{2190} velocity #{decimal(velocity)}"
+
+  def summarize([:actuator | rest], %{payload: %Effort{effort: effort}}),
+    do: "#{component_name(rest)} \u{2190} effort #{decimal(effort)}"
+
+  def summarize([:actuator | rest], %{payload: %Stop{mode: mode}}),
+    do: "#{component_name(rest)} \u{2190} stop (#{mode})"
+
+  def summarize([:actuator | rest], %{payload: %Hold{}}),
+    do: "#{component_name(rest)} \u{2190} hold"
 
   def summarize([:command, name, _execution_id], %{
         payload: %{status: :started, data: %{goal: goal}}
@@ -594,6 +634,9 @@ defmodule BB.TUI.Panels.Events do
   def summarize(_path, message) do
     inspect(message, pretty: false, limit: 30)
   end
+
+  defp decimal(value) when is_number(value), do: :erlang.float_to_binary(value / 1, decimals: 3)
+  defp decimal(other), do: inspect(other)
 
   defp severity_mark(:warning), do: "\u{26A0}"
   defp severity_mark(_severity), do: "\u{2718}"
