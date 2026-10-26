@@ -264,8 +264,9 @@ defmodule BB.TUI.Panels.Events do
 
   An actuator error takes its color from the reason's `BB.Error.Severity` —
   yellow for a `:warning` such as a late answer, red otherwise. A failed
-  command and a `[:safety, :error]` hardware report are red. Everything else
-  is white.
+  command and a `[:safety, :error]` hardware report are red, except a
+  command that failed with `:cancelled`, which is how bb reports a
+  cancellation. Everything else is white.
 
   ## Examples
 
@@ -282,6 +283,9 @@ defmodule BB.TUI.Panels.Events do
   @spec summary_style(list(), term()) :: Style.t()
   def summary_style([:actuator | _], %{payload: %{error: reason}}),
     do: severity_style(Errors.severity(reason))
+
+  def summary_style([:command | _], %{payload: %{status: :failed, data: %{reason: :cancelled}}}),
+    do: %Style{fg: :white}
 
   def summary_style([:command | _], %{payload: %{status: :failed}}), do: severity_style(:error)
   def summary_style([:safety, :error | _], _message), do: severity_style(:critical)
@@ -489,6 +493,9 @@ defmodule BB.TUI.Panels.Events do
       iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :cancelled}})
       "move cancelled"
 
+      iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :failed, data: %{reason: :cancelled}}})
+      "move cancelled"
+
       iex> BB.TUI.Panels.Events.summarize([:param, :speed], %{payload: %{new_value: 42}})
       "speed = 42"
 
@@ -536,6 +543,14 @@ defmodule BB.TUI.Panels.Events do
         payload: %{status: :succeeded, data: %{result: result}}
       }) do
     "#{name} \u{2714} #{inspect(result, limit: 30)}"
+  end
+
+  # bb's convention is for `result/1` to answer a cancellation with
+  # `{:error, :cancelled}`, which the runtime publishes as `:failed`.
+  def summarize([:command, name, _execution_id], %{
+        payload: %{status: :failed, data: %{reason: :cancelled}}
+      }) do
+    "#{name} cancelled"
   end
 
   def summarize([:command, name, _execution_id], %{

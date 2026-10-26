@@ -110,8 +110,15 @@ defmodule BB.TUI.App do
   command — one that only returns when it stops or is cancelled — is
   never reported as timed out while it is still running. Runaways stay
   bounded by the command's own DSL `timeout`. The escape hatch is `c`
-  in the commands panel, which cancels the running command and resolves
-  the await.
+  in the commands panel, which cancels the selected command's newest
+  execution and resolves the await.
+
+  The panel shows every command running on the robot, not only the one
+  this dashboard started — automation, another SSH session or a browser
+  tab can start commands too — so `c` works on those as well. The listing
+  comes from `BB.Command.list/1` and is refreshed on every `[:command | _]`
+  event and when this dashboard's own command starts or finishes;
+  cancellation goes by execution id through `BB.Command.cancel/2`.
   """
 
   use ExRatatui.App, runtime: :reducer
@@ -188,6 +195,7 @@ defmodule BB.TUI.App do
         commands: %State.Commands{available: commands},
         renderers: renderers
       }
+      |> State.put_running_commands(Robot.running_commands(robot, node))
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
 
@@ -547,21 +555,6 @@ defmodule BB.TUI.App do
     end
   end
 
-  # ── Update — commands panel: cancel a running command ────────
-
-  # Above the edit-mode clauses so `c` cancels rather than typing into a
-  # focused argument. Only reachable while a command is running, which
-  # cannot overlap edit mode — executing exits it.
-
-  def update(
-        {:event, %Event.Key{code: "c", kind: "press"}},
-        %{ui: %{active_panel: :commands}, commands: %{executing_pid: pid}} = state
-      )
-      when is_pid(pid) do
-    Robot.cancel_command(pid, state.node)
-    {:noreply, state}
-  end
-
   # ── Update — commands panel: argument-edit mode ──────────────
   # These clauses run only when the user has entered edit mode on a
   # command with arguments (Enter from the list view enters edit mode
@@ -636,6 +629,23 @@ defmodule BB.TUI.App do
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_command(state)}
+  end
+
+  # Below the edit-mode clauses, so a `c` typed into an argument stays text:
+  # a command started elsewhere can be running while this dashboard edits.
+  # Cancels the selected command's newest execution, whoever started it; the
+  # outcome arrives as that command's `[:command | _]` event.
+  def update(
+        {:event, %Event.Key{code: "c", kind: "press"}},
+        %{ui: %{active_panel: :commands}} = state
+      ) do
+    case State.selected_running_execution(state) do
+      %{execution_id: execution_id} ->
+        {:noreply, state, commands: [cancel_command_command(state, execution_id)]}
+
+      nil ->
+        {:noreply, state}
+    end
   end
 
   def update(
@@ -804,6 +814,18 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
+  # A command started, finished, failed or was cancelled — by this dashboard or
+  # anyone else — so re-read what is running. On a terminal status the event's
+  # own execution is left out: bb publishes it while the command process is
+  # still alive and registered.
+  def update({:info, {:bb, [:command, _name, execution_id] = path, msg}}, state) do
+    finished = if terminal_command_event?(msg), do: execution_id
+
+    state
+    |> State.put_running_commands(Robot.running_commands(state.robot, state.node), finished)
+    |> route_message(path, msg)
+  end
+
   # Consumer-renderer seam: a path matching a registered renderer prefix
   # (longest-prefix match, like a routing table) is handed off to the consumer's
   # module rather than pattern-matched here — bb_tui never inspects the payload's
@@ -812,20 +834,8 @@ defmodule BB.TUI.App do
   # (see `BB.TUI.Panels.Events`). The render is coalesced like sensors
   # (render?: false + the :sensor_flush tick) so a fast consumer stays smooth.
   # Falls through to the catch-all below when no renderer matches.
-  def update({:info, {:bb, path, %{payload: payload} = msg}}, state) do
-    case State.renderer_for(state, path) do
-      nil ->
-        {:noreply, State.append_event(state, path, msg)}
-
-      renderer ->
-        state =
-          state
-          |> maybe_put_observed(renderer, path, payload)
-          |> State.append_event(path, msg)
-          |> State.mark_render_pending()
-
-        {:noreply, state, render?: false}
-    end
+  def update({:info, {:bb, path, %{payload: _} = msg}}, state) do
+    route_message(state, path, msg)
   end
 
   # Everything else we subscribe to but don't model in dedicated state —
@@ -837,8 +847,11 @@ defmodule BB.TUI.App do
     {:noreply, State.append_event(state, path, msg)}
   end
 
+  # The command is registered by now, so the listing includes it even before
+  # its `:started` event arrives (or when `[:command]` isn't subscribed).
   def update({:info, {:command_started, {:ok, cmd_pid}}}, state) do
-    {:noreply, State.set_command_pid(state, cmd_pid), commands: [await_command_command(cmd_pid)]}
+    state = State.put_running_commands(state, Robot.running_commands(state.robot, state.node))
+    {:noreply, state, commands: [await_command_command(cmd_pid)]}
   end
 
   def update({:info, {:command_started, {:error, reason}}}, state) do
@@ -846,7 +859,12 @@ defmodule BB.TUI.App do
   end
 
   def update({:info, {:command_result, result}}, state) do
-    {:noreply, State.set_command_result(state, result)}
+    state =
+      state
+      |> State.set_command_result(result)
+      |> State.put_running_commands(Robot.running_commands(state.robot, state.node))
+
+    {:noreply, state}
   end
 
   # Either answer frees the actuator's jog slot, sending the position parked
@@ -873,6 +891,10 @@ defmodule BB.TUI.App do
 
     {:noreply, state, commands}
   end
+
+  # The cancel's own answer carries nothing: the command's `[:command | _]`
+  # events report what happened.
+  def update({:info, :command_cancel_sent}, state), do: {:noreply, state, render?: false}
 
   def update({:info, :throbber_tick}, state) do
     {:noreply, State.tick_throbber(state)}
@@ -915,6 +937,29 @@ defmodule BB.TUI.App do
   defp sensor_flush_subscriptions(_state), do: []
 
   # ── Helpers ──────────────────────────────────────────────────
+
+  defp route_message(state, path, %{payload: payload} = msg) do
+    case State.renderer_for(state, path) do
+      nil ->
+        {:noreply, State.append_event(state, path, msg)}
+
+      renderer ->
+        state =
+          state
+          |> maybe_put_observed(renderer, path, payload)
+          |> State.append_event(path, msg)
+          |> State.mark_render_pending()
+
+        {:noreply, state, render?: false}
+    end
+  end
+
+  defp route_message(state, path, msg), do: {:noreply, State.append_event(state, path, msg)}
+
+  defp terminal_command_event?(%{payload: %{status: status}}),
+    do: status in [:succeeded, :failed, :cancelled]
+
+  defp terminal_command_event?(_msg), do: false
 
   # Feed the status-bar readout from the consumer's optional `observed/2`. The
   # callback is optional (`@optional_callbacks observed: 2`), so skip the call
@@ -1238,7 +1283,7 @@ defmodule BB.TUI.App do
              state.commands.executing == nil do
           args = State.parsed_args_for_selected(state)
 
-          {:noreply, State.start_command(State.exit_command_edit_mode(state), :running),
+          {:noreply, State.start_command(State.exit_command_edit_mode(state), cmd.name),
            commands: [execute_command_command(state, cmd, args)]}
         else
           {:noreply, state}
@@ -1246,15 +1291,26 @@ defmodule BB.TUI.App do
     end
   end
 
-  # Execution is two-phase so the running command's pid reaches state and
-  # can be cancelled: phase one starts it and reports `{:command_started,
-  # _}`, phase two awaits it and reports `{:command_result, _}`.
+  # Execution is two-phase: phase one starts the command and reports
+  # `{:command_started, _}`, at which point it is registered and the running
+  # list is refreshed; phase two awaits it and reports `{:command_result, _}`.
   defp execute_command_command(%State{robot: robot, node: node}, cmd, args) do
     name = cmd.name
 
     Command.async(
       fn -> Robot.execute_command(robot, name, args, node) end,
       fn result -> {:command_started, result} end
+    )
+  end
+
+  # Off the event loop: cancelling is a `GenServer.stop/3`, which waits for the
+  # command to terminate, and a handler busy inside a callback only gets to the
+  # stop request once that callback returns — inline, the dashboard would
+  # freeze for as long.
+  defp cancel_command_command(%State{robot: robot, node: node}, execution_id) do
+    Command.async(
+      fn -> Robot.cancel_command(robot, execution_id, node) end,
+      fn _ -> :command_cancel_sent end
     )
   end
 

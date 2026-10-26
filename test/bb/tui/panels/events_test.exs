@@ -283,6 +283,11 @@ defmodule BB.TUI.Panels.EventsTest do
       assert Events.summary_style([:command, :home, make_ref()], msg).fg == :red
     end
 
+    test "leaves a cancelled command white" do
+      msg = %{payload: %{status: :failed, data: %{reason: :cancelled}}}
+      assert Events.summary_style([:command, :home, make_ref()], msg).fg == :white
+    end
+
     test "colors a hardware error report red" do
       assert Events.summary_style([:safety, :error], %{payload: %{error: :overcurrent}}).fg ==
                :red
