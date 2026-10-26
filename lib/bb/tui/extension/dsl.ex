@@ -64,7 +64,10 @@ defmodule BB.TUI.Extension.Dsl do
     schema: [
       label: [type: :string, required: true, doc: "Text shown before the value."],
       source: [type: {:struct, Source}, required: true, doc: "Where the value comes from."],
-      unit: [type: :atom, doc: "Unit to show the value in, e.g. `:degree` for a radian joint."],
+      unit: [
+        type: {:custom, BB.TUI.Extension.Format, :validate_unit, []},
+        doc: "Unit to show the value in, e.g. `:degree` for a radian joint."
+      ],
       scale: [type: :number, doc: "Multiplies the value before it is shown."],
       decimals: [type: :non_neg_integer, doc: "Decimal places to round to."],
       spark: [type: :boolean, default: false, doc: "Draw a sparkline of recent values."]

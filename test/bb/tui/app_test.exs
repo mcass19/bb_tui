@@ -8,10 +8,12 @@ defmodule BB.TUI.AppTest do
   alias BB.Math.Transform2D
   alias BB.Message.Actuator.Command
   alias BB.TUI.App
+  alias BB.TUI.Extension.Source
   alias BB.TUI.Panels.Events
   alias BB.TUI.State
   alias BB.TUI.Test.Fixtures
   alias ExRatatui.Layout.Rect
+  alias ExRatatui.Subscription
 
   setup :verify_on_exit!
   setup :set_mimic_private
@@ -213,6 +215,57 @@ defmodule BB.TUI.AppTest do
 
       assert State.jog_mode(state, :wheel) == :velocity_only
       assert state.joints.entries.wheel.target == nil
+    end
+  end
+
+  describe "extension sources" do
+    setup do
+      Fixtures.stub_bb_modules()
+      {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+      %{state: state}
+    end
+
+    test "polls the controllers the sources read, 4 times a second", %{state: state} do
+      assert Subscription.interval(:controller_poll, 250, :poll_controllers) in App.subscriptions(
+               state
+             )
+
+      refute Enum.any?(App.subscriptions(Fixtures.sample_state()), &(&1.id == :controller_poll))
+    end
+
+    test "a poll asks each controller once until it answers", %{state: state} do
+      Mimic.stub(BB.Process, :call, fn _robot, name, :inspect, _timeout -> %{name: name} end)
+
+      assert {:noreply, state, opts} = App.update({:info, :poll_controllers}, state)
+      assert opts[:render?] == false
+      assert [%ExRatatui.Command{fun: fun, mapper: mapper}, _yaw] = opts[:commands]
+      assert mapper.(fun.()) == {:controller_state, :balancer, {:ok, %{name: :balancer}}}
+
+      # Both are still out: the next tick sends nothing.
+      assert {:noreply, state, opts} = App.update({:info, :poll_controllers}, state)
+      assert opts[:commands] == []
+
+      assert {:noreply, state, render?: true} =
+               App.update({:info, {:controller_state, :balancer, {:ok, %{target: 0.2}}}}, state)
+
+      assert State.Extensions.read(state, Source.controller(:balancer, :target)) ==
+               0.2
+
+      # The same answer again changes nothing on screen.
+      assert {:noreply, _state, render?: false} =
+               App.update({:info, {:controller_state, :balancer, {:ok, %{target: 0.2}}}}, state)
+    end
+
+    test "keeps the latest payload of a topic a source reads", %{state: state} do
+      msg = %{payload: %{velocity: %{x: 0.3}}}
+
+      assert {:noreply, state} =
+               App.update({:info, {:bb, [:sensor, :base, :wheel], msg}}, state)
+               |> Tuple.delete_at(2)
+               |> then(fn {:noreply, state} -> {:noreply, state} end)
+
+      source = Source.topic([:sensor, :wheel], [:velocity, :x])
+      assert State.Extensions.read(state, source) == 0.3
     end
   end
 

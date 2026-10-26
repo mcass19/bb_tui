@@ -54,6 +54,16 @@ Readouts, plots and drive scales read their values from sources:
 | `topic([:sensor, :wheel], :velocity)` | a field of the latest message under a path; a list reaches into the payload |
 | `param([:yaw, :turn_rate])` | a robot parameter's current value |
 
+A `topic` source keeps the latest payload published on its path. Sensors and actuators publish under their full topology path (`[:sensor, :base_link, …, :imu]`), so a two-segment path `[root, name]` also matches any path that starts with `root` and ends with `name` — the same short name the event log shows.
+
+A `controller` source reads the map the controller answers `handle_call(:inspect, ...)` with. Controllers publish nothing, so the dashboard polls them, four times a second and never more than one call per controller at a time; one that isn't running, doesn't answer `:inspect` or takes longer than 200 ms shows its readouts as `-` until it answers again. Any map works, missing keys included.
+
+## Units and formatting
+
+`unit:` names the unit a readout is shown in, as a bb unit atom (`:degree`, `:centimeter_per_second`, `:volt`). A plain number is taken to be in SI units, the way bb works — radians, metres, metres per second — so `joint(:lean), unit: :degree` shows degrees; a unit-typed parameter converts from its own unit. An unknown unit fails at compile time.
+
+`scale:` multiplies the value before the conversion, for a source in some other unit (wheel radians per second to metres per second, say). `decimals:` rounds; floats otherwise show two. A value that isn't there yet shows as `-`, and one that isn't a number as plain text.
+
 The full option reference, generated from the DSL itself, is [the Extension DSL](DSL-BB.TUI.Extension.md).
 
 ## Wiring it in

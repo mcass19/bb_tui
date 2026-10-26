@@ -23,11 +23,23 @@ defmodule Dev.TUI do
       readout "max speed", param([:motion, :max_speed]), decimals: 2
     end
 
+    panel :oscillator do
+      title "Oscillator"
+      readout "output", controller(:oscillator, :output), unit: :degree, decimals: 1, spark: true
+      readout "target", controller(:oscillator, :target), unit: :degree, decimals: 1
+      readout "ticks", controller(:oscillator, :ticks)
+
+      plot "output vs target", [
+        controller(:oscillator, :output),
+        controller(:oscillator, :target)
+      ]
+    end
+
     panel :telemetry do
       title "Telemetry"
-      readout "battery", topic([:sensor, :battery], :voltage), decimals: 2
-      readout "drive", topic([:drive], [:vx]), scale: 100, decimals: 0
-      readout "gait", controller(:gait, :pattern)
+      readout "battery", topic([:sensor, :battery_bus], :voltage), unit: :volt, decimals: 2
+      readout "drive", topic([:drive], :vx), unit: :centimeter_per_second, decimals: 0
+      readout "trim", param([:controller, :trim]), decimals: 1
 
       plot "arm", [joint(:shoulder), joint(:elbow)], window: 5_000, y_range: {-3.2, 3.2}
     end

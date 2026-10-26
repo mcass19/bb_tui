@@ -121,7 +121,7 @@ readout "lean", joint(:lean), unit: :degree, decimals: 1
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`unit`](#panels-panel-readout-unit){: #panels-panel-readout-unit } | `atom` |  | Unit to show the value in, e.g. `:degree` for a radian joint. |
+| [`unit`](#panels-panel-readout-unit){: #panels-panel-readout-unit } | `any` |  | Unit to show the value in, e.g. `:degree` for a radian joint. |
 | [`scale`](#panels-panel-readout-scale){: #panels-panel-readout-scale } | `number` |  | Multiplies the value before it is shown. |
 | [`decimals`](#panels-panel-readout-decimals){: #panels-panel-readout-decimals } | `non_neg_integer` |  | Decimal places to round to. |
 | [`spark`](#panels-panel-readout-spark){: #panels-panel-readout-spark } | `boolean` | `false` | Draw a sparkline of recent values. |

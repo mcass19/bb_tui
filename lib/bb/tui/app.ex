@@ -808,80 +808,10 @@ defmodule BB.TUI.App do
 
   # ── Update — PubSub + async info messages ────────────────────
 
-  def update({:info, {:bb, [:state_machine | _] = path, msg}}, state) do
-    safety_state = Robot.safety_state(state.robot, state.node)
-    runtime_state = Robot.runtime_state(state.robot, state.node)
-
-    state =
-      state
-      |> State.update_safety(safety_state, runtime_state)
-      |> State.append_event(path, msg)
-
-    {:noreply, state}
-  end
-
-  # Sensor messages are the high-rate path. Update state but suppress the
-  # immediate render (render?: false) and flag a pending render; the
-  # :sensor_flush tick armed by subscriptions/1 performs one coalesced frame.
-  def update({:info, {:bb, [:sensor | _] = path, %{payload: payload} = msg}}, state) do
-    configurations =
-      case payload do
-        %{names: names, positions: pos} -> Enum.zip(names, pos) |> Map.new()
-        _ -> %{}
-      end
-
-    state =
-      state
-      |> State.update_configurations(configurations)
-      |> State.update_power(payload)
-      |> State.append_event(path, msg)
-      |> State.mark_render_pending()
-
-    {:noreply, state, render?: false}
-  end
-
-  def update({:info, {:bb, [:param | _] = path, msg}}, state) do
-    parameters = Robot.list_parameters(state.robot, [], state.node)
-
-    state =
-      state
-      |> State.update_parameters(parameters)
-      |> State.append_event(path, msg)
-
-    {:noreply, state}
-  end
-
-  # A command started, finished, failed or was cancelled — by this dashboard or
-  # anyone else — so re-read what is running. On a terminal status the event's
-  # own execution is left out: bb publishes it while the command process is
-  # still alive and registered.
-  def update({:info, {:bb, [:command, _name, execution_id] = path, msg}}, state) do
-    finished = if terminal_command_event?(msg), do: execution_id
-
-    state
-    |> State.put_running_commands(Robot.running_commands(state.robot, state.node), finished)
-    |> route_message(path, msg)
-  end
-
-  # Consumer-renderer seam: a path matching a registered renderer prefix
-  # (longest-prefix match, like a routing table) is handed off to the consumer's
-  # module rather than pattern-matched here — bb_tui never inspects the payload's
-  # struct. The renderer's `observed/2` (if exported) feeds the at-a-glance
-  # status-bar readout; the event row is rendered later from the same renderer
-  # (see `BB.TUI.Panels.Events`). The render is coalesced like sensors
-  # (render?: false + the :sensor_flush tick) so a fast consumer stays smooth.
-  # Falls through to the catch-all below when no renderer matches.
-  def update({:info, {:bb, path, %{payload: _} = msg}}, state) do
-    route_message(state, path, msg)
-  end
-
-  # Everything else we subscribe to but don't model in dedicated state —
-  # notably `[:safety, :error]` hardware-error reports and `[:estimator | _]`
-  # odometry/pose — lands here and is surfaced in the event log. Safety *state*
-  # transitions arrive separately on `[:state_machine]` (see above), so the
-  # badge already reflects an error before its detail shows up here.
-  def update({:info, {:bb, path, msg}}, state) do
-    {:noreply, State.append_event(state, path, msg)}
+  # Every PubSub message first feeds the extensions' `topic` sources, then
+  # takes its usual path (see `update_bb/2`).
+  def update({:info, {:bb, path, msg}} = info, state) do
+    update_bb(info, observe_extension_topics(state, path, msg))
   end
 
   # The command is registered by now, so the listing includes it even before
@@ -968,6 +898,20 @@ defmodule BB.TUI.App do
   # Coalesced sensor render: clear the pending flag and let the default
   # render?: true draw the single freshest frame. The next subscriptions/1
   # reconcile then drops :sensor_flush until the next sensor message.
+  # One `:inspect` per controller per tick, skipping any whose last poll is
+  # still out, so a slow controller never piles polls up.
+  def update({:info, :poll_controllers}, state) do
+    {due, extensions} = State.Extensions.start_polls(state.extensions)
+    commands = Enum.map(due, &inspect_controller_command(state, &1))
+    {:noreply, %{state | extensions: extensions}, commands: commands, render?: false}
+  end
+
+  def update({:info, {:controller_state, name, result}}, state) do
+    extensions = State.Extensions.finish_poll(state.extensions, name, result)
+    changed? = extensions.values != state.extensions.values
+    {:noreply, %{state | extensions: extensions}, render?: changed?}
+  end
+
   def update({:info, :sensor_flush}, state) do
     {:noreply, State.clear_render_pending(state)}
   end
@@ -980,7 +924,8 @@ defmodule BB.TUI.App do
 
   @impl true
   def subscriptions(state) do
-    throbber_subscriptions(state) ++ sensor_flush_subscriptions(state)
+    throbber_subscriptions(state) ++
+      sensor_flush_subscriptions(state) ++ controller_poll_subscriptions(state)
   end
 
   defp throbber_subscriptions(state) do
@@ -1001,7 +946,99 @@ defmodule BB.TUI.App do
 
   defp sensor_flush_subscriptions(_state), do: []
 
+  # Extension readouts of controller state are polled — controllers publish
+  # nothing — at 4 Hz, enough to read and gentle on a small board.
+  @controller_poll_ms 250
+
+  defp controller_poll_subscriptions(%State{extensions: %{controllers: [_ | _]}}),
+    do: [Subscription.interval(:controller_poll, @controller_poll_ms, :poll_controllers)]
+
+  defp controller_poll_subscriptions(_state), do: []
+
   # ── Helpers ──────────────────────────────────────────────────
+
+  # ── PubSub messages ──────────────────────────────────────────
+
+  defp update_bb({:info, {:bb, [:state_machine | _] = path, msg}}, state) do
+    safety_state = Robot.safety_state(state.robot, state.node)
+    runtime_state = Robot.runtime_state(state.robot, state.node)
+
+    state =
+      state
+      |> State.update_safety(safety_state, runtime_state)
+      |> State.append_event(path, msg)
+
+    {:noreply, state}
+  end
+
+  # Sensor messages are the high-rate path. Update state but suppress the
+  # immediate render (render?: false) and flag a pending render; the
+  # :sensor_flush tick armed by subscriptions/1 performs one coalesced frame.
+  defp update_bb({:info, {:bb, [:sensor | _] = path, %{payload: payload} = msg}}, state) do
+    configurations =
+      case payload do
+        %{names: names, positions: pos} -> Enum.zip(names, pos) |> Map.new()
+        _ -> %{}
+      end
+
+    state =
+      state
+      |> State.update_configurations(configurations)
+      |> State.update_power(payload)
+      |> State.append_event(path, msg)
+      |> State.mark_render_pending()
+
+    {:noreply, state, render?: false}
+  end
+
+  defp update_bb({:info, {:bb, [:param | _] = path, msg}}, state) do
+    parameters = Robot.list_parameters(state.robot, [], state.node)
+
+    state =
+      state
+      |> State.update_parameters(parameters)
+      |> State.append_event(path, msg)
+
+    {:noreply, state}
+  end
+
+  # A command started, finished, failed or was cancelled — by this dashboard or
+  # anyone else — so re-read what is running. On a terminal status the event's
+  # own execution is left out: bb publishes it while the command process is
+  # still alive and registered.
+  defp update_bb({:info, {:bb, [:command, _name, execution_id] = path, msg}}, state) do
+    finished = if terminal_command_event?(msg), do: execution_id
+
+    state
+    |> State.put_running_commands(Robot.running_commands(state.robot, state.node), finished)
+    |> route_message(path, msg)
+  end
+
+  # Consumer-renderer seam: a path matching a registered renderer prefix
+  # (longest-prefix match, like a routing table) is handed off to the consumer's
+  # module rather than pattern-matched here — bb_tui never inspects the payload's
+  # struct. The renderer's `observed/2` (if exported) feeds the at-a-glance
+  # status-bar readout; the event row is rendered later from the same renderer
+  # (see `BB.TUI.Panels.Events`). The render is coalesced like sensors
+  # (render?: false + the :sensor_flush tick) so a fast consumer stays smooth.
+  # Falls through to the catch-all below when no renderer matches.
+  defp update_bb({:info, {:bb, path, %{payload: _} = msg}}, state) do
+    route_message(state, path, msg)
+  end
+
+  # Everything else we subscribe to but don't model in dedicated state —
+  # notably `[:safety, :error]` hardware-error reports and `[:estimator | _]`
+  # odometry/pose — lands here and is surfaced in the event log. Safety *state*
+  # transitions arrive separately on `[:state_machine]` (see above), so the
+  # badge already reflects an error before its detail shows up here.
+  defp update_bb({:info, {:bb, path, msg}}, state) do
+    {:noreply, State.append_event(state, path, msg)}
+  end
+
+  defp observe_extension_topics(state, path, %{payload: payload}),
+    do: %{state | extensions: State.Extensions.put_message(state.extensions, path, payload)}
+
+  defp observe_extension_topics(state, _path, _msg), do: state
 
   defp route_message(state, path, %{payload: payload} = msg) do
     case State.renderer_for(state, path) do
@@ -1187,6 +1224,14 @@ defmodule BB.TUI.App do
   # every jog keypress. The async runner traps the exit of an actuator that
   # crashes while handling the command and delivers it as
   # `{:error, {:exit, reason}}`.
+  # Off the event loop: an `:inspect` is a `GenServer.call` into the robot.
+  defp inspect_controller_command(%State{robot: robot, node: node}, name) do
+    Command.async(
+      fn -> Robot.inspect_controller(robot, name, node) end,
+      fn result -> {:controller_state, name, result} end
+    )
+  end
+
   defp set_actuator_command(%State{robot: robot, node: node}, actuator, position) do
     Command.async(
       fn -> Robot.set_actuator(robot, actuator, position, node) end,

@@ -14,6 +14,12 @@ defmodule Dev.TestRobot do
     name(:test_robot)
   end
 
+  # A controller whose state is only reachable through `:inspect` — the
+  # source `Dev.TUI`'s Oscillator panel polls.
+  controllers do
+    controller(:oscillator, Dev.Oscillator, simulation: :start)
+  end
+
   commands do
     # Argument-less command — Enter executes directly.
     command :home do
