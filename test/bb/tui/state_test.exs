@@ -435,6 +435,33 @@ defmodule BB.TUI.StateTest do
       assert length(state.events.list) == 4
     end
 
+    test "a repeated parameter change replaces its earlier row" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      change = &%{payload: %BB.Parameter.Changed{path: [:speed], old_value: &1, new_value: &2}}
+
+      state =
+        state
+        |> State.append_event([:param, :speed], change.(1, 2))
+        |> State.append_event([:state_machine], %{payload: %{from: :armed, to: :idle}})
+        |> State.append_event([:param, :speed], change.(2, 3))
+        |> State.append_event([:param, :speed], change.(3, 4))
+
+      assert [{_, [:param, :speed], %{payload: %{new_value: 4}}}, {_, [:state_machine], _}] =
+               state.events.list
+    end
+
+    test "a repeated parameter change is kept when its earlier row is gone" do
+      msg = %{payload: %BB.Parameter.Changed{path: [:speed], old_value: 1, new_value: 2}}
+      key = State.event_debounce_key([:param, :speed], msg)
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+
+      state =
+        put_in(state.throttle.last_seen, %{key => System.monotonic_time(:millisecond)})
+        |> State.append_event([:param, :speed], msg)
+
+      assert [{_, [:param, :speed], ^msg}] = state.events.list
+    end
+
     test "records last-seen only for accepted events" do
       state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})

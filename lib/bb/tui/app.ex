@@ -90,16 +90,19 @@ defmodule BB.TUI.App do
 
   ## Side-effect convention
 
-  Fast, fire-and-forget calls (`Robot.arm/2`, `Robot.disarm/2`,
-  `Robot.set_parameter/4`, `Robot.publish/4`, `Robot.force_disarm/2`)
-  are invoked inline from `update/2` rather than wrapped in a
-  `Command.async/2`. They are effectively constant-time PubSub
-  publishes; the boilerplate of routing through a no-op result mapper
-  would dwarf the call. `Robot.execute_command/4`, which monitors a
-  spawned command process and waits for its `:DOWN`, goes through
-  `Command.async/2` — and so does `Robot.set_actuator/4`, whose
-  `:pubsub` delivery blocks on the actuator's answer; its refusals
-  come back as `{:actuator_result, _, _}` and land in the event log.
+  Every call that waits on one of the robot's processes runs through
+  `Command.async/2`, so the process that owns the terminal never blocks
+  on it: arming, disarming and force-disarming (`{:robot_write, _, _}`),
+  which may run a whole arm/disarm command; parameter writes
+  (`{:robot_write, _, _}`) and bridge reads and writes
+  (`{:remote_param_set, _, _, _}`, `{:remote_parameters, _, _}`); command
+  execution, awaiting and cancelling; and jogs via
+  `Robot.set_actuator/4`, whose `:pubsub` delivery blocks on the
+  actuator's answer (`{:actuator_result, _, _}`). An accepted write is
+  reported by the robot's own events; a refusal lands in the event log
+  under the path the write was aimed at. Only `Robot.publish/4` (the
+  simulated-joint fallback) and reads backed by ETS or the runtime stay
+  inline.
   Each actuator has at most one jog in flight: targets that arrive
   meanwhile are parked, latest wins, and sent once it is answered
   (see `BB.TUI.State.request_jog/3`).
@@ -307,8 +310,8 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: "y", kind: "press"}},
         %{safety: %{confirm_force_disarm?: true}} = state
       ) do
-    Robot.force_disarm(state.robot, state.node)
-    {:noreply, State.dismiss_force_disarm(state)}
+    {:noreply, State.dismiss_force_disarm(state),
+     commands: [safety_write(state, :force_disarm, &Robot.force_disarm/2)]}
   end
 
   def update(
@@ -344,8 +347,8 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: "enter", kind: "press"}},
         %{parameters: %{editing: %{path: path, buffer: buffer}}} = state
       ) do
-    Robot.set_parameter(state.robot, path, State.parse_param_input(buffer), state.node)
-    {:noreply, State.cancel_param_edit(state)}
+    {:noreply, State.cancel_param_edit(state),
+     commands: [parameter_write(state, path, State.parse_param_input(buffer))]}
   end
 
   def update(
@@ -495,13 +498,11 @@ defmodule BB.TUI.App do
   end
 
   def update({:event, %Event.Key{code: "a", kind: "press"}}, state) do
-    Robot.arm(state.robot, state.node)
-    {:noreply, state}
+    {:noreply, state, commands: [safety_write(state, :arm, &Robot.arm/2)]}
   end
 
   def update({:event, %Event.Key{code: "d", kind: "press"}}, state) do
-    Robot.disarm(state.robot, state.node)
-    {:noreply, state}
+    {:noreply, state, commands: [safety_write(state, :disarm, &Robot.disarm/2)]}
   end
 
   def update({:event, %Event.Key{code: "f", kind: "press"}}, state) do
@@ -766,7 +767,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :parameters}} = state
       ) do
     state = State.cycle_parameter_tab(state)
-    {:noreply, refresh_selected_tab(state)}
+    {:noreply, state, commands: refresh_selected_tab(state)}
   end
 
   # ── Update — PubSub + async info messages ────────────────────
@@ -895,6 +896,31 @@ defmodule BB.TUI.App do
   # The cancel's own answer carries nothing: the command's `[:command | _]`
   # events report what happened.
   def update({:info, :command_cancel_sent}, state), do: {:noreply, state, render?: false}
+
+  # A write the robot accepted is reported by its own event (`[:state_machine]`
+  # for safety, `[:param | _]` for parameters), so the answer itself is dropped
+  # without a render. A refusal has nowhere else to go: it lands in the event
+  # log under the path the write was aimed at.
+  def update({:info, {:robot_write, path, {:error, reason}}}, state) do
+    {:noreply, State.append_event(state, path, %{payload: %{error: reason}})}
+  end
+
+  def update({:info, {:robot_write, _path, _result}}, state),
+    do: {:noreply, state, render?: false}
+
+  # A bridge publishes no event for a write, so an accepted one re-fetches the
+  # bridge's list to show the new value.
+  def update({:info, {:remote_param_set, bridge, _id, :ok}}, state) do
+    {:noreply, state, commands: [fetch_remote_parameters(state, bridge)], render?: false}
+  end
+
+  def update({:info, {:remote_param_set, bridge, id, {:error, reason}}}, state) do
+    {:noreply, State.append_event(state, [:bridge, bridge, id], %{payload: %{error: reason}})}
+  end
+
+  def update({:info, {:remote_parameters, bridge, payload}}, state) do
+    {:noreply, State.put_remote_parameters(state, bridge, payload)}
+  end
 
   def update({:info, :throbber_tick}, state) do
     {:noreply, State.tick_throbber(state)}
@@ -1122,18 +1148,42 @@ defmodule BB.TUI.App do
 
   defp refresh_selected_tab(state) do
     case State.selected_parameter_tab(state) do
-      :local ->
-        state
-
-      {:bridge, name} ->
-        payload =
-          case Robot.list_remote_parameters(state.robot, name, state.node) do
-            {:ok, params} -> params
-            {:error, _} = error -> error
-          end
-
-        State.put_remote_parameters(state, name, payload)
+      :local -> []
+      {:bridge, name} -> [fetch_remote_parameters(state, name)]
     end
+  end
+
+  # ── Robot writes and bridge reads, off the event loop ─────────
+  #
+  # Each of these is a call into one of the robot's processes that can take a
+  # while or exit: an arm or disarm may run a whole arm/disarm command and the
+  # disarm callbacks (up to 5s each), a parameter write waits on the runtime,
+  # and a bridge call crosses to the remote system with a 5s timeout. Inline,
+  # they would freeze the dashboard for as long — and over `:rpc` a failed call
+  # raises — so each runs through `Command.async/2`, and its answer comes back
+  # as a message.
+
+  defp safety_write(%State{robot: robot, node: node}, action, fun) do
+    Command.async(fn -> fun.(robot, node) end, &{:robot_write, [:safety, action], &1})
+  end
+
+  defp parameter_write(%State{robot: robot, node: node}, path, value) do
+    Command.async(
+      fn -> Robot.set_parameter(robot, path, value, node) end,
+      &{:robot_write, [:param | path], &1}
+    )
+  end
+
+  defp fetch_remote_parameters(%State{robot: robot, node: node}, bridge) do
+    Command.async(
+      fn ->
+        case Robot.list_remote_parameters(robot, bridge, node) do
+          {:ok, params} -> params
+          {:error, _} = error -> error
+        end
+      end,
+      &{:remote_parameters, bridge, &1}
+    )
   end
 
   defp adjust_selected_param(state, direction, multiplier) do
@@ -1149,15 +1199,13 @@ defmodule BB.TUI.App do
         bounds = State.parameter_bounds(state, path)
         step = integer_step(bounds) * multiplier
         new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
-        Robot.set_parameter(state.robot, path, new_value, state.node)
-        {:noreply, state}
+        {:noreply, state, commands: [parameter_write(state, path, new_value)]}
 
       {path, value} when is_float(value) ->
         bounds = State.parameter_bounds(state, path)
         step = float_step(bounds) * multiplier
         new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
-        Robot.set_parameter(state.robot, path, new_value, state.node)
-        {:noreply, state}
+        {:noreply, state, commands: [parameter_write(state, path, new_value)]}
 
       # A unit-typed value arrives in its declared unit (bb 0.31), but its
       # bounds keep the unit they were declared in, so they are converted
@@ -1166,8 +1214,9 @@ defmodule BB.TUI.App do
         bounds = State.unit_bounds_in(State.parameter_bounds(state, path), value.name)
         step = float_step(bounds) * multiplier
         new_magnitude = State.clamp_to_bounds(apply_step(magnitude, direction, step), bounds)
-        Robot.set_parameter(state.robot, path, %{value | value: new_magnitude}, state.node)
-        {:noreply, state}
+
+        {:noreply, state,
+         commands: [parameter_write(state, path, %{value | value: new_magnitude})]}
 
       {path, value} ->
         cycle_in_values(state, path, value, direction)
@@ -1184,8 +1233,9 @@ defmodule BB.TUI.App do
     case State.parameter_in_values(state, path) do
       [_ | _] = values ->
         step = if direction == :increase, do: :next, else: :prev
-        Robot.set_parameter(state.robot, path, State.cycle_value(values, value, step), state.node)
-        {:noreply, state}
+
+        {:noreply, state,
+         commands: [parameter_write(state, path, State.cycle_value(values, value, step))]}
 
       _ ->
         {:noreply, state}
@@ -1211,13 +1261,16 @@ defmodule BB.TUI.App do
     end
   end
 
-  defp dispatch_remote_set(state, bridge_name, param, new_value) do
+  defp dispatch_remote_set(%State{robot: robot, node: node} = state, bridge, param, new_value) do
     id = State.remote_param_id(param)
 
-    case Robot.set_remote_parameter(state.robot, bridge_name, id, new_value, state.node) do
-      :ok -> {:noreply, refresh_selected_tab(state)}
-      {:error, _reason} -> {:noreply, state}
-    end
+    write =
+      Command.async(
+        fn -> Robot.set_remote_parameter(robot, bridge, id, new_value, node) end,
+        &{:remote_param_set, bridge, id, &1}
+      )
+
+    {:noreply, state, commands: [write]}
   end
 
   defp integer_step({min, max}) when is_integer(min) and is_integer(max),
@@ -1241,8 +1294,7 @@ defmodule BB.TUI.App do
   defp toggle_local_param(state) do
     case State.selected_param(state) do
       {path, value} when is_boolean(value) ->
-        Robot.set_parameter(state.robot, path, !value, state.node)
-        {:noreply, state}
+        {:noreply, state, commands: [parameter_write(state, path, !value)]}
 
       _ ->
         {:noreply, State.start_param_edit(state)}

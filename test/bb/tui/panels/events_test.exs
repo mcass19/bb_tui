@@ -265,6 +265,14 @@ defmodule BB.TUI.Panels.EventsTest do
                "home \u{2718} #{Exception.message(reason)}"
     end
 
+    test "leaves bb's own hardware error report to the generic summary" do
+      error = %BB.Safety.HardwareError{path: [:actuator, :elbow], error: :overcurrent}
+      summary = Events.summarize([:safety, :error], %{payload: error})
+
+      refute summary =~ "\u{2718}"
+      assert summary =~ "HardwareError"
+    end
+
     test "falls back to inspect for unknown payloads" do
       msg = %{payload: :something}
       result = Events.summarize([:unknown], msg)
@@ -288,9 +296,13 @@ defmodule BB.TUI.Panels.EventsTest do
       assert Events.summary_style([:command, :home, make_ref()], msg).fg == :white
     end
 
+    test "colors a refused parameter write by its severity" do
+      assert Events.summary_style([:param, :speed], %{payload: %{error: :read_only}}).fg == :red
+    end
+
     test "colors a hardware error report red" do
-      assert Events.summary_style([:safety, :error], %{payload: %{error: :overcurrent}}).fg ==
-               :red
+      error = %BB.Safety.HardwareError{path: [:actuator, :elbow], error: :overcurrent}
+      assert Events.summary_style([:safety, :error], %{payload: error}).fg == :red
     end
 
     test "colors the summary span of a rendered actuator warning yellow" do

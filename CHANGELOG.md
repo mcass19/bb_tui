@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The commands panel shows and cancels every running command, whoever started it.** The dashboard used to know only the command it had started itself, so a command kicked off by automation, another SSH session or a browser tab was invisible, and `c` could not stop it. The panel now reads the robot's running commands from `BB.Command.list/1` (bb 0.31.1), refreshed on each `[:command | _]` event and when the dashboard's own command starts or finishes. A running command's row shows `⏳ Running` in place of its Ready / Blocked badge, `×N` when it has several executions, and `c` on it cancels the newest by execution id through `BB.Command.cancel/2`; the status bar offers `c` only while the selected command runs. A cancellation reads `cancelled` in the event log rather than a red failure. Mirrors `bb_liveview` 0.3.4. The dev robot's `calibrate` now waits on a timer instead of sleeping in its handler, so it can be cancelled mid-run.
 
+- **Refused safety actions and parameter writes reach the event log.** `a`, `d`, and `f`'s confirmation, parameter writes from `h`/`l`/Enter and the inline editor, and bridge-tab writes all discarded the robot's answer, so an arm refused with `:already_armed`, a value of the wrong type or a bridge that timed out looked exactly like success. A refusal now lands in the event log under the path the write was aimed at — `arm ✘ :already_armed`, `identity.label ✘ invalid value for :label option: expected string, got: :x`, `mavlink.PITCH_P ✘ :timeout` — colored by its severity. Mirrors `bb_liveview`, which shows the same refusals next to the control.
+
 ### Changed
 
 - **The `bb` dependency is now `~> 0.33`** and **`ex_ratatui` is now `~> 0.18`.** bb 0.31.1–0.33 add the running-command registry and the structured actuator errors the entries below build on. ex_ratatui 0.18 ships a native NIF for OTP 29, resizes pixel images with a bicubic filter (sharper text in the browser's Visualization tab), and keeps `Viewport3D` correctly sized after a terminal font change.
@@ -21,7 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Each actuator has at most one jog in flight.** Every key autorepeat used to send its own `set_position`, and an actuator applies every command it receives in order, so one that fell behind kept working through stale targets after the key was released. Targets that arrive while a jog is in flight are now parked, latest wins, and sent once it is answered; a parked target is dropped if the robot has been disarmed meanwhile.
 
+- **Holding a key on a parameter logs where it ended up.** The event log's debounce dropped repeats of a parameter change within a second, so holding `l` logged the first step and hid the rest. A repeat now replaces its earlier row.
+
 ### Fixed
+
+- **Arming, disarming, parameter writes and bridge calls no longer block the dashboard.** All of them ran inline in the process that owns the terminal: an arm or disarm can run the robot's whole arm/disarm command and its disarm callbacks (up to 5s each), and a bridge call crosses to the remote system with a 5s timeout, freezing the UI for as long. Over `:rpc` a failed call raised and took the dashboard down. They now run off the event loop, and a bridge tab's list is fetched the same way when `t` cycles to it.
 
 - **Cancelling no longer freezes the dashboard.** `BB.Command.cancel` is a `GenServer.stop/3`, which waits for the command to terminate, and a handler busy inside a callback only reaches the stop request once that callback returns. The cancel ran inline in the process that owns the terminal, so `c` on a command sleeping in its handler froze the whole dashboard until the handler finished (~1.8s with the dev robot's `calibrate`). It now runs off the event loop.
 

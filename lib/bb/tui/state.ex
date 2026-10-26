@@ -618,29 +618,49 @@ defmodule BB.TUI.State do
   low-rate and each one matters, yet a command's `started` event and its
   outcome share a path and payload type, as do consecutive state transitions
   — debouncing them hid the outcome of any command shorter than the window.
+
+  A repeat of a `[:param | _]` event within the window replaces its earlier
+  row instead of being dropped: holding `l` on a parameter publishes a change
+  per keypress, and the log should show where it ended up, not the first step.
   """
   @spec append_event(t(), list(), term()) :: t()
   def append_event(%__MODULE__{events: %{paused?: true}} = state, _path, _message), do: state
 
   def append_event(
-        %__MODULE__{events: %{list: list} = events, throttle: throttle} = state,
+        %__MODULE__{events: %{list: list}, throttle: throttle} = state,
         path,
         message
       ) do
     key = event_debounce_key(path, message)
     now = System.monotonic_time(:millisecond)
 
-    if debounced_path?(path) and
-         event_debounced?(throttle.last_seen, key, now, throttle.debounce_ms) do
-      state
-    else
-      event = {event_timestamp(message), path, message}
+    debounced? =
+      debounced_path?(path) and
+        event_debounced?(throttle.last_seen, key, now, throttle.debounce_ms)
 
-      %{
-        state
-        | events: %{events | list: Enum.take([event | list], @max_events)},
-          throttle: %{throttle | last_seen: Map.put(throttle.last_seen, key, now)}
-      }
+    case {debounced?, path} do
+      {false, _path} -> record_event(state, key, now, list, path, message)
+      {true, [:param | _]} -> record_event(state, key, now, drop_event(list, key), path, message)
+      {true, _path} -> state
+    end
+  end
+
+  defp record_event(%{events: events, throttle: throttle} = state, key, now, list, path, message) do
+    event = {event_timestamp(message), path, message}
+
+    %{
+      state
+      | events: %{events | list: Enum.take([event | list], @max_events)},
+        throttle: %{throttle | last_seen: Map.put(throttle.last_seen, key, now)}
+    }
+  end
+
+  defp drop_event(list, key) do
+    case Enum.find_index(list, fn {_ts, path, message} ->
+           event_debounce_key(path, message) == key
+         end) do
+      nil -> list
+      index -> List.delete_at(list, index)
     end
   end
 
