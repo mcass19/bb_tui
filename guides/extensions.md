@@ -1,0 +1,57 @@
+# Extensions
+
+A robot or kit can extend the dashboard with what only it knows about: how to drive it, which numbers matter while it runs, the commands worth a key of their own, and what to tell the operator in each state. bb_tui renders all of it with its own widgets and theme; the extension only declares.
+
+An extension is a module of its own, apart from the robot module, so the robot stays a plain bb robot and the same robot can be watched with or without it.
+
+## Declaring an extension
+
+```elixir
+defmodule Goatbot.TUI do
+  use BB.TUI.Extension
+
+  drive do
+    publish {BB.NSK.Drive, :command}
+    stop {BB.NSK.Drive, :stop}
+    turn_scale param([:yaw, :turn_rate])
+  end
+
+  panels do
+    panel :balance do
+      title "Balance"
+      tab :drive
+      readout "lean", joint(:lean), unit: :degree, decimals: 1
+      readout "setpoint", controller(:pid_balancer, :setpoint), unit: :degree
+      plot "lean vs target", [joint(:lean), controller(:pid_balancer, :target)]
+    end
+  end
+
+  keys do
+    bind "s", command: :stand, label: "stand"
+  end
+
+  hints do
+    state :idle, "hold it upright, then s to stand"
+  end
+end
+```
+
+Four sections, all optional:
+
+- **`drive`** — hold-to-drive with the arrow keys. While a key is held, bb_tui calls `publish(robot, throttle, turn)` at `rate` Hz, with throttle and turn of -1, 0 or 1 scaled by `throttle_scale` and `turn_scale`; letting go calls `stop(robot)`. bb_tui never needs to know the kit: the extension names the functions.
+- **`panels`** — boxes of `readout`s (a labelled value) and `plot`s (a live chart), each on a tab of its own unless `tab` groups it; `tab :drive` puts a panel beside the drive pad.
+- **`keys`** — `bind` a key to a robot command. bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`) can't be bound, and the compiler says so.
+- **`hints`** — a banner under the title bar for each robot runtime state.
+
+## Sources
+
+Readouts, plots and drive scales read their values from sources:
+
+| Source | Value |
+|---|---|
+| `joint(:lean)` | a joint's position, as the joints panel shows it |
+| `controller(:pid_balancer, :setpoint)` | a field of the map a controller answers `handle_call(:inspect, ...)` with; a list reaches into nested maps |
+| `topic([:sensor, :wheel], :velocity)` | a field of the latest message under a path; a list reaches into the payload |
+| `param([:yaw, :turn_rate])` | a robot parameter's current value |
+
+The full option reference, generated from the DSL itself, is [the Extension DSL](DSL-BB.TUI.Extension.md).
