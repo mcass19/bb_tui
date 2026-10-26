@@ -32,6 +32,8 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.SlowCommand,
           BB.TUI.Test.Servo,
           BB.TUI.Test.PeerHelper,
+          BB.TUI.Test.RemoteDrive,
+          BB.TUI.Test.RemoteDriveExtension,
           # extension fixtures, and the DSL builder modules Spark generates
           # (they run at compile time)
           BB.TUI.Test.Drive,
