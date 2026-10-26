@@ -158,15 +158,25 @@ defmodule BB.TUI.IntegrationTest do
       assert current_state(pid).commands.executing == nil
     end
 
-    # Regression: `BB.Command.cancel/1` is a `GenServer.stop/3` that exits when
-    # the command stops for any reason other than the requested one — a handler
-    # ending cleanly on cancellation exits :normal. Cancel is dispatched inline
-    # from `update/2`, so an escaping exit killed `ExRatatui.Server` and took the
-    # whole dashboard down mid-session.
+    # Regression: `BB.Command.cancel/2` ends in a `GenServer.stop/3` that exits
+    # when the command stops for any reason other than the requested one — a
+    # handler ending cleanly on cancellation exits :normal. Cancel is
+    # dispatched inline from `update/2`, so an escaping exit killed
+    # `ExRatatui.Server` and took the whole dashboard down mid-session.
     test "cancel: `c` survives a command that stops with a different reason" do
       cmd_pid = spawn(fn -> Process.sleep(:infinity) end)
+      execution_id = make_ref()
+
+      entry = %{
+        name: :home,
+        execution_id: execution_id,
+        pid: cmd_pid,
+        category: :default,
+        started_at: DateTime.utc_now()
+      }
 
       Mimic.stub(BB.Robot.Runtime, :execute, fn _robot, :home, _goal -> {:ok, cmd_pid} end)
+      Mimic.stub(BB.Command, :list, fn _robot -> [entry] end)
 
       # Stays pending so the command is still running when `c` arrives —
       # awaiting with :infinity is exactly what makes that window real.
@@ -177,7 +187,7 @@ defmodule BB.TUI.IntegrationTest do
         end
       end)
 
-      Mimic.stub(BB.Command, :cancel, fn ^cmd_pid ->
+      Mimic.stub(BB.Command, :cancel, fn _robot, ^execution_id ->
         exit({:normal, {GenServer, :stop, [cmd_pid, {:shutdown, :cancelled}, :infinity]}})
       end)
 
@@ -186,7 +196,7 @@ defmodule BB.TUI.IntegrationTest do
       :ok = Runtime.inject_event(pid, %Key{code: "enter", kind: "press"})
 
       eventually(fn ->
-        assert current_state(pid).commands.executing_pid == cmd_pid
+        assert current_state(pid).commands.running == [entry]
       end)
 
       :ok = Runtime.inject_event(pid, %Key{code: "c", kind: "press"})
@@ -285,7 +295,7 @@ defmodule BB.TUI.IntegrationTest do
     test "dormant when nothing is animating" do
       pid = start_tui!()
 
-      # In :idle / :armed (no executing command) subscriptions/1 returns
+      # Outside :disarming subscriptions/1 returns
       # [], so the runtime registers no timer. Asserting on the snapshot
       # is deterministic — no need to sleep waiting for ticks that won't
       # fire.

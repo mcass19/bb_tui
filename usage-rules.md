@@ -152,7 +152,8 @@ BB.TUI.run(MyApp.Robot, renderers: %{[:sensor, :gripper] => MyApp.GripperRendere
 Commands are awaited with `:infinity`, so a continuous command — one that only
 returns when it stops or is cancelled — is never reported as timed out while it
 is still running. Runaways stay bounded by the command's own DSL `timeout`.
-Press `c` in the commands panel to cancel the running command.
+The commands panel shows every command running on the robot, whoever started
+it, with a `⏳ Running` badge; press `c` on one to cancel its newest execution.
 
 ## Anti-patterns
 

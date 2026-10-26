@@ -421,11 +421,69 @@ defmodule BB.TUI.StateTest do
       assert length(state.events.list) == 2
     end
 
+    test "never debounces command lifecycle or state machine events" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      path = [:command, :calibrate, make_ref()]
+
+      state =
+        state
+        |> State.append_event(path, %{payload: %BB.Command.Event{status: :started}})
+        |> State.append_event(path, %{payload: %BB.Command.Event{status: :failed}})
+        |> State.append_event([:state_machine], %{payload: %{from: :disarmed, to: :armed}})
+        |> State.append_event([:state_machine], %{payload: %{from: :armed, to: :executing}})
+
+      assert length(state.events.list) == 4
+    end
+
+    test "a repeated parameter change replaces its earlier row" do
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+      change = &%{payload: %BB.Parameter.Changed{path: [:speed], old_value: &1, new_value: &2}}
+
+      state =
+        state
+        |> State.append_event([:param, :speed], change.(1, 2))
+        |> State.append_event([:state_machine], %{payload: %{from: :armed, to: :idle}})
+        |> State.append_event([:param, :speed], change.(2, 3))
+        |> State.append_event([:param, :speed], change.(3, 4))
+
+      assert [{_, [:param, :speed], %{payload: %{new_value: 4}}}, {_, [:state_machine], _}] =
+               state.events.list
+    end
+
+    test "a repeated parameter change is kept when its earlier row is gone" do
+      msg = %{payload: %BB.Parameter.Changed{path: [:speed], old_value: 1, new_value: 2}}
+      key = State.event_debounce_key([:param, :speed], msg)
+      state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
+
+      state =
+        put_in(state.throttle.last_seen, %{key => System.monotonic_time(:millisecond)})
+        |> State.append_event([:param, :speed], msg)
+
+      assert [{_, [:param, :speed], ^msg}] = state.events.list
+    end
+
     test "records last-seen only for accepted events" do
       state = Fixtures.sample_state(%{event_debounce_ms: 1_000})
       state = State.append_event(state, [:sensor, :imu], %{payload: %{x: 1}})
 
       assert Map.has_key?(state.throttle.last_seen, {[:sensor, :imu], :map})
+    end
+  end
+
+  describe "update_safety/3 and joint targets" do
+    test "leaving the armed states clears every joint's target" do
+      entries = %{
+        elbow: %{joint: %{}, position: 0.0, target: 0.5},
+        wrist: %{joint: %{}, position: 0.0, target: nil}
+      }
+
+      state = %State{joints: %State.Joints{entries: entries}}
+
+      assert State.update_safety(state, :disarming, :disarming).joints.entries.elbow.target == 0.5
+
+      disarmed = State.update_safety(state, :disarmed, :disarmed)
+      assert disarmed.joints.entries.elbow.target == nil
+      assert disarmed.joints.entries.wrist == entries.wrist
     end
   end
 

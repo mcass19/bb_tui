@@ -402,26 +402,53 @@ defmodule BB.TUI.RobotTest do
       assert {:ok, _pid} = Robot.execute_command(@robot, :home, %{}, nil)
     end
 
-    test "cancel_command/2 delegates locally when node is nil" do
+    test "await_command/2 awaits locally with :infinity when node is nil" do
       cmd_pid = self()
-      Mimic.expect(BB.Command, :cancel, fn ^cmd_pid -> :ok end)
+      Mimic.expect(BB.Command, :await, fn ^cmd_pid, :infinity -> {:ok, :done} end)
 
-      assert Robot.cancel_command(cmd_pid, nil) == :ok
+      assert Robot.await_command(cmd_pid, nil) == {:ok, :done}
     end
 
-    # BB.Command.cancel/1 is GenServer.stop(pid, {:shutdown, :cancelled}), which
-    # exits when the command stops for any other reason — a handler that ends
-    # cleanly on cancellation exits :normal. bb only catches {:noproc, _}, so
-    # that exit escapes. This runs inline from update/2, so letting it through
-    # kills the whole dashboard.
-    test "cancel_command/2 swallows the exit when the command stops normally" do
-      cmd_pid = self()
+    test "cancel_command/3 cancels by execution id locally when node is nil" do
+      id = make_ref()
+      Mimic.expect(BB.Command, :cancel, fn @robot, ^id -> :ok end)
 
-      Mimic.expect(BB.Command, :cancel, fn ^cmd_pid ->
-        exit({:normal, {GenServer, :stop, [cmd_pid, {:shutdown, :cancelled}, :infinity]}})
+      assert Robot.cancel_command(@robot, id, nil) == :ok
+    end
+
+    test "cancel_command/3 ignores a command that has already finished" do
+      id = make_ref()
+      Mimic.expect(BB.Command, :cancel, fn @robot, ^id -> {:error, :not_found} end)
+
+      assert Robot.cancel_command(@robot, id, nil) == :ok
+    end
+
+    # BB.Command.cancel/2 ends in GenServer.stop(pid, {:shutdown, :cancelled}),
+    # which exits when the command stops for any other reason — a handler that
+    # ends cleanly on cancellation exits :normal. bb only catches {:noproc, _},
+    # so that exit escapes. This runs inline from update/2, so letting it
+    # through kills the whole dashboard.
+    test "cancel_command/3 swallows the exit when the command stops normally" do
+      id = make_ref()
+
+      Mimic.expect(BB.Command, :cancel, fn @robot, ^id ->
+        exit({:normal, {GenServer, :stop, [self(), {:shutdown, :cancelled}, :infinity]}})
       end)
 
-      assert Robot.cancel_command(cmd_pid, nil) == :ok
+      assert Robot.cancel_command(@robot, id, nil) == :ok
+    end
+
+    test "running_commands/2 lists the robot's running commands locally" do
+      entry = %{name: :home, execution_id: make_ref(), started_at: DateTime.utc_now()}
+      Mimic.expect(BB.Command, :list, fn @robot -> [entry] end)
+
+      assert Robot.running_commands(@robot, nil) == [entry]
+    end
+
+    test "running_commands/2 is empty when the robot's registry is not up" do
+      Mimic.expect(BB.Command, :list, fn @robot -> raise ArgumentError, "unknown registry" end)
+
+      assert Robot.running_commands(@robot, nil) == []
     end
   end
 
@@ -600,26 +627,63 @@ defmodule BB.TUI.RobotTest do
       assert {:ok, ^reply_pid} = Robot.execute_command(@robot, :home, %{}, @remote)
     end
 
-    test "cancel_command/2 routes through :rpc.call" do
+    # bb's ResultCache is node-local: awaited from the dashboard's node, a
+    # command that already finished reports :noproc although it succeeded.
+    test "await_command/2 awaits on the robot's node" do
       cmd_pid = self()
 
-      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :cancel, [^cmd_pid] ->
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :await, [^cmd_pid, :infinity] ->
+        {:ok, :done}
+      end)
+
+      Mimic.reject(&BB.Command.await/2)
+
+      assert Robot.await_command(cmd_pid, @remote) == {:ok, :done}
+    end
+
+    test "await_command/2 reports a lost robot node as an error" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :await, _args ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.await_command(self(), @remote) == {:error, {:badrpc, :nodedown}}
+    end
+
+    test "cancel_command/3 routes through :rpc.call" do
+      id = make_ref()
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :cancel, [@robot, ^id] ->
         :ok
       end)
 
-      assert Robot.cancel_command(cmd_pid, @remote) == :ok
+      assert Robot.cancel_command(@robot, id, @remote) == :ok
     end
 
     # Unlike every other remote call here, a :badrpc from cancel is ignored
-    # rather than raised — the await resolving is the authoritative outcome.
-    test "cancel_command/2 ignores a :badrpc reply instead of raising" do
-      cmd_pid = self()
+    # rather than raised — the command's own events report the outcome.
+    test "cancel_command/3 ignores a :badrpc reply instead of raising" do
+      id = make_ref()
 
-      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :cancel, [^cmd_pid] ->
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :cancel, [@robot, ^id] ->
         {:badrpc, {:EXIT, {:normal, {GenServer, :stop, []}}}}
       end)
 
-      assert Robot.cancel_command(cmd_pid, @remote) == :ok
+      assert Robot.cancel_command(@robot, id, @remote) == :ok
+    end
+
+    test "running_commands/2 routes through :rpc.call" do
+      entry = %{name: :home, execution_id: make_ref(), started_at: DateTime.utc_now()}
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :list, [@robot] -> [entry] end)
+
+      assert Robot.running_commands(@robot, @remote) == [entry]
+    end
+
+    test "running_commands/2 is empty when the remote node can't be reached" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Command, :list, [@robot] ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.running_commands(@robot, @remote) == []
     end
   end
 end

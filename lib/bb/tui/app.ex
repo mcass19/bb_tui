@@ -39,9 +39,8 @@ defmodule BB.TUI.App do
       (PubSub, async results, subscription ticks, `send_after`
       messages). Returns `{:noreply, state}` for pure transitions or
       `{:noreply, state, commands: [cmd]}` when an effect should fire.
-    * `subscriptions/1` — declares the throbber tick interval whenever
-      the dashboard has something animating (a `:disarming` safety
-      state or a command currently executing), and a one-shot
+    * `subscriptions/1` — declares the throbber tick interval while
+      the safety panel's disarming spinner animates, and a one-shot
       `:sensor_flush` tick whenever a sensor render is pending (see
       *High-rate sensor handling*). The runtime diffs the result
       against the previous one, so timers only run when needed. This
@@ -90,16 +89,22 @@ defmodule BB.TUI.App do
 
   ## Side-effect convention
 
-  Fast, fire-and-forget calls (`Robot.arm/2`, `Robot.disarm/2`,
-  `Robot.set_parameter/4`, `Robot.publish/4`, `Robot.force_disarm/2`)
-  are invoked inline from `update/2` rather than wrapped in a
-  `Command.async/2`. They are effectively constant-time PubSub
-  publishes; the boilerplate of routing through a no-op result mapper
-  would dwarf the call. `Robot.execute_command/4`, which monitors a
-  spawned command process and waits for its `:DOWN`, goes through
-  `Command.async/2` — and so does `Robot.set_actuator/4`, whose
-  `:pubsub` delivery blocks on the actuator's answer; its refusals
-  come back as `{:actuator_result, _, _}` and land in the event log.
+  Every call that waits on one of the robot's processes runs through
+  `Command.async/2`, so the process that owns the terminal never blocks
+  on it: arming, disarming and force-disarming (`{:robot_write, _, _}`),
+  which may run a whole arm/disarm command; parameter writes
+  (`{:robot_write, _, _}`) and bridge reads and writes
+  (`{:remote_param_set, _, _, _}`, `{:remote_parameters, _, _}`); command
+  execution, awaiting and cancelling; and jogs via
+  `Robot.set_actuator/4`, whose `:pubsub` delivery blocks on the
+  actuator's answer (`{:actuator_result, _, _}`). An accepted write is
+  reported by the robot's own events; a refusal lands in the event log
+  under the path the write was aimed at. Only `Robot.publish/4` (the
+  simulated-joint fallback) and reads backed by ETS or the runtime stay
+  inline.
+  Each actuator has at most one jog in flight: targets that arrive
+  meanwhile are parked, latest wins, and sent once it is answered
+  (see `BB.TUI.State.request_jog/3`).
 
   ## Cancelling a running command
 
@@ -107,8 +112,15 @@ defmodule BB.TUI.App do
   command — one that only returns when it stops or is cancelled — is
   never reported as timed out while it is still running. Runaways stay
   bounded by the command's own DSL `timeout`. The escape hatch is `c`
-  in the commands panel, which cancels the running command and resolves
-  the await.
+  in the commands panel, which cancels the selected command's newest
+  execution and resolves the await.
+
+  The panel shows every command running on the robot, not only the one
+  this dashboard started — automation, another SSH session or a browser
+  tab can start commands too — so `c` works on those as well. The listing
+  comes from `BB.Command.list/1` and is refreshed on every `[:command | _]`
+  event and when this dashboard's own command starts or finishes;
+  cancellation goes by execution id through `BB.Command.cancel/2`.
   """
 
   use ExRatatui.App, runtime: :reducer
@@ -116,6 +128,7 @@ defmodule BB.TUI.App do
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Robot.Joint
+  alias BB.TUI.Errors
   alias BB.TUI.Panels
   alias BB.TUI.Robot
   alias BB.TUI.State
@@ -185,6 +198,7 @@ defmodule BB.TUI.App do
         commands: %State.Commands{available: commands},
         renderers: renderers
       }
+      |> State.put_running_commands(Robot.running_commands(robot, node))
       |> State.update_parameters(Robot.list_parameters(robot, [], node))
       |> State.set_parameter_tabs(bridges)
 
@@ -296,8 +310,8 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: "y", kind: "press"}},
         %{safety: %{confirm_force_disarm?: true}} = state
       ) do
-    Robot.force_disarm(state.robot, state.node)
-    {:noreply, State.dismiss_force_disarm(state)}
+    {:noreply, State.dismiss_force_disarm(state),
+     commands: [safety_write(state, :force_disarm, &Robot.force_disarm/2)]}
   end
 
   def update(
@@ -333,8 +347,8 @@ defmodule BB.TUI.App do
         {:event, %Event.Key{code: "enter", kind: "press"}},
         %{parameters: %{editing: %{path: path, buffer: buffer}}} = state
       ) do
-    Robot.set_parameter(state.robot, path, State.parse_param_input(buffer), state.node)
-    {:noreply, State.cancel_param_edit(state)}
+    {:noreply, State.cancel_param_edit(state),
+     commands: [parameter_write(state, path, State.parse_param_input(buffer))]}
   end
 
   def update(
@@ -484,13 +498,11 @@ defmodule BB.TUI.App do
   end
 
   def update({:event, %Event.Key{code: "a", kind: "press"}}, state) do
-    Robot.arm(state.robot, state.node)
-    {:noreply, state}
+    {:noreply, state, commands: [safety_write(state, :arm, &Robot.arm/2)]}
   end
 
   def update({:event, %Event.Key{code: "d", kind: "press"}}, state) do
-    Robot.disarm(state.robot, state.node)
-    {:noreply, state}
+    {:noreply, state, commands: [safety_write(state, :disarm, &Robot.disarm/2)]}
   end
 
   def update({:event, %Event.Key{code: "f", kind: "press"}}, state) do
@@ -542,21 +554,6 @@ defmodule BB.TUI.App do
     else
       {:noreply, state}
     end
-  end
-
-  # ── Update — commands panel: cancel a running command ────────
-
-  # Above the edit-mode clauses so `c` cancels rather than typing into a
-  # focused argument. Only reachable while a command is running, which
-  # cannot overlap edit mode — executing exits it.
-
-  def update(
-        {:event, %Event.Key{code: "c", kind: "press"}},
-        %{ui: %{active_panel: :commands}, commands: %{executing_pid: pid}} = state
-      )
-      when is_pid(pid) do
-    Robot.cancel_command(pid, state.node)
-    {:noreply, state}
   end
 
   # ── Update — commands panel: argument-edit mode ──────────────
@@ -633,6 +630,23 @@ defmodule BB.TUI.App do
       )
       when code in ["k", "up"] do
     {:noreply, State.select_prev_command(state)}
+  end
+
+  # Below the edit-mode clauses, so a `c` typed into an argument stays text:
+  # a command started elsewhere can be running while this dashboard edits.
+  # Cancels the selected command's newest execution, whoever started it; the
+  # outcome arrives as that command's `[:command | _]` event.
+  def update(
+        {:event, %Event.Key{code: "c", kind: "press"}},
+        %{ui: %{active_panel: :commands}} = state
+      ) do
+    case State.selected_running_execution(state) do
+      %{execution_id: execution_id} ->
+        {:noreply, state, commands: [cancel_command_command(state, execution_id)]}
+
+      nil ->
+        {:noreply, state}
+    end
   end
 
   def update(
@@ -753,7 +767,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :parameters}} = state
       ) do
     state = State.cycle_parameter_tab(state)
-    {:noreply, refresh_selected_tab(state)}
+    {:noreply, state, commands: refresh_selected_tab(state)}
   end
 
   # ── Update — PubSub + async info messages ────────────────────
@@ -801,6 +815,18 @@ defmodule BB.TUI.App do
     {:noreply, state}
   end
 
+  # A command started, finished, failed or was cancelled — by this dashboard or
+  # anyone else — so re-read what is running. On a terminal status the event's
+  # own execution is left out: bb publishes it while the command process is
+  # still alive and registered.
+  def update({:info, {:bb, [:command, _name, execution_id] = path, msg}}, state) do
+    finished = if terminal_command_event?(msg), do: execution_id
+
+    state
+    |> State.put_running_commands(Robot.running_commands(state.robot, state.node), finished)
+    |> route_message(path, msg)
+  end
+
   # Consumer-renderer seam: a path matching a registered renderer prefix
   # (longest-prefix match, like a routing table) is handed off to the consumer's
   # module rather than pattern-matched here — bb_tui never inspects the payload's
@@ -809,20 +835,8 @@ defmodule BB.TUI.App do
   # (see `BB.TUI.Panels.Events`). The render is coalesced like sensors
   # (render?: false + the :sensor_flush tick) so a fast consumer stays smooth.
   # Falls through to the catch-all below when no renderer matches.
-  def update({:info, {:bb, path, %{payload: payload} = msg}}, state) do
-    case State.renderer_for(state, path) do
-      nil ->
-        {:noreply, State.append_event(state, path, msg)}
-
-      renderer ->
-        state =
-          state
-          |> maybe_put_observed(renderer, path, payload)
-          |> State.append_event(path, msg)
-          |> State.mark_render_pending()
-
-        {:noreply, state, render?: false}
-    end
+  def update({:info, {:bb, path, %{payload: _} = msg}}, state) do
+    route_message(state, path, msg)
   end
 
   # Everything else we subscribe to but don't model in dedicated state —
@@ -834,8 +848,11 @@ defmodule BB.TUI.App do
     {:noreply, State.append_event(state, path, msg)}
   end
 
+  # The command is registered by now, so the listing includes it even before
+  # its `:started` event arrives (or when `[:command]` isn't subscribed).
   def update({:info, {:command_started, {:ok, cmd_pid}}}, state) do
-    {:noreply, State.set_command_pid(state, cmd_pid), commands: [await_command_command(cmd_pid)]}
+    state = State.put_running_commands(state, Robot.running_commands(state.robot, state.node))
+    {:noreply, state, commands: [await_command_command(state, cmd_pid)]}
   end
 
   def update({:info, {:command_started, {:error, reason}}}, state) do
@@ -843,20 +860,68 @@ defmodule BB.TUI.App do
   end
 
   def update({:info, {:command_result, result}}, state) do
-    {:noreply, State.set_command_result(state, result)}
+    state =
+      state
+      |> State.set_command_result(result)
+      |> State.put_running_commands(Robot.running_commands(state.robot, state.node))
+
+    {:noreply, state}
   end
 
+  # Either answer frees the actuator's jog slot, sending the position parked
+  # behind it if there is one (see `continue_jog/2`).
+  #
   # Jog commands succeed silently — under key autorepeat there is one of
   # these per repeat, so skip the render. The joint's displayed position
   # moves on sensor feedback, not on acceptance.
-  def update({:info, {:actuator_result, _actuator, :ok}}, state) do
-    {:noreply, state, render?: false}
+  def update({:info, {:actuator_result, actuator, :ok}}, state) do
+    {state, commands} = continue_jog(state, actuator)
+    {:noreply, state, [render?: false] ++ commands}
   end
 
-  # A refusal (or the async runner's trapped exit from a dead actuator)
-  # lands in the event log; the target keeps the asked-for value.
+  # Anything else lands in the event log: a refusal (`NotArmed`, `StaleEpoch`,
+  # …), an actuator that isn't running, a late answer (`CommandPending`, a
+  # warning — the command is queued and will most likely be applied), or the
+  # async runner's trapped exit from an actuator that crashed while handling
+  # the command. Only a late answer keeps the joint's target: the others mean
+  # the joint isn't going there, so the next jog steps from where it is.
   def update({:info, {:actuator_result, actuator, {:error, reason}}}, state) do
-    {:noreply, State.append_event(state, [:actuator, actuator], %{payload: %{error: reason}})}
+    {state, commands} =
+      state
+      |> State.append_event([:actuator, actuator], %{payload: %{error: reason}})
+      |> forget_refused_target(actuator, reason)
+      |> continue_jog(actuator)
+
+    {:noreply, state, commands}
+  end
+
+  # The cancel's own answer carries nothing: the command's `[:command | _]`
+  # events report what happened.
+  def update({:info, :command_cancel_sent}, state), do: {:noreply, state, render?: false}
+
+  # A write the robot accepted is reported by its own event (`[:state_machine]`
+  # for safety, `[:param | _]` for parameters), so the answer itself is dropped
+  # without a render. A refusal has nowhere else to go: it lands in the event
+  # log under the path the write was aimed at.
+  def update({:info, {:robot_write, path, {:error, reason}}}, state) do
+    {:noreply, State.append_event(state, path, %{payload: %{error: reason}})}
+  end
+
+  def update({:info, {:robot_write, _path, _result}}, state),
+    do: {:noreply, state, render?: false}
+
+  # A bridge publishes no event for a write, so an accepted one re-fetches the
+  # bridge's list to show the new value.
+  def update({:info, {:remote_param_set, bridge, _id, :ok}}, state) do
+    {:noreply, state, commands: [fetch_remote_parameters(state, bridge)], render?: false}
+  end
+
+  def update({:info, {:remote_param_set, bridge, id, {:error, reason}}}, state) do
+    {:noreply, State.append_event(state, [:bridge, bridge, id], %{payload: %{error: reason}})}
+  end
+
+  def update({:info, {:remote_parameters, bridge, payload}}, state) do
+    {:noreply, State.put_remote_parameters(state, bridge, payload)}
   end
 
   def update({:info, :throbber_tick}, state) do
@@ -901,6 +966,29 @@ defmodule BB.TUI.App do
 
   # ── Helpers ──────────────────────────────────────────────────
 
+  defp route_message(state, path, %{payload: payload} = msg) do
+    case State.renderer_for(state, path) do
+      nil ->
+        {:noreply, State.append_event(state, path, msg)}
+
+      renderer ->
+        state =
+          state
+          |> maybe_put_observed(renderer, path, payload)
+          |> State.append_event(path, msg)
+          |> State.mark_render_pending()
+
+        {:noreply, state, render?: false}
+    end
+  end
+
+  defp route_message(state, path, msg), do: {:noreply, State.append_event(state, path, msg)}
+
+  defp terminal_command_event?(%{payload: %{status: status}}),
+    do: status in [:succeeded, :failed, :cancelled]
+
+  defp terminal_command_event?(_msg), do: false
+
   # Feed the status-bar readout from the consumer's optional `observed/2`. The
   # callback is optional (`@optional_callbacks observed: 2`), so skip the call
   # entirely when the renderer doesn't export it. A `nil` return (or a
@@ -923,8 +1011,10 @@ defmodule BB.TUI.App do
     end
   end
 
+  # Only the safety panel's disarming spinner animates. A running command
+  # shows a static `⏳ Running` badge, so ticking while one runs would only
+  # redraw an unchanged screen ten times a second.
   defp needs_throbber?(%State{safety: %{state: :disarming}}), do: true
-  defp needs_throbber?(%State{commands: %{executing: marker}}) when marker != nil, do: true
   defp needs_throbber?(_), do: false
 
   defp maybe_add_popup(panels, %{ui: %{show_help?: true, help_scroll_offset: offset}}, full) do
@@ -951,8 +1041,9 @@ defmodule BB.TUI.App do
 
   defp maybe_add_popup(panels, _state, _full), do: panels
 
-  defp adjust_selected_joint(state, _direction, _multiplier)
-       when state.safety.state not in [:armed, :disarming] do
+  defguardp jog_allowed?(state) when state.safety.state in [:armed, :disarming]
+
+  defp adjust_selected_joint(state, _direction, _multiplier) when not jog_allowed?(state) do
     {:noreply, state}
   end
 
@@ -966,13 +1057,14 @@ defmodule BB.TUI.App do
       %{position: pos} when not is_number(pos) ->
         {:noreply, state}
 
-      %{position: pos, joint: joint} ->
+      %{joint: joint} = joint_data ->
         step = State.joint_step(joint) * multiplier
+        base = State.jog_base(joint_data)
 
         new_pos =
           case direction do
-            :increase -> pos + step
-            :decrease -> pos - step
+            :increase -> base + step
+            :decrease -> base - step
           end
           |> State.clamp_position(joint)
 
@@ -980,7 +1072,7 @@ defmodule BB.TUI.App do
         state = State.set_joint_target(state, name, new_pos)
 
         if actuator do
-          {:noreply, state, commands: [set_actuator_command(state, actuator, new_pos)]}
+          jog(state, actuator, new_pos)
         else
           publish_simulated_position(state.robot, name, new_pos, state.node)
           {:noreply, State.set_joint_position(state, name, new_pos)}
@@ -988,10 +1080,59 @@ defmodule BB.TUI.App do
     end
   end
 
+  defp forget_refused_target(state, actuator, reason) do
+    joint = find_joint_for_actuator(state, actuator)
+
+    if joint && Errors.severity(reason) != :warning,
+      do: State.set_joint_target(state, joint, nil),
+      else: state
+  end
+
+  defp find_joint_for_actuator(%State{robot_struct: %{actuators: actuators}}, actuator) do
+    case Map.get(actuators, actuator) do
+      %{joint: joint} -> joint
+      _ -> nil
+    end
+  end
+
+  defp find_joint_for_actuator(_state, _actuator), do: nil
+
+  # One jog in flight per actuator. An actuator applies every command it is
+  # sent, in order — one answered late (`CommandPending`) is still queued, not
+  # dropped — so sending a target per autorepeat would leave a slow actuator
+  # working through stale ones. Targets arriving while a jog is in flight are
+  # parked, latest wins, and sent when it is answered.
+  defp jog(state, actuator, position) do
+    case State.request_jog(state, actuator, position) do
+      {:send, state} ->
+        {:noreply, state, commands: [set_actuator_command(state, actuator, position)]}
+
+      {:queued, state} ->
+        {:noreply, state}
+    end
+  end
+
+  # A position parked while the robot was armed is dropped if it has since
+  # been disarmed: sending it would only collect a refusal.
+  defp continue_jog(state, actuator) do
+    case State.finish_jog(state, actuator) do
+      {nil, state} ->
+        {state, []}
+
+      {position, state} when jog_allowed?(state) ->
+        {state, [commands: [set_actuator_command(state, actuator, position)]]}
+
+      {_position, state} ->
+        {_nil, state} = State.finish_jog(state, actuator)
+        {state, []}
+    end
+  end
+
   # Off the event loop because `set_position/4`'s `:pubsub` delivery is a
   # `GenServer.call`: inline it would stall the terminal-owning process on
-  # every jog keypress and exit it if the actuator is dead. The async runner
-  # traps that exit and delivers it as `{:error, {:exit, reason}}`.
+  # every jog keypress. The async runner traps the exit of an actuator that
+  # crashes while handling the command and delivers it as
+  # `{:error, {:exit, reason}}`.
   defp set_actuator_command(%State{robot: robot, node: node}, actuator, position) do
     Command.async(
       fn -> Robot.set_actuator(robot, actuator, position, node) end,
@@ -1029,18 +1170,42 @@ defmodule BB.TUI.App do
 
   defp refresh_selected_tab(state) do
     case State.selected_parameter_tab(state) do
-      :local ->
-        state
-
-      {:bridge, name} ->
-        payload =
-          case Robot.list_remote_parameters(state.robot, name, state.node) do
-            {:ok, params} -> params
-            {:error, _} = error -> error
-          end
-
-        State.put_remote_parameters(state, name, payload)
+      :local -> []
+      {:bridge, name} -> [fetch_remote_parameters(state, name)]
     end
+  end
+
+  # ── Robot writes and bridge reads, off the event loop ─────────
+  #
+  # Each of these is a call into one of the robot's processes that can take a
+  # while or exit: an arm or disarm may run a whole arm/disarm command and the
+  # disarm callbacks (up to 5s each), a parameter write waits on the runtime,
+  # and a bridge call crosses to the remote system with a 5s timeout. Inline,
+  # they would freeze the dashboard for as long — and over `:rpc` a failed call
+  # raises — so each runs through `Command.async/2`, and its answer comes back
+  # as a message.
+
+  defp safety_write(%State{robot: robot, node: node}, action, fun) do
+    Command.async(fn -> fun.(robot, node) end, &{:robot_write, [:safety, action], &1})
+  end
+
+  defp parameter_write(%State{robot: robot, node: node}, path, value) do
+    Command.async(
+      fn -> Robot.set_parameter(robot, path, value, node) end,
+      &{:robot_write, [:param | path], &1}
+    )
+  end
+
+  defp fetch_remote_parameters(%State{robot: robot, node: node}, bridge) do
+    Command.async(
+      fn ->
+        case Robot.list_remote_parameters(robot, bridge, node) do
+          {:ok, params} -> params
+          {:error, _} = error -> error
+        end
+      end,
+      &{:remote_parameters, bridge, &1}
+    )
   end
 
   defp adjust_selected_param(state, direction, multiplier) do
@@ -1056,15 +1221,13 @@ defmodule BB.TUI.App do
         bounds = State.parameter_bounds(state, path)
         step = integer_step(bounds) * multiplier
         new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
-        Robot.set_parameter(state.robot, path, new_value, state.node)
-        {:noreply, state}
+        {:noreply, state, commands: [parameter_write(state, path, new_value)]}
 
       {path, value} when is_float(value) ->
         bounds = State.parameter_bounds(state, path)
         step = float_step(bounds) * multiplier
         new_value = State.clamp_to_bounds(apply_step(value, direction, step), bounds)
-        Robot.set_parameter(state.robot, path, new_value, state.node)
-        {:noreply, state}
+        {:noreply, state, commands: [parameter_write(state, path, new_value)]}
 
       # A unit-typed value arrives in its declared unit (bb 0.31), but its
       # bounds keep the unit they were declared in, so they are converted
@@ -1073,8 +1236,9 @@ defmodule BB.TUI.App do
         bounds = State.unit_bounds_in(State.parameter_bounds(state, path), value.name)
         step = float_step(bounds) * multiplier
         new_magnitude = State.clamp_to_bounds(apply_step(magnitude, direction, step), bounds)
-        Robot.set_parameter(state.robot, path, %{value | value: new_magnitude}, state.node)
-        {:noreply, state}
+
+        {:noreply, state,
+         commands: [parameter_write(state, path, %{value | value: new_magnitude})]}
 
       {path, value} ->
         cycle_in_values(state, path, value, direction)
@@ -1091,8 +1255,9 @@ defmodule BB.TUI.App do
     case State.parameter_in_values(state, path) do
       [_ | _] = values ->
         step = if direction == :increase, do: :next, else: :prev
-        Robot.set_parameter(state.robot, path, State.cycle_value(values, value, step), state.node)
-        {:noreply, state}
+
+        {:noreply, state,
+         commands: [parameter_write(state, path, State.cycle_value(values, value, step))]}
 
       _ ->
         {:noreply, state}
@@ -1118,13 +1283,16 @@ defmodule BB.TUI.App do
     end
   end
 
-  defp dispatch_remote_set(state, bridge_name, param, new_value) do
+  defp dispatch_remote_set(%State{robot: robot, node: node} = state, bridge, param, new_value) do
     id = State.remote_param_id(param)
 
-    case Robot.set_remote_parameter(state.robot, bridge_name, id, new_value, state.node) do
-      :ok -> {:noreply, refresh_selected_tab(state)}
-      {:error, _reason} -> {:noreply, state}
-    end
+    write =
+      Command.async(
+        fn -> Robot.set_remote_parameter(robot, bridge, id, new_value, node) end,
+        &{:remote_param_set, bridge, id, &1}
+      )
+
+    {:noreply, state, commands: [write]}
   end
 
   defp integer_step({min, max}) when is_integer(min) and is_integer(max),
@@ -1148,8 +1316,7 @@ defmodule BB.TUI.App do
   defp toggle_local_param(state) do
     case State.selected_param(state) do
       {path, value} when is_boolean(value) ->
-        Robot.set_parameter(state.robot, path, !value, state.node)
-        {:noreply, state}
+        {:noreply, state, commands: [parameter_write(state, path, !value)]}
 
       _ ->
         {:noreply, State.start_param_edit(state)}
@@ -1190,7 +1357,7 @@ defmodule BB.TUI.App do
              state.commands.executing == nil do
           args = State.parsed_args_for_selected(state)
 
-          {:noreply, State.start_command(State.exit_command_edit_mode(state), :running),
+          {:noreply, State.start_command(State.exit_command_edit_mode(state), cmd.name),
            commands: [execute_command_command(state, cmd, args)]}
         else
           {:noreply, state}
@@ -1198,9 +1365,9 @@ defmodule BB.TUI.App do
     end
   end
 
-  # Execution is two-phase so the running command's pid reaches state and
-  # can be cancelled: phase one starts it and reports `{:command_started,
-  # _}`, phase two awaits it and reports `{:command_result, _}`.
+  # Execution is two-phase: phase one starts the command and reports
+  # `{:command_started, _}`, at which point it is registered and the running
+  # list is refreshed; phase two awaits it and reports `{:command_result, _}`.
   defp execute_command_command(%State{robot: robot, node: node}, cmd, args) do
     name = cmd.name
 
@@ -1210,9 +1377,20 @@ defmodule BB.TUI.App do
     )
   end
 
-  defp await_command_command(cmd_pid) do
+  # Off the event loop: cancelling is a `GenServer.stop/3`, which waits for the
+  # command to terminate, and a handler busy inside a callback only gets to the
+  # stop request once that callback returns — inline, the dashboard would
+  # freeze for as long.
+  defp cancel_command_command(%State{robot: robot, node: node}, execution_id) do
     Command.async(
-      fn -> await_command(cmd_pid) end,
+      fn -> Robot.cancel_command(robot, execution_id, node) end,
+      fn _ -> :command_cancel_sent end
+    )
+  end
+
+  defp await_command_command(%State{node: node}, cmd_pid) do
+    Command.async(
+      fn -> await_command(cmd_pid, node) end,
       fn result -> {:command_result, result} end
     )
   end
@@ -1222,7 +1400,8 @@ defmodule BB.TUI.App do
   # (e.g. a synchronous {:stop, :normal, _}) terminates between
   # `Robot.execute_command/4` returning the pid and us awaiting on it.
   # The earlier Process.monitor approach surfaced that race as a
-  # spurious {:error, :noproc}.
+  # spurious {:error, :noproc}. The cache is node-local, so against a
+  # remote robot `Robot.await_command/2` runs the await on its node.
   #
   # Awaits `:infinity` rather than a UI-side deadline: a continuous command
   # only returns when it stops or is cancelled, and the command's own DSL
@@ -1232,8 +1411,8 @@ defmodule BB.TUI.App do
   #
   # Unwrap {:command_failed, reason} at the boundary so the panel shows
   # the bare reason (`:cancelled`, `:noproc`, etc.) consistently.
-  defp await_command(cmd_pid) do
-    case BB.Command.await(cmd_pid, :infinity) do
+  defp await_command(cmd_pid, node) do
+    case Robot.await_command(cmd_pid, node) do
       {:ok, result} -> {:ok, result}
       {:ok, result, _opts} -> {:ok, result}
       {:error, {:command_failed, reason}} -> {:error, reason}

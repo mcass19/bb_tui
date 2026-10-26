@@ -12,6 +12,13 @@ defmodule BB.TUI.Panels.Events do
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Math.Vec3
+  alias BB.Message.Actuator.BeginMotion
+  alias BB.Message.Actuator.Command.Effort
+  alias BB.Message.Actuator.Command.Hold
+  alias BB.Message.Actuator.Command.Stop
+  alias BB.Message.Actuator.Command.Velocity
+  alias BB.Message.Actuator.EndMotion
+  alias BB.TUI.Errors
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Layout.Rect
@@ -20,6 +27,9 @@ defmodule BB.TUI.Panels.Events do
   alias ExRatatui.Widgets.Block
   alias ExRatatui.Widgets.List, as: WidgetList
   alias ExRatatui.Widgets.Scrollbar
+
+  # Paths `BB.TUI.App` logs a refusal under, as `%{payload: %{error: reason}}`.
+  @refusal_roots [:actuator, :param, :bridge, :safety]
 
   @doc """
   Renders the events panel as a List widget with formatted event entries.
@@ -217,7 +227,7 @@ defmodule BB.TUI.Panels.Events do
   | --------- | ------ |
   | timestamp | cyan   |
   | path      | blue (`Theme.path_style/0`) |
-  | summary   | white  |
+  | summary   | white, or yellow/red for a warning/error (see `summary_style/2`) |
 
   ## Examples
 
@@ -252,10 +262,49 @@ defmodule BB.TUI.Panels.Events do
         %Span{content: " ", style: %Style{}},
         %Span{content: path_str, style: Theme.path_style()},
         %Span{content: " ", style: %Style{}},
-        %Span{content: summary, style: %Style{fg: :white}}
+        %Span{content: summary, style: summary_style(path, message)}
       ]
     }
   end
+
+  @doc """
+  Returns the style for an event's summary, colored by severity when the event
+  reports a failure.
+
+  A refusal of something this dashboard sent — a jog, a parameter or bridge
+  write, an arm or disarm — takes its color from the reason's
+  `BB.Error.Severity`: yellow for a `:warning` such as a late answer, red
+  otherwise. A failed
+  command and a `[:safety, :error]` hardware report are red, except a
+  command that failed with `:cancelled`, which is how bb reports a
+  cancellation. Everything else is white.
+
+  ## Examples
+
+      iex> BB.TUI.Panels.Events.summary_style([:state_machine], %{payload: %{from: :armed, to: :idle}}).fg
+      :white
+
+      iex> BB.TUI.Panels.Events.summary_style([:actuator, :elbow], %{payload: %{error: :disarmed}}).fg
+      BB.TUI.Theme.red()
+
+      iex> pending = %BB.Error.State.CommandPending{actuator: :elbow, timeout_ms: 250}
+      iex> BB.TUI.Panels.Events.summary_style([:actuator, :elbow], %{payload: %{error: pending}}).fg
+      BB.TUI.Theme.yellow()
+  """
+  @spec summary_style(list(), term()) :: Style.t()
+  def summary_style([root | _], %{payload: %{error: reason} = payload})
+      when root in @refusal_roots and not is_struct(payload),
+      do: severity_style(Errors.severity(reason))
+
+  def summary_style([:command | _], %{payload: %{status: :failed, data: %{reason: :cancelled}}}),
+    do: %Style{fg: :white}
+
+  def summary_style([:command | _], %{payload: %{status: :failed}}), do: severity_style(:error)
+  def summary_style([:safety, :error | _], _message), do: severity_style(:critical)
+  def summary_style(_path, _message), do: %Style{fg: :white}
+
+  defp severity_style(:warning), do: %Style{fg: Theme.yellow()}
+  defp severity_style(_severity), do: %Style{fg: Theme.red()}
 
   # Prefer the consumer renderer registered for this path (longest-prefix
   # match). When a renderer matches and its `summarize/2` returns a string, use
@@ -371,6 +420,7 @@ defmodule BB.TUI.Panels.Events do
   defp format_value(other), do: format_scalar(other)
 
   defp format_scalar(f) when is_float(f), do: :erlang.float_to_binary(f, decimals: 3)
+  defp format_scalar(%{__exception__: true} = exception), do: Exception.message(exception)
 
   defp format_scalar(%Transform2D{x: x, y: y, theta: theta}) do
     "(#{compact(x)}, #{compact(y)}, #{:erlang.float_to_binary(theta * 180.0 / :math.pi(), decimals: 1)}°)"
@@ -397,11 +447,21 @@ defmodule BB.TUI.Panels.Events do
   # bb's command pubsub paths look like `[:command, :move, #Reference<…>]`.
   # The execution_id reference is internal correlation and doesn't render
   # via String.Chars, so drop reference segments and stringify the rest.
+  #
+  # Actuators and sensors publish under their full topology path
+  # (`[:actuator, :base_link, :waist, …, :elbow, :elbow_servo]`), which would
+  # push the summary off the row. Their names are unique within a robot, so
+  # the root and the name say everything.
+  defp format_path([root | [_, _ | _] = rest]) when root in [:actuator, :sensor],
+    do: format_path([root, List.last(rest)])
+
   defp format_path(path) do
     path
     |> Enum.reject(&is_reference/1)
     |> Enum.map_join(".", &to_string/1)
   end
+
+  defp component_name(rest), do: rest |> List.last() |> to_string()
 
   defp format_goal(goal) when map_size(goal) == 0, do: "(no args)"
 
@@ -424,6 +484,26 @@ defmodule BB.TUI.Panels.Events do
 
       iex> BB.TUI.Panels.Events.summarize([:actuator, :waist], %{payload: %{position: 1.57}})
       "waist \u{2190} position 1.570"
+
+      iex> motion = %BB.Message.Actuator.BeginMotion{initial_position: 0.0, target_position: 0.5}
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :base_link, :elbow, :elbow_servo], %{payload: motion})
+      "elbow_servo moving 0.000 \u{2192} 0.500"
+
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: :disarmed}})
+      "elbow \u{2718} :disarmed"
+
+      iex> BB.TUI.Panels.Events.summarize([:safety, :arm], %{payload: %{error: :in_error}})
+      "arm \u{2718} :in_error"
+
+      iex> BB.TUI.Panels.Events.summarize([:param, :motion, :max_speed], %{payload: %{error: :out_of_range}})
+      "motion.max_speed \u{2718} :out_of_range"
+
+      iex> BB.TUI.Panels.Events.summarize([:bridge, :mavlink, "PITCH_P"], %{payload: %{error: :timeout}})
+      "mavlink.PITCH_P \u{2718} :timeout"
+
+      iex> pending = %BB.Error.State.CommandPending{actuator: :elbow, command: Position, timeout_ms: 250}
+      iex> BB.TUI.Panels.Events.summarize([:actuator, :elbow], %{payload: %{error: pending}})
+      "elbow \u{26A0} Actuator :elbow has not answered Position within 250ms. The command is still queued and will most likely be applied"
 
       iex> waypoints = [[position: 0.0, time_from_start: 0], [position: 0.6, time_from_start: 400]]
       iex> BB.TUI.Panels.Events.summarize([:actuator, :shoulder], %{payload: %{waypoints: waypoints, repeat: 1}})
@@ -448,6 +528,9 @@ defmodule BB.TUI.Panels.Events do
       iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :cancelled}})
       "move cancelled"
 
+      iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :failed, data: %{reason: :cancelled}}})
+      "move cancelled"
+
       iex> BB.TUI.Panels.Events.summarize([:param, :speed], %{payload: %{new_value: 42}})
       "speed = 42"
 
@@ -463,24 +546,51 @@ defmodule BB.TUI.Panels.Events do
     "#{from} \u{2192} #{to}"
   end
 
-  def summarize([:actuator | rest], %{payload: %{error: reason}}) do
-    joint = Enum.map_join(rest, ".", &to_string/1)
-    "#{joint} \u{2718} #{error_text(reason)}"
+  # A refusal of something this dashboard sent, logged by `BB.TUI.App` under
+  # the path the write was aimed at. A late answer
+  # (`BB.Error.State.CommandPending`, severity `:warning`) is not a refusal —
+  # the command is queued and will most likely still be applied — so it gets
+  # a warning mark rather than the cross. The struct guard keeps bb's own
+  # `[:safety, :error]` hardware reports, which carry an `error` field, out.
+  def summarize([root | rest], %{payload: %{error: reason} = payload})
+      when root in @refusal_roots and not is_struct(payload) do
+    target = Enum.map_join(rest, ".", &to_string/1)
+    "#{target} #{severity_mark(Errors.severity(reason))} #{Errors.describe(reason)}"
   end
+
+  # What the actuator reports back: the motion it started for a command, and
+  # (from drivers that report it) where and why that motion ended.
+  def summarize([:actuator | rest], %{payload: %BeginMotion{} = motion}) do
+    "#{component_name(rest)} moving #{decimal(motion.initial_position)} \u{2192} " <>
+      decimal(motion.target_position)
+  end
+
+  def summarize([:actuator | rest], %{payload: %EndMotion{position: position, reason: reason}}),
+    do: "#{component_name(rest)} stopped at #{decimal(position)} (#{reason})"
 
   def summarize([:actuator | rest], %{payload: %{position: position}})
       when is_number(position) do
-    joint = Enum.map_join(rest, ".", &to_string/1)
-    "#{joint} \u{2190} position #{:erlang.float_to_binary(position / 1, decimals: 3)}"
+    "#{component_name(rest)} \u{2190} position #{decimal(position)}"
   end
 
   def summarize([:actuator | rest], %{payload: %{waypoints: [_ | _] = waypoints} = payload}) do
-    joint = Enum.map_join(rest, ".", &to_string/1)
     duration = waypoints |> List.last() |> Enum.into(%{}) |> Map.get(:time_from_start, 0)
 
-    "#{joint} \u{2190} trajectory #{length(waypoints)} waypoints over #{duration}ms" <>
+    "#{component_name(rest)} \u{2190} trajectory #{length(waypoints)} waypoints over #{duration}ms" <>
       format_repeat(Map.get(payload, :repeat))
   end
+
+  def summarize([:actuator | rest], %{payload: %Velocity{velocity: velocity}}),
+    do: "#{component_name(rest)} \u{2190} velocity #{decimal(velocity)}"
+
+  def summarize([:actuator | rest], %{payload: %Effort{effort: effort}}),
+    do: "#{component_name(rest)} \u{2190} effort #{decimal(effort)}"
+
+  def summarize([:actuator | rest], %{payload: %Stop{mode: mode}}),
+    do: "#{component_name(rest)} \u{2190} stop (#{mode})"
+
+  def summarize([:actuator | rest], %{payload: %Hold{}}),
+    do: "#{component_name(rest)} \u{2190} hold"
 
   def summarize([:command, name, _execution_id], %{
         payload: %{status: :started, data: %{goal: goal}}
@@ -494,10 +604,18 @@ defmodule BB.TUI.Panels.Events do
     "#{name} \u{2714} #{inspect(result, limit: 30)}"
   end
 
+  # bb's convention is for `result/1` to answer a cancellation with
+  # `{:error, :cancelled}`, which the runtime publishes as `:failed`.
+  def summarize([:command, name, _execution_id], %{
+        payload: %{status: :failed, data: %{reason: :cancelled}}
+      }) do
+    "#{name} cancelled"
+  end
+
   def summarize([:command, name, _execution_id], %{
         payload: %{status: :failed, data: %{reason: reason}}
       }) do
-    "#{name} \u{2718} #{inspect(reason, limit: 30)}"
+    "#{name} \u{2718} #{Errors.describe(reason)}"
   end
 
   def summarize([:command, name, _execution_id], %{payload: %{status: :cancelled}}) do
@@ -517,8 +635,11 @@ defmodule BB.TUI.Panels.Events do
     inspect(message, pretty: false, limit: 30)
   end
 
-  defp error_text(%{__exception__: true} = exception), do: Exception.message(exception)
-  defp error_text(reason), do: inspect(reason, pretty: false, limit: 30)
+  defp decimal(value) when is_number(value), do: :erlang.float_to_binary(value / 1, decimals: 3)
+  defp decimal(other), do: inspect(other)
+
+  defp severity_mark(:warning), do: "\u{26A0}"
+  defp severity_mark(_severity), do: "\u{2718}"
 
   # A trajectory runs once unless it says otherwise, so the common case
   # stays unadorned.

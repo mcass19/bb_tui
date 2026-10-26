@@ -222,7 +222,7 @@ defmodule BB.TUI.Panels.EventsTest do
       msg = %{payload: %{waypoints: trajectory_waypoints(), repeat: 5}}
 
       assert Events.summarize([:actuator, :arm, :shoulder], msg) ==
-               "arm.shoulder \u{2190} trajectory 3 waypoints over 400ms \u{00D7}5"
+               "shoulder \u{2190} trajectory 3 waypoints over 400ms \u{00D7}5"
     end
 
     test "summarizes a trajectory whose repeat count is absent" do
@@ -246,6 +246,78 @@ defmodule BB.TUI.Panels.EventsTest do
                "shoulder_motor \u{2718} {:exit, :noproc}"
     end
 
+    test "marks a late actuator answer as a warning rather than a refusal" do
+      pending = %BB.Error.State.CommandPending{
+        actuator: :elbow,
+        command: Position,
+        timeout_ms: 250
+      }
+
+      assert Events.summarize([:actuator, :elbow], %{payload: %{error: pending}}) =~
+               ~r/^elbow \x{26A0} Actuator :elbow has not answered Position within 250ms/u
+    end
+
+    test "summarizes a failed command via Exception.message when the reason is one" do
+      reason = %BB.Error.State.NotArmed{}
+      msg = %{payload: %{status: :failed, data: %{reason: reason}}}
+
+      assert Events.summarize([:command, :home, make_ref()], msg) ==
+               "home \u{2718} #{Exception.message(reason)}"
+    end
+
+    test "leaves bb's own hardware error report to the generic summary" do
+      error = %BB.Safety.HardwareError{path: [:actuator, :elbow], error: :overcurrent}
+      summary = Events.summarize([:safety, :error], %{payload: error})
+
+      refute summary =~ "\u{2718}"
+      assert summary =~ "HardwareError"
+    end
+
+    test "names an actuator by its last path segment, not its topology path" do
+      path = [:actuator, :base_link, :elbow, :elbow_servo]
+
+      assert Events.summarize(path, %{
+               payload: %BB.Message.Actuator.Command.Velocity{velocity: 0.5}
+             }) ==
+               "elbow_servo \u{2190} velocity 0.500"
+
+      assert Events.summarize(path, %{payload: %BB.Message.Actuator.Command.Effort{effort: 1.2}}) ==
+               "elbow_servo \u{2190} effort 1.200"
+
+      assert Events.summarize(path, %{
+               payload: %BB.Message.Actuator.Command.Stop{mode: :decelerate}
+             }) ==
+               "elbow_servo \u{2190} stop (decelerate)"
+
+      assert Events.summarize(path, %{payload: %BB.Message.Actuator.Command.Hold{}}) ==
+               "elbow_servo \u{2190} hold"
+
+      end_motion = %BB.Message.Actuator.EndMotion{position: 0.5, reason: :completed}
+
+      assert Events.summarize(path, %{payload: end_motion}) ==
+               "elbow_servo stopped at 0.500 (completed)"
+
+      unknown = %BB.Message.Actuator.EndMotion{position: nil, reason: :stopped}
+
+      assert Events.summarize(path, %{payload: unknown}) ==
+               "elbow_servo stopped at nil (stopped)"
+    end
+
+    test "shortens actuator and sensor topology paths in the row" do
+      ts = ~U[2026-01-15 18:23:12.000Z]
+      motion = %BB.Message.Actuator.BeginMotion{initial_position: 0.0, target_position: 0.5}
+
+      assert Events.format_event(
+               {ts, [:actuator, :base_link, :elbow, :elbow_servo], %{payload: motion}}
+             ) =~
+               "actuator.elbow_servo"
+
+      assert Events.format_event(
+               {ts, [:sensor, :base_link, :elbow, :elbow_position],
+                %{payload: %{names: [:elbow], positions: [0.5]}}}
+             ) =~ "sensor.elbow_position "
+    end
+
     test "falls back to inspect for unknown payloads" do
       msg = %{payload: :something}
       result = Events.summarize([:unknown], msg)
@@ -258,7 +330,57 @@ defmodule BB.TUI.Panels.EventsTest do
     end
   end
 
+  describe "summary_style/2" do
+    test "colors a failed command red whatever its reason" do
+      msg = %{payload: %{status: :failed, data: %{reason: :timeout}}}
+      assert Events.summary_style([:command, :home, make_ref()], msg).fg == :red
+    end
+
+    test "leaves a cancelled command white" do
+      msg = %{payload: %{status: :failed, data: %{reason: :cancelled}}}
+      assert Events.summary_style([:command, :home, make_ref()], msg).fg == :white
+    end
+
+    test "colors a refused parameter write by its severity" do
+      assert Events.summary_style([:param, :speed], %{payload: %{error: :read_only}}).fg == :red
+    end
+
+    test "colors a hardware error report red" do
+      error = %BB.Safety.HardwareError{path: [:actuator, :elbow], error: :overcurrent}
+      assert Events.summary_style([:safety, :error], %{payload: error}).fg == :red
+    end
+
+    test "colors the summary span of a rendered actuator warning yellow" do
+      pending = %BB.Error.State.CommandPending{
+        actuator: :elbow,
+        command: Position,
+        timeout_ms: 250
+      }
+
+      events = [{~U[2026-03-30 12:00:00Z], [:actuator, :elbow], %{payload: %{error: pending}}}]
+
+      widget = Events.render(Fixtures.sample_state(%{events: events}), true)
+      %Line{spans: spans} = hd(widget.items)
+
+      assert List.last(spans).style.fg == :yellow
+    end
+  end
+
   describe "format_event_details/1" do
+    test "renders an exception field through its message" do
+      pending = %BB.Error.State.CommandPending{
+        actuator: :elbow,
+        command: Position,
+        timeout_ms: 250
+      }
+
+      event = {~U[2026-01-15 18:23:12.000Z], [:actuator, :elbow], %{payload: %{error: pending}}}
+
+      assert [line] = Events.format_event_details(event)
+      assert line =~ "error"
+      assert line =~ "Actuator :elbow has not answered Position within 250ms"
+    end
+
     test "formats struct payload with type and fields" do
       # Use a standard library struct to test the struct payload path
       uri = %URI{scheme: "https", host: "example.com"}

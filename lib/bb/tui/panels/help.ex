@@ -53,7 +53,9 @@ defmodule BB.TUI.Panels.Help do
   - `j` / `↓` — Select next command
   - `k` / `↑` — Select previous command
   - `⏎` — Execute (or enter argument edit mode)
-  - `c` — Cancel the running command
+  - `c` — Cancel the selected command while it runs, whoever started it
+
+  A running command shows `⏳ Running` in place of its badge, with `×N` when it has several executions; `c` cancels the newest.
 
   ## Command edit mode
 
@@ -74,7 +76,7 @@ defmodule BB.TUI.Panels.Help do
   - `L` — Increase position (10% of range)
   - `H` — Decrease position (10% of range)
 
-  Commanded targets render as a hollow marker on the position bar.
+  Commanded targets render as a hollow marker on the position bar until the joint reaches them. Each step moves the target, so holding a key keeps stepping ahead of the joint.
 
   ## Parameters panel
 

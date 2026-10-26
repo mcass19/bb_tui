@@ -3,11 +3,12 @@ defmodule BB.TUI.Panels.Commands do
   Commands panel — displays available robot commands with execution state.
 
   Shows each command name with a Ready / Blocked badge based on the
-  current runtime state. Each row is a `%ExRatatui.Text.Line{}` so
-  the badge can render in its own color (green for Ready, dim for
-  Blocked) without affecting the surrounding text. The trailing
-  result / executing rows render as colored badges too — green ✔ for
-  success, red ✖ for failure, yellow ⏳ while a command is in flight.
+  current runtime state, or a yellow ⏳ Running badge while it runs —
+  whoever started it, with a `×N` count when it has several executions.
+  Each row is a `%ExRatatui.Text.Line{}` so the badge can render in its
+  own color (green for Ready, dim for Blocked) without affecting the
+  surrounding text. The trailing result row renders as a colored badge
+  too — green ✔ for success, red ✖ for failure.
 
   Argument editing for commands with declared arguments is handled by
   `BB.TUI.Panels.CommandEdit`, which renders as a popup above this
@@ -16,6 +17,7 @@ defmodule BB.TUI.Panels.Commands do
   Pure function — takes state, returns a widget struct.
   """
 
+  alias BB.TUI.Errors
   alias BB.TUI.State
   alias BB.TUI.Theme
   alias ExRatatui.Style
@@ -48,18 +50,11 @@ defmodule BB.TUI.Panels.Commands do
     result_line =
       case state.commands.result do
         {:ok, result} -> [result_line(:ok, "✔ #{inspect(result, limit: 50)}")]
-        {:error, reason} -> [result_line(:error, "✖ #{inspect(reason, limit: 50)}")]
+        {:error, reason} -> [result_line(:error, "✖ #{Errors.describe(reason, 50)}")]
         nil -> []
       end
 
-    executing_line =
-      if state.commands.executing do
-        [executing_line()]
-      else
-        []
-      end
-
-    all_items = items ++ executing_line ++ result_line
+    all_items = items ++ result_line
 
     %WidgetList{
       items: all_items,
@@ -154,19 +149,48 @@ defmodule BB.TUI.Panels.Commands do
 
   # ── Private: rich-text rows ─────────────────────────────────
 
-  defp format_commands(%State{
-         commands: %{available: commands},
-         safety: %{runtime: runtime_state}
-       }) do
+  defp format_commands(
+         %State{
+           commands: %{available: commands, executing: executing},
+           safety: %{runtime: runtime_state}
+         } = state
+       ) do
     Enum.map(commands, fn cmd ->
       name = to_string(Map.get(cmd, :name, inspect(cmd)))
+      runs = running_count(state, cmd, executing)
 
-      if command_ready?(cmd, runtime_state) do
-        ready_row(name)
-      else
-        blocked_row(name)
+      cond do
+        runs > 0 -> running_row(name, runs)
+        command_ready?(cmd, runtime_state) -> ready_row(name)
+        true -> blocked_row(name)
       end
     end)
+  end
+
+  # A command this dashboard just asked to run counts as running before it
+  # shows up in the registry listing, so the row never flashes back to Ready.
+  defp running_count(state, %{name: name}, executing) do
+    case State.running_executions(state, name) do
+      [] when executing == name -> 1
+      runs -> length(runs)
+    end
+  end
+
+  defp running_count(_state, _cmd, _executing), do: 0
+
+  defp running_row(name, runs) do
+    count = if runs > 1, do: " \u{00D7}#{runs}", else: ""
+
+    %Line{
+      spans: [
+        %Span{content: name, style: %Style{fg: :white}},
+        %Span{content: "  ", style: %Style{}},
+        %Span{
+          content: "\u{23F3} Running#{count}",
+          style: %Style{fg: Theme.yellow(), modifiers: [:bold]}
+        }
+      ]
+    }
   end
 
   defp ready_row(name) do
@@ -185,14 +209,6 @@ defmodule BB.TUI.Panels.Commands do
         %Span{content: name, style: %Style{fg: Theme.dim_text()}},
         %Span{content: "  ", style: %Style{}},
         %Span{content: "○ Blocked", style: Theme.blocked_style()}
-      ]
-    }
-  end
-
-  defp executing_line do
-    %Line{
-      spans: [
-        %Span{content: "⏳ Executing…", style: %Style{fg: Theme.yellow(), modifiers: [:bold]}}
       ]
     }
   end

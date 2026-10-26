@@ -15,4 +15,6 @@ Mimic.copy(BB.TUI.App)
 
 {:ok, _} = BB.TUI.Test.Endpoint.start_link()
 
-ExUnit.start()
+# `:distributed` tests start a `:peer` node and need a distributed test node:
+# elixir --sname test -S mix test --only distributed
+ExUnit.start(exclude: [:distributed])
