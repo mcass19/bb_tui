@@ -44,14 +44,16 @@ defmodule BB.TUI.AppTest do
       assert {:noreply, state, commands: [_send]} = press(state, "l")
       assert state.joints.jogs == %{shoulder_motor: nil}
 
+      # Steps from the pending target (0.02), not the unmoved sensor position.
       assert {:noreply, state} = press(state, "L")
-      assert state.joints.jogs == %{shoulder_motor: 0.2}
-      assert state.joints.entries.shoulder.target == 0.2
+      assert_in_delta state.joints.jogs.shoulder_motor, 0.22, 1.0e-9
+      assert_in_delta state.joints.entries.shoulder.target, 0.22, 1.0e-9
     end
 
     test "an answered jog sends the parked target, latest wins", %{state: state} do
+      # l → 0.02, L → 0.22, H → 0.02: each steps from the last target.
       Mimic.expect(BB.Actuator, :set_position, fn _robot, :shoulder_motor, pos, _opts ->
-        assert_in_delta pos, -0.2, 1.0e-9
+        assert_in_delta pos, 0.02, 1.0e-9
         :ok
       end)
 
@@ -85,6 +87,49 @@ defmodule BB.TUI.AppTest do
 
       assert [{_ts, [:actuator, :shoulder_motor], %{payload: %{error: ^pending}}} | _] =
                state.events.list
+    end
+
+    test "a refused jog forgets its target so the next jog steps from the joint", %{
+      state: state
+    } do
+      {:noreply, state, _} = press(state, "l")
+      refusal = %BB.Error.State.NotArmed{actuator: :shoulder_motor}
+
+      {:noreply, state, _} =
+        App.update({:info, {:actuator_result, :shoulder_motor, {:error, refusal}}}, state)
+
+      assert state.joints.entries.shoulder.target == nil
+    end
+
+    test "a late jog keeps its target: the command will still be applied", %{state: state} do
+      {:noreply, state, _} = press(state, "l")
+      pending = %BB.Error.State.CommandPending{actuator: :shoulder_motor, timeout_ms: 250}
+
+      {:noreply, state, _} =
+        App.update({:info, {:actuator_result, :shoulder_motor, {:error, pending}}}, state)
+
+      assert_in_delta state.joints.entries.shoulder.target, 0.02, 1.0e-9
+    end
+
+    test "a refusal for an actuator the robot doesn't list leaves targets alone", %{state: state} do
+      {:noreply, state, _} = press(state, "l")
+
+      {:noreply, state, _} =
+        App.update({:info, {:actuator_result, :ghost_motor, {:error, :disarmed}}}, state)
+
+      assert_in_delta state.joints.entries.shoulder.target, 0.02, 1.0e-9
+    end
+
+    test "a refusal is still logged when the robot struct lists no actuators", %{state: state} do
+      state = %{state | robot_struct: nil}
+
+      assert {:noreply, state, []} =
+               App.update(
+                 {:info, {:actuator_result, :shoulder_motor, {:error, :disarmed}}},
+                 state
+               )
+
+      assert [{_ts, [:actuator, :shoulder_motor], _msg} | _] = state.events.list
     end
 
     test "a parked target is dropped once the robot is disarmed", %{state: state} do

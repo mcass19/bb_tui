@@ -76,7 +76,7 @@ defmodule BB.TUI.Panels.Help do
   - `L` — Increase position (10% of range)
   - `H` — Decrease position (10% of range)
 
-  Commanded targets render as a hollow marker on the position bar.
+  Commanded targets render as a hollow marker on the position bar until the joint reaches them. Each step moves the target, so holding a key keeps stepping ahead of the joint.
 
   ## Parameters panel
 

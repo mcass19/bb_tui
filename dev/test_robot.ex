@@ -21,10 +21,9 @@ defmodule Dev.TestRobot do
       allowed_states([:idle])
     end
 
-    # Drives a joint via the kinematic simulator; the actuator publish
-    # flows through `[:actuator, <joint>]` so the move is visible in
-    # the event stream and the joints panel updates from the resulting
-    # sensor feedback.
+    # Drives a joint: through its actuator when it has one (the kinematic
+    # simulator moves it and the position estimator reports back), or with
+    # a synthetic `JointState` for the actuator-less wrist and gripper.
     command :move do
       handler(Dev.MoveHandler)
       allowed_states([:idle])
@@ -284,6 +283,9 @@ defmodule Dev.TestRobot do
               velocity(~u(180 degree_per_second))
             end
 
+            actuator(:waist_servo, Dev.Servo)
+            sensor(:waist_position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :waist_servo})
+
             link :shoulder_link do
               visual do
                 origin do
@@ -325,6 +327,13 @@ defmodule Dev.TestRobot do
                   effort(~u(18 newton_meter))
                   velocity(~u(180 degree_per_second))
                 end
+
+                actuator(:shoulder_servo, Dev.Servo)
+
+                sensor(
+                  :shoulder_position,
+                  {BB.Sensor.OpenLoopPositionEstimator, actuator: :shoulder_servo}
+                )
 
                 link :upper_arm_link do
                   visual do
@@ -369,6 +378,13 @@ defmodule Dev.TestRobot do
                       effort(~u(13 newton_meter))
                       velocity(~u(180 degree_per_second))
                     end
+
+                    actuator(:elbow_servo, Dev.Servo)
+
+                    sensor(
+                      :elbow_position,
+                      {BB.Sensor.OpenLoopPositionEstimator, actuator: :elbow_servo}
+                    )
 
                     link :forearm_link do
                       visual do
