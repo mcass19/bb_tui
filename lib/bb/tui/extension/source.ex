@@ -13,6 +13,11 @@ defmodule BB.TUI.Extension.Source do
       `path` (a key, or a path into the payload)
     * `param(path)` — a robot parameter's current value
 
+  An orientation along a path also answers `:roll`, `:pitch` and `:yaw`, and
+  a pose its translation's `:x`, `:y` and `:z` too, so
+  `topic([:sensor, :imu], [:orientation, :pitch])` reads an IMU's pitch (see
+  `BB.TUI.State.Extensions.read/2`).
+
   ## Examples
 
       iex> BB.TUI.Extension.Source.joint(:lean)

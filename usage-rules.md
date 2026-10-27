@@ -157,6 +157,9 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   `mix bb.tui --extension`.
 - Sources are `joint/1`, `controller/2` (a field of the controller's
   `:inspect` state), `topic/2` and `param/1`. There is no `inspect/2`.
+- Field paths reach into bb's message structs; orientations also answer
+  `:roll`/`:pitch`/`:yaw` (radians, Z-Y-X) and poses `:x`/`:y`/`:z` too, e.g.
+  `topic([:sensor, :imu], [:orientation, :pitch])`.
 - `bind` can't take bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`);
   the compiler rejects it.
 - Only one extension per session may declare `drive`. Driving happens only on
