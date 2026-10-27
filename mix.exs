@@ -83,16 +83,11 @@ defmodule BB.TUI.MixProject do
   defp deps do
     [
       {:bb, bb_dep("~> 0.33")},
-      # Local checkouts until ex_ratatui 0.19 and phoenix_ex_ratatui 0.4 are
-      # on Hex; revert to `~> 0.19` / `~> 0.4` then.
-      {:ex_ratatui, path: "../ex_ratatui", override: true},
+      {:ex_ratatui, "~> 0.19"},
       {:spark, "~> 2.7"},
 
       # Optional
-      {:phoenix_ex_ratatui, path: "../phoenix_ex_ratatui", optional: true},
-      # Builds the checkout's NIF (`EX_RATATUI_BUILD=true`): the precompiled
-      # 0.18 library lacks the key-release NIF.
-      {:rustler, "~> 0.37", only: [:dev, :test], runtime: false},
+      {:phoenix_ex_ratatui, "~> 0.4", optional: true},
       {:igniter, "~> 0.8", optional: true},
 
       # Test
