@@ -236,6 +236,10 @@ defmodule BB.TUI.Test.Fixtures do
     Mimic.stub(BB.Dsl.Info, :commands, fn _robot -> [] end)
     Mimic.stub(BB.Dsl.Info, :topology, fn _robot -> [] end)
 
+    Mimic.stub(BB.Dsl.Info, :controllers, fn _robot ->
+      Keyword.get(overrides, :controllers, [])
+    end)
+
     Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn _robot ->
       Keyword.get(overrides, :simulation, :kinematic)
     end)

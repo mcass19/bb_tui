@@ -24,6 +24,7 @@ defmodule BB.TUI.State do
 
   alias BB.Message.Actuator.Command
   alias BB.TUI.State.Commands
+  alias BB.TUI.State.Controllers
   alias BB.TUI.State.Drive
   alias BB.TUI.State.Events
   alias BB.TUI.State.Extensions
@@ -56,7 +57,8 @@ defmodule BB.TUI.State do
     renderers: %{},
     observed: %{},
     throttle: %Throttle{},
-    viz: %Viz{}
+    viz: %Viz{},
+    controllers: %Controllers{}
   ]
 
   @type t :: %__MODULE__{
@@ -76,11 +78,12 @@ defmodule BB.TUI.State do
           renderers: %{optional([atom()]) => module()},
           observed: %{optional(term()) => %{display: map(), meta: map()}},
           throttle: Throttle.t(),
-          viz: Viz.t()
+          viz: Viz.t(),
+          controllers: Controllers.t()
         }
 
-  @typedoc "A top-level tab: the two built-ins, or an extension's."
-  @type tab :: :control | :visualization | {:extension, atom()}
+  @typedoc "A top-level tab: a built-in one, or an extension's."
+  @type tab :: :control | :visualization | :controllers | {:extension, atom()}
 
   @panels [:safety, :commands, :joints, :events, :parameters]
 
@@ -97,7 +100,8 @@ defmodule BB.TUI.State do
 
   @doc """
   Returns the ordered list of top-level tabs: Control Panel and
-  Visualization, then one `{:extension, name}` per extension tab.
+  Visualization, Controllers when the robot declares any, then one
+  `{:extension, name}` per extension tab.
 
   ## Examples
 
@@ -118,10 +122,17 @@ defmodule BB.TUI.State do
 
       iex> BB.TUI.State.tab_labels(%BB.TUI.State{})
       [control: "Control Panel", visualization: "Visualization"]
+
+      iex> controllers = %BB.TUI.State.Controllers{list: [%{name: :balancer}]}
+      iex> BB.TUI.State.tab_labels(%BB.TUI.State{controllers: controllers})
+      [control: "Control Panel", visualization: "Visualization", controllers: "Controllers"]
   """
   @spec tab_labels(t()) :: [{tab(), String.t()}]
-  def tab_labels(%__MODULE__{extensions: extensions}) do
+  def tab_labels(%__MODULE__{extensions: extensions, controllers: controllers}) do
+    controllers_tab = if controllers.list == [], do: [], else: [controllers: "Controllers"]
+
     [control: "Control Panel", visualization: "Visualization"] ++
+      controllers_tab ++
       for {name, label} <- Extensions.tabs(extensions), do: {{:extension, name}, label}
   end
 

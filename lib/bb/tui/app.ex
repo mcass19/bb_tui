@@ -189,6 +189,7 @@ defmodule BB.TUI.App do
     commands = Robot.discover_commands(robot, node)
     bridges = Robot.list_bridges(robot, node)
     simulation = Robot.simulation_mode(robot, node)
+    controllers = Robot.list_controllers(robot, node)
 
     # In simulation every actuator runs as `BB.Sim.Actuator`, which takes
     # position commands whatever its declared driver accepts.
@@ -207,6 +208,10 @@ defmodule BB.TUI.App do
         joints: %State.Joints{entries: joints, payloads: payloads},
         extensions: extensions,
         commands: %State.Commands{available: commands},
+        controllers: %State.Controllers{
+          list: controllers,
+          alive: Robot.controllers_alive(robot, Enum.map(controllers, & &1.name), node)
+        },
         renderers: renderers
       }
       |> State.put_running_commands(Robot.running_commands(robot, node))
@@ -305,6 +310,10 @@ defmodule BB.TUI.App do
     Panels.Extension.render_tab(state, tab, main, now_ms())
   end
 
+  defp render_body(%{ui: %{active_tab: :controllers}} = state, main) do
+    [{Panels.Controllers.render(state), main}]
+  end
+
   defp render_body(%{ui: %{active_tab: :visualization}} = state, main) do
     Panels.Visualization.render_panes(state, main)
   end
@@ -390,6 +399,18 @@ defmodule BB.TUI.App do
         %{safety: %{confirm_force_disarm?: true}} = state
       ) do
     {:noreply, state}
+  end
+
+  # The inspect popup: Enter asks again, any other key closes it.
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
+        %{controllers: %{detail: %{name: name}}} = state
+      ) do
+    inspect_controller(state, name)
+  end
+
+  def update({:event, %Event.Key{kind: "press"}}, %{controllers: %{detail: %{}}} = state) do
+    {:noreply, put_in(state.controllers.detail, nil)}
   end
 
   def update({:event, %Event.Key{kind: "press"}}, %{events: %{show_detail?: true}} = state) do
@@ -661,6 +682,56 @@ defmodule BB.TUI.App do
   # extension tab, `h`/`l` must not jog a joint nobody can see.
   def update({:event, %Event.Key{kind: "press"}}, %{ui: %{active_tab: {:extension, _}}} = state) do
     {:noreply, state}
+  end
+
+  # ── Update — controllers tab ─────────────────────────────────
+
+  def update(
+        {:event, %Event.Key{code: code, kind: "press"}},
+        %{ui: %{active_tab: :controllers}} = state
+      )
+      when code in ["j", "down", "k", "up"] do
+    delta = if code in ["j", "down"], do: 1, else: -1
+    {:noreply, %{state | controllers: State.Controllers.move(state.controllers, delta)}}
+  end
+
+  def update(
+        {:event, %Event.Key{code: "enter", kind: "press"}},
+        %{ui: %{active_tab: :controllers}} = state
+      ) do
+    inspect_controller(state, State.Controllers.selected_name(state.controllers))
+  end
+
+  # As on an extension tab, the Control Panel's panel keys stay on their tab.
+  def update({:event, %Event.Key{kind: "press"}}, %{ui: %{active_tab: :controllers}} = state) do
+    {:noreply, state}
+  end
+
+  # A check only goes out while the tab is up; a reply arriving after it was
+  # left still lands, so the tab is current when it comes back.
+  def update({:info, :controllers_check}, state) do
+    %{robot: robot, node: node} = state
+    names = Enum.map(state.controllers.list, & &1.name)
+
+    check =
+      Command.async(
+        fn -> Robot.controllers_alive(robot, names, node) end,
+        &{:controllers_alive, &1}
+      )
+
+    {:noreply, state, commands: [check], render?: false}
+  end
+
+  def update({:info, {:controllers_alive, alive}}, state) do
+    {:noreply, put_in(state.controllers.alive, alive), render?: alive != state.controllers.alive}
+  end
+
+  # A popup closed before its answer came back stays closed.
+  def update({:info, {:controller_detail, name, result}}, state) do
+    case state.controllers.detail do
+      %{name: ^name} -> {:noreply, put_in(state.controllers.detail.result, result)}
+      _closed -> {:noreply, state, render?: false}
+    end
   end
 
   # ── Update — events panel keys ───────────────────────────────
@@ -1085,8 +1156,15 @@ defmodule BB.TUI.App do
       sensor_flush_subscriptions(state) ++
       controller_poll_subscriptions(state) ++
       drive_subscriptions(state) ++
-      velocity_jog_subscriptions(state) ++ pilot_subscriptions(state)
+      velocity_jog_subscriptions(state) ++
+      pilot_subscriptions(state) ++ controllers_subscriptions(state)
   end
+
+  # Running or not, checked every second while the Controllers tab is up.
+  defp controllers_subscriptions(%State{ui: %{active_tab: :controllers}}),
+    do: [Subscription.interval(:controllers_check, 1_000, :controllers_check)]
+
+  defp controllers_subscriptions(_state), do: []
 
   # Checks a spinning joint's key often enough to stop it promptly.
   defp velocity_jog_subscriptions(%State{joints: %{velocity_jog: nil}}), do: []
@@ -1292,6 +1370,20 @@ defmodule BB.TUI.App do
     %{state | drive: drive}
   end
 
+  defp inspect_controller(state, nil), do: {:noreply, state}
+
+  defp inspect_controller(state, name) do
+    %{robot: robot, node: node} = state
+
+    ask =
+      Command.async(
+        fn -> Robot.inspect_controller(robot, name, node) end,
+        &{:controller_detail, name, &1}
+      )
+
+    {:noreply, put_in(state.controllers.detail, %{name: name, result: :loading}), commands: [ask]}
+  end
+
   # Everything this session keeps moving: the drive and a spinning joint.
   defp halt_motion(state), do: state |> halt_drive() |> halt_velocity_jog()
 
@@ -1385,6 +1477,9 @@ defmodule BB.TUI.App do
   defp maybe_add_popup(panels, %{safety: %{confirm_force_disarm?: true}}, full) do
     panels ++ [{Panels.ForceDisarm.render(), full}]
   end
+
+  defp maybe_add_popup(panels, %{controllers: %{detail: %{} = detail}}, full),
+    do: panels ++ [{Panels.Controllers.detail(detail), full}]
 
   defp maybe_add_popup(panels, %{events: %{show_detail?: true}} = state, full) do
     case State.selected_event(state) do

@@ -2,8 +2,8 @@ defmodule BB.TUI.State.UI do
   @moduledoc """
   View chrome state, split out of `BB.TUI.State`.
 
-  `active_tab` is the focused top-level tab (an extension's is
-  `{:extension, name}`); `active_panel` is the focused panel
+  `active_tab` is the focused top-level tab (`:control`, `:visualization`,
+  `:controllers`, or an extension's `{:extension, name}`); `active_panel` is the focused panel
   within the Control Panel tab; `show_help?` toggles the help overlay and
   `help_scroll_offset` scrolls it; `throbber_step` advances the spinner animation.
   """

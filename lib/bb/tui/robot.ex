@@ -209,6 +209,49 @@ defmodule BB.TUI.Robot do
     end
   end
 
+  @doc """
+  Returns the controllers the robot declares, as `%{name:, module:,
+  simulation:}`, `simulation` being what happens to the controller in
+  simulation (`:omit`, `:mock` or `:start`). Empty when the robot's DSL
+  can't be read.
+  """
+  @spec list_controllers(module(), maybe_node()) :: [
+          %{name: atom(), module: module(), simulation: atom()}
+        ]
+  def list_controllers(robot, node) do
+    case dsl_call(node, Info, :controllers, [robot]) do
+      {:ok, entities} when is_list(entities) ->
+        for %BB.Dsl.Controller{name: name, child_spec: spec, simulation: simulation} <- entities,
+            do: %{name: name, module: spec_module(spec), simulation: simulation}
+
+      _ ->
+        []
+    end
+  end
+
+  defp spec_module({module, _opts}), do: module
+  defp spec_module(module), do: module
+
+  @doc """
+  Whether each of the named controllers has a running process, in one call
+  (one round trip under `node`). Empty when the robot's node can't be
+  reached, so nothing is claimed either way.
+  """
+  @spec controllers_alive(module(), [atom()], maybe_node()) :: %{atom() => boolean()}
+  def controllers_alive(robot, names, nil) do
+    Map.new(names, &{&1, BB.Process.whereis(robot, &1) != :undefined})
+  rescue
+    # The robot isn't running: no registry to look in.
+    ArgumentError -> Map.new(names, &{&1, false})
+  end
+
+  def controllers_alive(robot, names, node) do
+    case Rpc.call(node, __MODULE__, :controllers_alive, [robot, names, nil]) do
+      %{} = alive -> alive
+      _badrpc -> %{}
+    end
+  end
+
   # A readout poll, not a control loop: a controller that takes longer than
   # this to answer `:inspect` is skipped until the next poll.
   @inspect_timeout_ms 200

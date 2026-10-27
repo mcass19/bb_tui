@@ -7,7 +7,7 @@ The dashboard is fully keyboard-driven. Global keys work from any panel; the res
 | Key | Action |
 |---|---|
 | `q` | Quit |
-| `[` `]` | Switch top-level tab (Control Panel / Visualization / extension tabs) |
+| `[` `]` | Switch top-level tab (Control Panel / Visualization / Controllers / extension tabs) |
 | `Tab` | Cycle to the next panel (Control Panel tab) |
 | `Shift+Tab` | Cycle to the previous panel (Control Panel tab) |
 | `1` `2` `3` `4` `5` | Jump directly to the panel whose title shows `[N]` |
@@ -27,6 +27,18 @@ An extension (see the [Extensions guide](extensions.md)) adds tabs of its own af
 | `t` | On the Drive tab: take the wheel (the pilot lease), or hand it back |
 | `←` `↑` `↓` `→` | On the Drive tab, with the wheel: hold to drive, let go to stop (see the [Driving guide](driving.md)) |
 | `Space` | Freeze the tab's charts, to look at a moment (a fall, a spike) without it scrolling away; again to resume. Nothing is recorded while frozen, and readouts keep updating |
+
+## Controllers tab
+
+A robot that declares controllers gets a Controllers tab after Visualization: each controller's name, its module, and whether its process is running (checked every second while the tab is up; a controller left out of simulation says `off in simulation`).
+
+| Key | Action |
+|---|---|
+| `j` / `Down` | Select next controller |
+| `k` / `Up` | Select previous controller |
+| `Enter` | Inspect: the state the controller answers `handle_call(:inspect, ...)` with, pretty-printed in a popup |
+
+In the popup `Enter` asks again and any other key closes it. A controller that isn't running, doesn't answer `:inspect` or takes longer than 200 ms shows `no answer` and the reason.
 
 ## Visualization tab
 
