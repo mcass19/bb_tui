@@ -54,6 +54,8 @@ Readouts, plots and drive scales read their values from sources:
 | `topic([:sensor, :wheel], :velocity)` | a field of the latest message under a path; a list reaches into the payload |
 | `param([:yaw, :turn_rate])` | a robot parameter's current value |
 
+Paths reach into bb's message structs as they are: `topic([:drive], :vx)` reads a `Twist2D`'s forward speed and `topic([:odom], [:twist, :angular, :z])` an `Odometry`'s turn rate. Orientations also answer `:roll`, `:pitch` and `:yaw` in radians — `topic([:sensor, :imu], [:orientation, :pitch])` — and poses those and their translation's `:x`, `:y` and `:z`, as in `topic([:odom], [:pose, :x])`.
+
 A `topic` source keeps the latest payload published on its path. Sensors and actuators publish under their full topology path (`[:sensor, :base_link, …, :imu]`), so a two-segment path `[root, name]` also matches any path that starts with `root` and ends with `name` — the same short name the event log shows.
 
 A `controller` source reads the map the controller answers `handle_call(:inspect, ...)` with. Controllers publish nothing, so the dashboard polls them, four times a second and never more than one call per controller at a time; one that isn't running, doesn't answer `:inspect` or takes longer than 200 ms shows its readouts as `-` until it answers again. Any map works, missing keys included.

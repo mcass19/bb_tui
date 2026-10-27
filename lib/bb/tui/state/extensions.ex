@@ -23,6 +23,8 @@ defmodule BB.TUI.State.Extensions do
   moment and nothing is recorded, so a fall stays on screen.
   """
 
+  alias BB.Math.Quaternion
+  alias BB.Math.Transform
   alias BB.TUI.Extension
   alias BB.TUI.Extension.Format
   alias BB.TUI.Extension.Info
@@ -425,6 +427,11 @@ defmodule BB.TUI.State.Extensions do
   is none yet: a joint's position, a parameter's value, or the field the
   source names in a topic's latest payload or a controller's state.
 
+  On the way, an orientation (`BB.Math.Quaternion`, an `Imu`'s
+  `:orientation`) also answers `:roll`, `:pitch` and `:yaw` in radians
+  (Z-Y-X, as in aviation), and a pose (`BB.Math.Transform`, an `Odometry`'s
+  `:pose`) answers those and its translation's `:x`, `:y` and `:z`.
+
   ## Examples
 
       iex> alias BB.TUI.Extension.Source
@@ -441,6 +448,19 @@ defmodule BB.TUI.State.Extensions do
       3
       iex> BB.TUI.State.Extensions.read(state, Source.topic([:drive], :vx))
       nil
+
+      iex> alias BB.TUI.Extension.Source
+      iex> pose = BB.Math.Transform.from_position_quaternion(
+      ...>   BB.Math.Vec3.new(1.0, 2.0, 0.0),
+      ...>   BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), 0.5)
+      ...> )
+      iex> state = %BB.TUI.State{
+      ...>   extensions: %BB.TUI.State.Extensions{values: %{{:topic, [:odom]} => %{pose: pose}}}
+      ...> }
+      iex> BB.TUI.State.Extensions.read(state, Source.topic([:odom], [:pose, :x]))
+      1.0
+      iex> BB.TUI.State.Extensions.read(state, Source.topic([:odom], [:pose, :yaw])) |> Float.round(6)
+      0.5
   """
   @spec read(map(), Source.t()) :: term()
   def read(state, %Source{type: :joint, target: name}) do
@@ -464,6 +484,18 @@ defmodule BB.TUI.State.Extensions do
     do: dig(state.extensions.values[{:controller, name}], field)
 
   defp dig(value, []), do: value
+
+  defp dig(%Quaternion{} = orientation, [axis | rest]) when axis in [:roll, :pitch, :yaw] do
+    {roll, pitch, yaw} = Quaternion.to_euler(orientation, :zyx)
+    dig(%{roll: roll, pitch: pitch, yaw: yaw}[axis], rest)
+  end
+
+  defp dig(%Transform{} = pose, [axis | _rest] = path) when axis in [:roll, :pitch, :yaw],
+    do: dig(Transform.get_quaternion(pose), path)
+
+  defp dig(%Transform{} = pose, [axis | _rest] = path) when axis in [:x, :y, :z],
+    do: dig(Transform.get_translation(pose), path)
+
   defp dig(%{} = map, [key | rest]), do: dig(Map.get(map, key), rest)
   defp dig(_value, _path), do: nil
 

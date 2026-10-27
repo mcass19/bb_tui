@@ -9,6 +9,7 @@ defmodule BB.TUI.Panels.Events do
   Pure function — takes state, returns a widget struct.
   """
 
+  alias BB.Math.Quaternion
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Math.Vec3
@@ -18,6 +19,11 @@ defmodule BB.TUI.Panels.Events do
   alias BB.Message.Actuator.Command.Stop
   alias BB.Message.Actuator.Command.Velocity
   alias BB.Message.Actuator.EndMotion
+  alias BB.Message.Estimator.Odometry
+  alias BB.Message.Estimator.Pose
+  alias BB.Message.Geometry.Twist
+  alias BB.Message.Geometry.Twist2D
+  alias BB.Message.Sensor.Imu
   alias BB.TUI.Errors
   alias BB.TUI.State
   alias BB.TUI.Theme
@@ -531,6 +537,27 @@ defmodule BB.TUI.Panels.Events do
       iex> BB.TUI.Panels.Events.summarize([:command, :move, :ref], %{payload: %{status: :failed, data: %{reason: :cancelled}}})
       "move cancelled"
 
+      iex> twist = %BB.Message.Geometry.Twist2D{vx: 0.1, vy: 0.0, omega: 0.3}
+      iex> BB.TUI.Panels.Events.summarize([:drive], %{payload: twist})
+      "twist vx 0.100 vy 0.000 \u{03C9} 0.300"
+
+      iex> twist = %BB.Message.Geometry.Twist{linear: BB.Math.Vec3.new(0.1, 0.0, 0.0), angular: BB.Math.Vec3.new(0.0, 0.0, 0.3)}
+      iex> BB.TUI.Panels.Events.summarize([:cmd_vel], %{payload: twist})
+      "twist v (0.100, 0.000, 0.000) \u{03C9} (0.000, 0.000, 0.300)"
+
+      iex> imu = %BB.Message.Sensor.Imu{orientation: BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_y(), 0.1)}
+      iex> BB.TUI.Panels.Events.summarize([:sensor, :imu], %{payload: imu})
+      "imu roll 0.0\u{00B0} pitch 5.7\u{00B0} yaw 0.0\u{00B0}"
+
+      iex> pose = BB.Math.Transform.translation(BB.Math.Vec3.new(1.0, 2.0, 0.0))
+      iex> twist = %BB.Message.Geometry.Twist{linear: BB.Math.Vec3.new(0.1, 0.0, 0.0), angular: BB.Math.Vec3.zero()}
+      iex> BB.TUI.Panels.Events.summarize([:odom], %{payload: %BB.Message.Estimator.Odometry{pose: pose, twist: twist}})
+      "odometry x 1.000 y 2.000 yaw 0.0\u{00B0} v 0.100 \u{03C9} 0.000"
+
+      iex> pose = BB.Math.Transform.translation(BB.Math.Vec3.new(1.0, 2.0, 3.0))
+      iex> BB.TUI.Panels.Events.summarize([:pose], %{payload: %BB.Message.Estimator.Pose{transform: pose}})
+      "pose x 1.000 y 2.000 z 3.000 yaw 0.0\u{00B0}"
+
       iex> BB.TUI.Panels.Events.summarize([:param, :speed], %{payload: %{new_value: 42}})
       "speed = 42"
 
@@ -592,6 +619,33 @@ defmodule BB.TUI.Panels.Events do
   def summarize([:actuator | rest], %{payload: %Hold{}}),
     do: "#{component_name(rest)} \u{2190} hold"
 
+  # Motion and attitude, wherever they are published: velocities in m/s and
+  # rad/s, angles in degrees.
+  def summarize(_path, %{payload: %Twist2D{vx: vx, vy: vy, omega: omega}}),
+    do: "twist vx #{decimal(vx)} vy #{decimal(vy)} \u{03C9} #{decimal(omega)}"
+
+  def summarize(_path, %{payload: %Twist{linear: linear, angular: angular}}),
+    do: "twist v #{vector(linear)} \u{03C9} #{vector(angular)}"
+
+  def summarize(_path, %{payload: %Imu{orientation: %Quaternion{} = orientation}}) do
+    {roll, pitch, yaw} = Quaternion.to_euler(orientation, :zyx)
+    "imu roll #{degrees(roll)} pitch #{degrees(pitch)} yaw #{degrees(yaw)}"
+  end
+
+  def summarize(_path, %{payload: %Odometry{pose: %Transform{} = pose, twist: %Twist{} = twist}}) do
+    %Vec3{x: x, y: y} = Transform.get_translation(pose)
+    {_roll, _pitch, yaw} = pose |> Transform.get_quaternion() |> Quaternion.to_euler(:zyx)
+
+    "odometry x #{decimal(x)} y #{decimal(y)} yaw #{degrees(yaw)} " <>
+      "v #{decimal(twist.linear.x)} \u{03C9} #{decimal(twist.angular.z)}"
+  end
+
+  def summarize(_path, %{payload: %Pose{transform: %Transform{} = pose}}) do
+    %Vec3{x: x, y: y, z: z} = Transform.get_translation(pose)
+    {_roll, _pitch, yaw} = pose |> Transform.get_quaternion() |> Quaternion.to_euler(:zyx)
+    "pose x #{decimal(x)} y #{decimal(y)} z #{decimal(z)} yaw #{degrees(yaw)}"
+  end
+
   def summarize([:command, name, _execution_id], %{
         payload: %{status: :started, data: %{goal: goal}}
       }) do
@@ -637,6 +691,11 @@ defmodule BB.TUI.Panels.Events do
 
   defp decimal(value) when is_number(value), do: :erlang.float_to_binary(value / 1, decimals: 3)
   defp decimal(other), do: inspect(other)
+
+  defp vector(%Vec3{x: x, y: y, z: z}), do: "(#{decimal(x)}, #{decimal(y)}, #{decimal(z)})"
+
+  defp degrees(radians),
+    do: :erlang.float_to_binary(radians * 180 / :math.pi(), decimals: 1) <> "\u{00B0}"
 
   defp severity_mark(:warning), do: "\u{26A0}"
   defp severity_mark(_severity), do: "\u{2718}"
