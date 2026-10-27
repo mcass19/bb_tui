@@ -110,7 +110,7 @@ The 3D Visualization tab works over SSH, but how crisply it renders depends on t
 
 ## Browser
 
-With the optional `{:phoenix_ex_ratatui, "~> 0.3"}` dependency present, `BB.TUI.Live` turns the dashboard into a Phoenix LiveView — without it the module is simply not compiled, and nothing else in `bb_tui` changes.
+With the optional `{:phoenix_ex_ratatui, "~> 0.4"}` dependency present, `BB.TUI.Live` turns the dashboard into a Phoenix LiveView — without it the module is simply not compiled, and nothing else in `bb_tui` changes.
 
 The installer does the whole wiring in a Phoenix project — the dependency, the LiveView module, the route, and the JS hook:
 

@@ -20,7 +20,7 @@ Each panel's title carries a bold-cyan `[N]` badge that mirrors the number key f
 
 ## Extension tabs
 
-An extension (see the [Extensions guide](extensions.md)) adds tabs of its own after Visualization. They show live readouts only, so the Control Panel's panel keys don't reach them: `h`/`l` on an extension tab never jogs the joint selected back on the Control Panel. The global keys above still work, and so do the keys an extension binds to robot commands — from every tab. The status bar lists them on an extension tab, and the help overlay under "Robot keys".
+An extension (see the [Extensions guide](extensions.md)) adds tabs of its own after Visualization (and Controllers, when the robot has any). They show readouts, charts and the drive pad, so the Control Panel's panel keys don't reach them: `h`/`l` on an extension tab never jogs the joint selected back on the Control Panel. The global keys above still work, and so do the keys an extension binds to robot commands — from every tab. The status bar lists them on an extension tab, and the help overlay under "Robot keys".
 
 | Key | Action |
 |---|---|
