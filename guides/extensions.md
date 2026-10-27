@@ -86,7 +86,7 @@ Charts are fed as their sources change — a topic at the rate it is published, 
 
 ## Attitude
 
-An `attitude` draws an artificial horizon: a horizon line and a rung every 10° of pitch, moved by `pitch` and tilted by `roll` behind a fixed aircraft symbol, with both angles in degrees underneath. Both sources read radians and either may be left out; `range:` is the pitch from the centre to the top edge (30° by default), and `scale: -1` flips a robot whose angles run the other way. As on an aircraft, positive pitch is nose up and moves the horizon down, and positive roll is right side down.
+An `attitude` draws an artificial horizon: a horizon line and a rung every 10° of pitch, moved by `pitch` and tilted by `roll` behind a fixed aircraft symbol, with both angles in degrees underneath. Both sources read radians and either may be left out; `range:` is the pitch from the centre to the top edge (30° by default), and `scale: -1` flips a robot whose angles run the other way. The signs are bb's — x forward, y left, z up — so positive pitch tips the nose down (a balancing robot leaning forward) and moves the horizon up, and positive roll tips the right side down. Note that an aircraft instrument counts pitch the other way round.
 
 ```elixir
 attitude "lean", pitch: joint(:lean), range: 20

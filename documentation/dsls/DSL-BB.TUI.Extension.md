@@ -183,7 +183,8 @@ attitude label
 
 
 An artificial horizon moved by a pitch and tilted by a roll, both read
-in radians. Positive pitch is nose up, positive roll right side down.
+in radians, signed as bb measures them: positive pitch tips the nose
+down (leaning forward), positive roll tips the right side down.
 
 
 

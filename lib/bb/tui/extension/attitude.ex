@@ -6,10 +6,12 @@ defmodule BB.TUI.Extension.Attitude do
 
   Both sources read radians — an orientation's `:pitch` or `:roll`, a lean
   joint — and either may be left out. `scale` multiplies both first, so
-  `scale: -1` flips a robot whose angles run the other way. As on an
-  aircraft's instrument, positive pitch is nose up and moves the horizon
-  down, and positive roll is right side down and lifts the horizon's right
-  end. `range` is the pitch, in degrees, from the centre to the top edge.
+  `scale: -1` flips a robot whose angles run the other way. The signs are
+  bb's (x forward, y left, z up): positive pitch, about +Y, tips the nose
+  down and moves the horizon up — a balancing robot leaning forward — and
+  positive roll, about +X, tips the right side down and lifts the
+  horizon's right end. `range` is the pitch, in degrees, from the centre
+  to the top edge.
   """
   defstruct [:label, :pitch, :roll, :scale, range: 30, __spark_metadata__: nil]
 

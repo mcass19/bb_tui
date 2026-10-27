@@ -178,17 +178,25 @@ defmodule BB.TUI.Panels.ExtensionTest do
       assert [[{+0.0, +0.0}]] = for(%Canvas.Points{coords: coords} <- canvas.shapes, do: coords)
     end
 
-    test "nose up moves the horizon down, with the ladder above it", %{panel: panel} do
+    # bb's frame: positive pitch, about +Y, tips the nose down — a
+    # balancing robot leaning forward.
+    test "positive pitch tips the nose down: the horizon rises", %{panel: panel} do
       {[horizon], canvas, text} = horizon(tilt(panel, 10 * :math.pi() / 180, 0.0), panel)
 
-      assert horizon.y1 < 0 and horizon.y1 == horizon.y2
+      assert horizon.y1 > 0 and horizon.y1 == horizon.y2
       assert text =~ "pitch 10.0°"
 
-      # Rungs every 10° within the range: -10 below the centre, +10 on it,
-      # +20 and +30 above.
+      # Rungs every 10° within the range: one above the horizon, the one
+      # 10° below it on the centre, and two more below.
       rungs = for %Canvas.Line{color: :dark_gray, y1: y} <- canvas.shapes, do: y
       assert length(rungs) == 4
-      assert Enum.count(rungs, &(&1 > 0.1)) == 2
+      assert Enum.count(rungs, &(&1 > horizon.y1)) == 1
+      assert Enum.count(rungs, &(&1 < -0.1)) == 2
+    end
+
+    test "negative pitch lifts the nose: the horizon sinks", %{panel: panel} do
+      {[horizon], _canvas, _text} = horizon(tilt(panel, -0.2, 0.0), panel)
+      assert horizon.y1 < 0
     end
 
     test "right side down lifts the horizon's right end", %{panel: panel} do

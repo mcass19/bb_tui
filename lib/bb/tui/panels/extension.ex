@@ -257,17 +257,18 @@ defmodule BB.TUI.Panels.Extension do
   end
 
   # A rung every 10° within `range` of the current pitch, unlabelled: the
-  # angles line underneath gives the numbers.
+  # angles line underneath gives the numbers. Pitch is bb's: positive tips
+  # the nose down, so the horizon rises.
   defp ladder(pitch, roll, per_degree, x_half, range) do
     {sin, cos} = {:math.sin(roll), :math.cos(roll)}
     pitch_degrees = pitch * 180 / :math.pi()
     at = fn along, up -> {along * cos - up * sin, along * sin + up * cos} end
-    horizon_up = -pitch_degrees * per_degree
+    horizon_up = pitch_degrees * per_degree
 
     rungs =
       for step <- -9..9,
           step != 0,
-          abs(step * 10 - pitch_degrees) < range do
+          abs(step * 10 + pitch_degrees) < range do
         up = horizon_up + step * 10 * per_degree
         {x1, y1} = at.(-x_half * 0.15, up)
         {x2, y2} = at.(x_half * 0.15, up)
