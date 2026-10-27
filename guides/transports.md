@@ -157,6 +157,8 @@ iex --name dev@127.0.0.1 --cookie secret -S mix bb.tui \
     --robot MyApp.Robot --node robot@192.168.1.42
 ```
 
+The title bar shows the link's health next to the node's name: the last round trip, timed every two seconds (green under 50 ms, yellow under 250 ms, red above), `no reply` when one takes longer than a second, and `link down` when the node is gone.
+
 ### Renderer-only attach via `Distributed.attach/3`
 
 Run the TUI _on the robot node_ and attach to it from any connected BEAM node. The remote node runs the app callbacks (`mount` / `render` / `handle_event`); the local node only renders the widgets it receives and forwards terminal events back. No robot code is required on the local node.

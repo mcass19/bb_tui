@@ -58,7 +58,8 @@ defmodule BB.TUI.State do
     observed: %{},
     throttle: %Throttle{},
     viz: %Viz{},
-    controllers: %Controllers{}
+    controllers: %Controllers{},
+    link: nil
   ]
 
   @type t :: %__MODULE__{
@@ -79,8 +80,15 @@ defmodule BB.TUI.State do
           observed: %{optional(term()) => %{display: map(), meta: map()}},
           throttle: Throttle.t(),
           viz: Viz.t(),
-          controllers: Controllers.t()
+          controllers: Controllers.t(),
+          link: link()
         }
+
+  @typedoc """
+  The last round trip to the robot's node under `node:`, in microseconds,
+  or why it failed; `nil` for a local session or before the first check.
+  """
+  @type link :: {:ok, non_neg_integer()} | {:error, term()} | nil
 
   @typedoc "A top-level tab: a built-in one, or an extension's."
   @type tab :: :control | :visualization | :controllers | {:extension, atom()}
