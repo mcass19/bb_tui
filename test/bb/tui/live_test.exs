@@ -22,7 +22,16 @@ defmodule BB.TUI.LiveTest do
     def tui_mount_opts(_socket), do: [robot: BB.TUI.TestRobot, subscribe_paths: [[:sensor]]]
   end
 
+  defmodule DriveLive do
+    use BB.TUI.Live, robot: BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension]
+  end
+
   describe "use BB.TUI.Live" do
+    test "asks the browser for key releases when an extension declares a drive" do
+      assert DriveLive.tui_mount_opts(nil)[:keyboard_enhancement] == true
+      refute Keyword.has_key?(RobotLive.tui_mount_opts(nil), :keyboard_enhancement)
+    end
+
     test "boots the dashboard and pushes the first full frame on resize" do
       Fixtures.stub_bb_modules()
 

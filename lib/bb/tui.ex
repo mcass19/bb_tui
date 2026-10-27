@@ -215,6 +215,11 @@ defmodule BB.TUI do
   `q` to quit). For SSH transport, the daemon runs until the process
   is stopped.
 
+  Called from an IEx shell that isn't the node's own terminal — an IEx
+  session over SSH (`nerves_ssh`) or an `iex --remsh` — the dashboard
+  draws in that shell, through `ExRatatui.IODevice`, rather than on the
+  node's console.
+
   ## Options
 
     * `:node` — connected remote node atom. When set, all robot data is
@@ -254,6 +259,24 @@ defmodule BB.TUI do
   """
   @spec run(module(), keyword()) :: :ok | {:error, term()}
   def run(robot, opts \\ []) when is_atom(robot) do
+    if shell_device?(opts) do
+      opts
+      |> Keyword.put(:robot, robot)
+      |> with_key_releases()
+      |> then(&ExRatatui.IODevice.run(App, &1))
+    else
+      run_started(robot, opts)
+    end
+  end
+
+  # Only a local session can move to the shell's device; a headless test
+  # session never does.
+  defp shell_device?(opts) do
+    Keyword.get(opts, :transport, :local) == :local and
+      not Keyword.has_key?(opts, :test_mode) and ExRatatui.IODevice.io_device?()
+  end
+
+  defp run_started(robot, opts) do
     case start(robot, opts) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
@@ -310,6 +333,7 @@ defmodule BB.TUI do
       _ ->
         opts
         |> Keyword.put(:robot, robot)
+        |> with_key_releases()
         |> focus_events_for_drive()
         |> App.start_link()
     end
@@ -318,10 +342,34 @@ defmodule BB.TUI do
   # Driving stops when the terminal window loses focus, which needs the
   # terminal to report it.
   defp focus_events_for_drive(opts) do
-    if Enum.any?(Keyword.get(opts, :extensions, []), &drive_extension?/1),
+    if drive?(opts),
       do: Keyword.put_new(opts, :focus_events, true),
       else: opts
   end
+
+  @doc """
+  Asks for key releases when the `:extensions` in `opts` declare a drive:
+  adds `keyboard_enhancement: true` (unless `opts` already say), so a held
+  arrow drives until it is let go instead of being inferred from
+  autorepeat. Every entry point does this itself; a `BB.TUI.Live` that
+  overrides `tui_mount_opts/1` passes its options through it.
+
+  ## Examples
+
+      iex> BB.TUI.with_key_releases(robot: MyRobot, extensions: [BB.TUI.Test.Extension])
+      [keyboard_enhancement: true, robot: MyRobot, extensions: [BB.TUI.Test.Extension]]
+
+      iex> BB.TUI.with_key_releases(robot: MyRobot)
+      [robot: MyRobot]
+  """
+  @spec with_key_releases(keyword()) :: keyword()
+  def with_key_releases(opts) do
+    if drive?(opts),
+      do: Keyword.put_new(opts, :keyboard_enhancement, true),
+      else: opts
+  end
+
+  defp drive?(opts), do: Enum.any?(Keyword.get(opts, :extensions, []), &drive_extension?/1)
 
   defp drive_extension?(module),
     do: Extension.extension?(module) and Info.drive?(module)
@@ -391,7 +439,9 @@ defmodule BB.TUI do
   subsystem instead of spinning up a separate daemon.
 
   `opts` reach every session's `mount/1`, as `start_ssh/2`'s app options
-  do: `:node`, `:subscribe_paths`, `:renderers` and `:extensions`.
+  do: `:node`, `:subscribe_paths`, `:renderers` and `:extensions`. An
+  extension declaring a drive also asks each session's terminal for key
+  releases (see `with_key_releases/1`).
 
   ## Nerves example
 
@@ -429,11 +479,15 @@ defmodule BB.TUI do
       iex> Keyword.fetch!(args, :app_opts)
       [robot: SomeRobot, extensions: [SomeRobot.TUI]]
 
+      iex> {_name, {_mod, args}} = BB.TUI.subsystem(SomeRobot, extensions: [BB.TUI.Test.Extension])
+      iex> Keyword.fetch!(args, :app_opts)[:keyboard_enhancement]
+      true
+
   """
   @spec subsystem(module(), keyword()) :: {charlist(), {module(), keyword()}}
   def subsystem(robot, opts \\ []) when is_atom(robot) and is_list(opts) do
-    {name, {mod, args}} = ExRatatui.SSH.subsystem(BB.TUI.App)
-    {name, {mod, Keyword.put(args, :app_opts, Keyword.put(opts, :robot, robot))}}
+    app_opts = opts |> Keyword.put(:robot, robot) |> with_key_releases()
+    ExRatatui.SSH.subsystem(BB.TUI.App, app_opts: app_opts)
   end
 
   @doc """
@@ -485,6 +539,7 @@ defmodule BB.TUI do
       |> maybe_put(:subscribe_paths, subscribe_paths)
       |> maybe_put(:renderers, renderers)
       |> maybe_put(:extensions, extensions)
+      |> with_key_releases()
 
     Keyword.put(opts, :app_opts, app_opts)
   end

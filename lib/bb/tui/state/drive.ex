@@ -15,8 +15,9 @@ defmodule BB.TUI.State.Drive do
       robot's dead-man timeout). A key counts as held for 600 ms after
       its first press and then 150 ms after each repeat, and is let go
       when its presses stop.
-    * **release**: entered on the first `"release"` event, from a terminal
-      speaking the kitty keyboard protocol or a browser. A key is held until
+    * **release**: entered on the first `"release"` or `"repeat"` event —
+      only a terminal speaking the kitty keyboard protocol, or a browser,
+      reports either, and one that reports repeats reports releases too. A key is held until
       its release; a 1 s safety window, refreshed by its repeats,
       still lets go of one whose release got lost.
   """
@@ -92,6 +93,25 @@ defmodule BB.TUI.State.Drive do
 
     %{drive | held: Map.put(held, axis, entry)}
   end
+
+  @doc """
+  A key event of `kind` arrived. A `"repeat"` (like a `"release"`) only
+  comes from a terminal reporting key releases, so it switches to release
+  mode before the key is let go for the first time.
+
+  ## Examples
+
+      iex> alias BB.TUI.State.Drive
+      iex> Drive.saw_kind(%Drive{}, "repeat").mode
+      :release
+      iex> Drive.saw_kind(%Drive{}, "press").mode
+      :inference
+  """
+  @spec saw_kind(t(), String.t()) :: t()
+  def saw_kind(%__MODULE__{} = drive, kind) when kind in ["repeat", "release"],
+    do: %{drive | mode: :release}
+
+  def saw_kind(%__MODULE__{} = drive, _kind), do: drive
 
   @doc """
   A drive key came up. The first release switches to release mode for the

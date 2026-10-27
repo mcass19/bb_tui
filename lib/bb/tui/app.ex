@@ -490,7 +490,10 @@ defmodule BB.TUI.App do
     case state.drive.lease do
       :mine ->
         state
-        |> Map.update!(:drive, &State.Drive.press(&1, code, now_ms()))
+        |> Map.update!(
+          :drive,
+          &(&1 |> State.Drive.saw_kind(kind) |> State.Drive.press(code, now_ms()))
+        )
         |> step_drive()
 
       _not_mine ->
@@ -912,7 +915,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :joints}} = state
       )
       when code in ["l", "right"] and kind in ["press", "repeat"] do
-    adjust_selected_joint(state, :increase, 1)
+    state |> saw_kind(kind) |> adjust_selected_joint(:increase, 1)
   end
 
   def update(
@@ -920,7 +923,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :joints}} = state
       )
       when code in ["h", "left"] and kind in ["press", "repeat"] do
-    adjust_selected_joint(state, :decrease, 1)
+    state |> saw_kind(kind) |> adjust_selected_joint(:decrease, 1)
   end
 
   def update(
@@ -928,7 +931,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :joints}} = state
       )
       when kind in ["press", "repeat"] do
-    adjust_selected_joint(state, :increase, 10)
+    state |> saw_kind(kind) |> adjust_selected_joint(:increase, 10)
   end
 
   def update(
@@ -936,7 +939,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :joints}} = state
       )
       when kind in ["press", "repeat"] do
-    adjust_selected_joint(state, :decrease, 10)
+    state |> saw_kind(kind) |> adjust_selected_joint(:decrease, 10)
   end
 
   # Letting go of a jog key stops a spinning joint at once.
@@ -945,8 +948,7 @@ defmodule BB.TUI.App do
         %{ui: %{active_panel: :joints}} = state
       )
       when code in ["h", "l", "H", "L", "left", "right"] do
-    state = put_in(state.drive.mode, :release)
-    {:noreply, halt_velocity_jog(state)}
+    {:noreply, state |> saw_kind("release") |> halt_velocity_jog()}
   end
 
   # A tick already queued when the jog stopped.
@@ -1399,6 +1401,10 @@ defmodule BB.TUI.App do
 
     {:noreply, put_in(state.controllers.detail, %{name: name, result: :loading}), commands: [ask]}
   end
+
+  # A repeat or release means the terminal reports key releases: holds end
+  # on them rather than on inferred autorepeat (see `State.Drive`).
+  defp saw_kind(state, kind), do: %{state | drive: State.Drive.saw_kind(state.drive, kind)}
 
   # Everything this session keeps moving: the drive and a spinning joint.
   defp halt_motion(state), do: state |> halt_drive() |> halt_velocity_jog()

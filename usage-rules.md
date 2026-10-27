@@ -168,6 +168,13 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   connected nodes; bb_tui calls `stop` on release, quit,
   leaving the tab, focus loss and session end, but the robot must still keep
   its own dead-man timeout — a dropped connection is invisible to bb_tui.
+- A declared drive makes every bb_tui entry point ask for key releases
+  (`keyboard_enhancement: true`); an overriding `tui_mount_opts/1` in a
+  `BB.TUI.Live` returns its options through `BB.TUI.with_key_releases/1`,
+  and a `Distributed.attach/3` client passes the option itself.
+- `BB.TUI.run/2` from an IEx shell over SSH (`nerves_ssh`, `iex --remsh`)
+  draws in that shell via `ExRatatui.IODevice`, so a `tui()` IEx helper is
+  just `BB.TUI.run(MyRobot, extensions: [...])`.
 - The same lease gates spinning a velocity-only joint from the Joints panel
   (`t`, then hold `h`/`l`); no extension is needed for it.
 - Readout `unit:` values are bb unit atoms and assume the source is in SI units

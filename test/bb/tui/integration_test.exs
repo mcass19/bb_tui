@@ -291,6 +291,47 @@ defmodule BB.TUI.IntegrationTest do
     end
   end
 
+  describe "driving with key releases" do
+    # A terminal speaking the kitty keyboard protocol sends a press, repeats
+    # and a release; the session drives for exactly as long as the key is
+    # held, past the 600 ms a press alone would count for.
+    test "a held arrow drives from its press to its release" do
+      test_pid = self()
+
+      Mimic.stub(BB.TUI.Test.Drive, :command, fn _robot, throttle, _turn ->
+        send(test_pid, {:publish, throttle})
+        :ok
+      end)
+
+      Mimic.stub(BB.TUI.Test.Drive, :stop, fn _robot ->
+        send(test_pid, :stopped)
+        :ok
+      end)
+
+      pid = start_tui!(extensions: [BB.TUI.Test.Extension])
+      update_user_state(pid, &put_in(&1.ui.active_tab, {:extension, :drive}))
+
+      :ok = Runtime.inject_event(pid, %Key{code: "t", kind: "press"})
+      assert current_state(pid).drive.lease == :mine
+
+      :ok = Runtime.inject_event(pid, %Key{code: "up", kind: "press"})
+      assert_receive {:publish, 1.0}, 500
+
+      :ok = Runtime.inject_event(pid, %Key{code: "up", kind: "repeat"})
+      assert current_state(pid).drive.mode == :release
+
+      # Still driving well past the first-press window.
+      Process.sleep(700)
+      flush_publishes()
+      assert_receive {:publish, 1.0}, 200
+      refute_received :stopped
+
+      :ok = Runtime.inject_event(pid, %Key{code: "up", kind: "release"})
+      assert_receive :stopped, 500
+      refute current_state(pid).drive.driving?
+    end
+  end
+
   describe "Throbber subscription" do
     test "dormant when nothing is animating" do
       pid = start_tui!()
@@ -323,12 +364,9 @@ defmodule BB.TUI.IntegrationTest do
     end
   end
 
-  defp start_tui! do
+  defp start_tui!(opts \\ []) do
     {:ok, pid} =
-      BB.TUI.start(BB.TUI.TestRobot,
-        test_mode: {80, 24},
-        name: nil
-      )
+      BB.TUI.start(BB.TUI.TestRobot, [test_mode: {80, 24}, name: nil] ++ opts)
 
     on_exit(fn ->
       if Process.alive?(pid), do: GenServer.stop(pid)
@@ -336,6 +374,14 @@ defmodule BB.TUI.IntegrationTest do
 
     Process.unlink(pid)
     pid
+  end
+
+  defp flush_publishes do
+    receive do
+      {:publish, _throttle} -> flush_publishes()
+    after
+      0 -> :ok
+    end
   end
 
   defp current_state(pid) do

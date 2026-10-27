@@ -302,9 +302,11 @@ defmodule BB.TUI.AppTest do
                state
              )
 
-      # A repeat keeps it spinning without sending again.
+      # A repeat keeps it spinning without sending again, and means key
+      # releases are coming.
       {:noreply, state} = spin_key(state, "l", "repeat")
       refute_received {:set_velocity, _, _, _}
+      assert state.drive.mode == :release
 
       assert {:noreply, state} = spin_key(state, "l", "release")
       assert_received {:stop, ^robot, :wheel_motor}
@@ -713,6 +715,14 @@ defmodule BB.TUI.AppTest do
 
       assert {:noreply, _state, render?: false} = App.update({:info, :drive_tick}, state)
       assert_received {:publish, _robot, +0.0, 2.0}
+    end
+
+    test "a repeat means key releases are coming: release mode at once", %{state: state} do
+      {:noreply, state, _} = key(state, "up", "press")
+      assert state.drive.mode == :inference
+
+      {:noreply, state, _} = key(state, "up", "repeat")
+      assert state.drive.mode == :release
     end
 
     test "a release stops at once, and the drive stops ticking", %{state: state} do

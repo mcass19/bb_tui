@@ -8,7 +8,7 @@ if Code.ensure_loaded?(PhoenixExRatatui.LiveView) do
     next to `bb_tui`:
 
         {:bb_tui, "~> #{Mix.Project.config()[:version] |> String.split(".") |> Enum.take(2) |> Enum.join(".")}"},
-        {:phoenix_ex_ratatui, "~> 0.3"}
+        {:phoenix_ex_ratatui, "~> 0.4"}
 
     Define a LiveView and route to it like any other:
 
@@ -33,6 +33,11 @@ if Code.ensure_loaded?(PhoenixExRatatui.LiveView) do
           end
         end
 
+    An extension declaring a drive turns on key releases in the browser
+    (`keyboard_enhancement: true`, see `BB.TUI.with_key_releases/1`); an
+    overriding `tui_mount_opts/1` keeps them by returning its options
+    through that function.
+
     Each browser connection runs its own isolated dashboard session over
     the shared robot, exactly as concurrent SSH clients do. The JS side
     needs `phoenix_ex_ratatui`'s hook registered once in `app.js` — see
@@ -56,7 +61,7 @@ if Code.ensure_loaded?(PhoenixExRatatui.LiveView) do
         @bb_tui_live_opts opts
 
         @doc false
-        def tui_mount_opts(_socket), do: @bb_tui_live_opts
+        def tui_mount_opts(_socket), do: BB.TUI.with_key_releases(@bb_tui_live_opts)
 
         defoverridable tui_mount_opts: 1
 

@@ -14,6 +14,7 @@ Mimic.copy(BB.Process)
 Mimic.copy(BB.TUI.Rpc)
 Mimic.copy(BB.TUI.Test.Drive)
 Mimic.copy(BB.TUI.App)
+Mimic.copy(ExRatatui.IODevice)
 
 {:ok, _} = BB.TUI.Test.Endpoint.start_link()
 
