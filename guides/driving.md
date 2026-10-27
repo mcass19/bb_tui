@@ -19,7 +19,7 @@ Driving only happens on this tab. Elsewhere the arrows keep their usual jobs, an
 
 ## Taking the wheel
 
-Only one dashboard session drives a robot at a time. On the Drive tab, `t` takes the wheel — the pilot lease — and `t` again hands it back, stopping first; without it the arrows don't drive and the pad says so. Another session holding it shows as "driven by <node> since <time>" (the time this session first saw it there), checked every second while the tab is up.
+Only one dashboard session drives a robot at a time. On the Drive tab, `t` takes the wheel — the pilot lease — and `t` again hands it back, stopping first; without it the arrows don't drive and the pad says so. Another session holding it shows as "driven by <node> since <time>" (the time this session first saw it there). The status bar carries the wheel on every tab — `wheel free`, `wheel <node>`, or `wheel yours` with the key mode (see below) — checked every second.
 
 The lease is a `:global` name registered to the session that holds it (`BB.TUI.Pilot`), so it reaches every connected node — a laptop on `node:`, an SSH session on the robot, an attached terminal — and goes away with its session, however that ends. After a network split heals, two sessions may both believe they hold it for a moment; the one that loses is told, and stops at once. Every drive tick checks the lease too, so a session whose lease went elsewhere stops within a tick.
 

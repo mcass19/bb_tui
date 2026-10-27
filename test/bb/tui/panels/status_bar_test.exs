@@ -254,6 +254,35 @@ defmodule BB.TUI.Panels.StatusBarTest do
     end
   end
 
+  describe "wheel segment" do
+    @drive %{rate: 20}
+
+    defp wheel_state(drive, extensions \\ %State.Extensions{drive: @drive}),
+      do: %{Fixtures.sample_state() | drive: drive, extensions: extensions}
+
+    test "shows the wheel free once a drive is declared" do
+      assert text(StatusBar.render(wheel_state(%State.Drive{}))) =~ "│ wheel free"
+    end
+
+    test "shows the wheel as ours, with the key mode" do
+      txt = StatusBar.render(wheel_state(%State.Drive{lease: :mine, mode: :release})) |> text()
+      assert txt =~ "wheel yours · release keys"
+
+      txt = StatusBar.render(wheel_state(%State.Drive{lease: :mine})) |> text()
+      assert txt =~ "wheel yours · repeat keys"
+    end
+
+    test "shows who else holds it, even without a drive declared" do
+      lease = {:other, :pilot@host, ~N[2026-10-27 10:00:00]}
+      state = wheel_state(%State.Drive{lease: lease}, %State.Extensions{})
+      assert text(StatusBar.render(state)) =~ "wheel pilot@host"
+    end
+
+    test "is left out with no drive and no lease" do
+      refute text(StatusBar.render(Fixtures.sample_state())) =~ "wheel"
+    end
+  end
+
   describe "battery / power segment" do
     alias BB.Message.Sensor.BatteryState
     alias BB.Message.Sensor.PowerState

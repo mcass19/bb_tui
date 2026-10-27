@@ -124,6 +124,22 @@ defmodule BB.TUI.RobotTest do
     end
   end
 
+  describe "link_rtt/1" do
+    @remote :"robot@127.0.0.1"
+
+    test "times a round trip to the node, giving up after a second" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, :erlang, :node, [], 1_000 -> @remote end)
+      assert {:ok, micros} = Robot.link_rtt(@remote)
+      assert is_integer(micros) and micros >= 0
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, :erlang, :node, [], 1_000 ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.link_rtt(@remote) == {:error, :nodedown}
+    end
+  end
+
   describe "controllers" do
     @remote :"robot@127.0.0.1"
 

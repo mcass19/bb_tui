@@ -512,7 +512,7 @@ defmodule BB.TUI.App do
     {:noreply, state |> halt_motion() |> observe_lease()}
   end
 
-  # Keeps "driven by …" current while the Drive tab is on screen.
+  # Keeps the wheel current: "driven by …" on the pad and the status bar.
   def update({:info, :pilot_check}, state) do
     checked = observe_lease(state)
     {:noreply, checked, render?: checked.drive.lease != state.drive.lease}
@@ -721,6 +721,13 @@ defmodule BB.TUI.App do
 
     {:noreply, state, commands: [check], render?: false}
   end
+
+  def update({:info, :link_check}, %State{node: node} = state) do
+    check = Command.async(fn -> Robot.link_rtt(node) end, &{:link, &1})
+    {:noreply, state, commands: [check], render?: false}
+  end
+
+  def update({:info, {:link, link}}, state), do: {:noreply, %{state | link: link}}
 
   def update({:info, {:controllers_alive, alive}}, state) do
     {:noreply, put_in(state.controllers.alive, alive), render?: alive != state.controllers.alive}
@@ -1157,8 +1164,15 @@ defmodule BB.TUI.App do
       controller_poll_subscriptions(state) ++
       drive_subscriptions(state) ++
       velocity_jog_subscriptions(state) ++
-      pilot_subscriptions(state) ++ controllers_subscriptions(state)
+      pilot_subscriptions(state) ++
+      controllers_subscriptions(state) ++ link_subscriptions(state)
   end
+
+  # Under `node:`, the link's round trip is timed every two seconds.
+  defp link_subscriptions(%State{node: nil}), do: []
+
+  defp link_subscriptions(_state),
+    do: [Subscription.interval(:link_check, 2_000, :link_check)]
 
   # Running or not, checked every second while the Controllers tab is up.
   defp controllers_subscriptions(%State{ui: %{active_tab: :controllers}}),
@@ -1181,11 +1195,13 @@ defmodule BB.TUI.App do
 
   defp drive_subscriptions(_state), do: []
 
-  defp pilot_subscriptions(%State{
-         ui: %{active_tab: {:extension, :drive}},
-         extensions: %{drive: %{}}
-       }),
-       do: [Subscription.interval(:pilot_check, 1_000, :pilot_check)]
+  # The status bar shows the wheel from every tab once a drive is declared
+  # or the lease is held.
+  defp pilot_subscriptions(%State{extensions: %{drive: %{}}}),
+    do: [Subscription.interval(:pilot_check, 1_000, :pilot_check)]
+
+  defp pilot_subscriptions(%State{drive: %{lease: lease}}) when lease != :free,
+    do: [Subscription.interval(:pilot_check, 1_000, :pilot_check)]
 
   defp pilot_subscriptions(%State{ui: %{active_tab: :control, active_panel: :joints}} = state) do
     if velocity_joint_selected?(state),

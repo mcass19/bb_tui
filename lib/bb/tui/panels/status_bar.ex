@@ -3,8 +3,10 @@ defmodule BB.TUI.Panels.StatusBar do
   Status bar — single-line bar at the bottom of the dashboard.
 
   Carries (in order) the robot module, a colored safety badge, a
-  runtime-state pill, a battery / power segment (only when the robot has
-  published electrical telemetry), the global key hints (`Tab` / `q` /
+  runtime-state pill, the wheel (the pilot lease — who holds it, and this
+  session's key mode when it is ours; only when an extension declares a
+  drive or the lease is held), a battery / power segment (only when the
+  robot has published electrical telemetry), the global key hints (`Tab` / `q` /
   `?`), and a set of context-sensitive key pills for the active panel.
 
   Every segment is a `%ExRatatui.Text.Span{}` so each piece can carry
@@ -77,6 +79,7 @@ defmodule BB.TUI.Panels.StatusBar do
         %Span{content: " ", style: %Style{}},
         runtime_pill(state.safety.runtime)
       ] ++
+        wheel_spans(state) ++
         power_spans(state) ++
         observed_spans(state) ++
         [%Span{content: "  ", style: %Style{}}] ++
@@ -122,6 +125,33 @@ defmodule BB.TUI.Panels.StatusBar do
 
   defp observed_label(%{label: label}) when is_binary(label), do: label
   defp observed_label(display), do: inspect(display)
+
+  # The wheel: who holds the pilot lease and, when it is this session's,
+  # whether its keys report releases. Nothing for a session with no drive
+  # declared and no lease held. Private and unspecced on purpose: a spec'd
+  # call here would let dialyzer narrow `state` and flag the unknown-panel
+  # fallback in `key_hints/1` as dead.
+  defp wheel_spans(%State{extensions: %{drive: nil}, drive: %{lease: :free}}), do: []
+
+  defp wheel_spans(%State{drive: drive}) do
+    [Theme.dim_span(" │ wheel ") | holder_spans(drive)]
+  end
+
+  defp holder_spans(%{lease: :free}), do: [Theme.dim_span("free")]
+
+  defp holder_spans(%{lease: {:other, node, _since}}),
+    do: [%Span{content: Atom.to_string(node), style: %Style{fg: Theme.yellow()}}]
+
+  defp holder_spans(%{lease: :mine, mode: mode}) do
+    [
+      %Span{content: "yours", style: %Style{fg: Theme.green(), modifiers: [:bold]}},
+      Theme.dim_span(" · "),
+      mode_span(mode)
+    ]
+  end
+
+  defp mode_span(:release), do: %Span{content: "release keys", style: %Style{fg: Theme.green()}}
+  defp mode_span(_inference), do: %Span{content: "repeat keys", style: %Style{fg: Theme.yellow()}}
 
   defp runtime_pill(runtime_state) do
     %Span{

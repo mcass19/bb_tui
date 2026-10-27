@@ -209,6 +209,23 @@ defmodule BB.TUI.Robot do
     end
   end
 
+  @link_timeout_ms 1_000
+
+  @doc """
+  Times one round trip to `node`, in microseconds, giving up after a
+  second. `{:error, :timeout}` for a link that is up but too slow,
+  `{:error, :nodedown}` for one that is gone.
+  """
+  @spec link_rtt(node()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def link_rtt(node) do
+    started = System.monotonic_time(:microsecond)
+
+    case Rpc.call(node, :erlang, :node, [], @link_timeout_ms) do
+      {:badrpc, reason} -> {:error, reason}
+      _node -> {:ok, System.monotonic_time(:microsecond) - started}
+    end
+  end
+
   @doc """
   Returns the controllers the robot declares, as `%{name:, module:,
   simulation:}`, `simulation` being what happens to the controller in

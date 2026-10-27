@@ -12,6 +12,12 @@ defmodule BB.TUI.RpcTest do
     end
   end
 
+  describe "call/5" do
+    test "delegates to :rpc.call/5 — non-existent node returns {:badrpc, _}" do
+      assert {:badrpc, _reason} = Rpc.call(:"nonexistent@127.0.0.1", :erlang, :node, [], 100)
+    end
+  end
+
   describe "cast/4" do
     test "delegates to :erpc.cast/4 — fire and forget, even to an unknown node" do
       assert :ok = Rpc.cast(:"nonexistent@127.0.0.1", :erlang, :node, [])

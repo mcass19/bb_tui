@@ -18,6 +18,13 @@ defmodule BB.TUI.Rpc do
   def call(node, mod, fun, args), do: :rpc.call(node, mod, fun, args)
 
   @doc """
+  Synchronous remote function call that gives up after `timeout`
+  milliseconds. Mirrors `:rpc.call/5`.
+  """
+  @spec call(node(), module(), atom(), [term()], timeout()) :: term()
+  def call(node, mod, fun, args, timeout), do: :rpc.call(node, mod, fun, args, timeout)
+
+  @doc """
   Asynchronous remote call: runs `mod.fun(args)` on `node` without waiting
   for it. Mirrors `:erpc.cast/4`.
   """

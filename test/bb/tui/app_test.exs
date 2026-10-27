@@ -422,6 +422,35 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "link health" do
+    test "under node: the round trip is timed every two seconds and shown" do
+      state = Fixtures.sample_state(%{node: :"robot@127.0.0.1"})
+
+      assert Subscription.interval(:link_check, 2_000, :link_check) in App.subscriptions(state)
+      refute Enum.any?(App.subscriptions(%{state | node: nil}), &(&1.id == :link_check))
+
+      assert {:noreply, ^state, commands: [check], render?: false} =
+               App.update({:info, :link_check}, state)
+
+      Mimic.stub(BB.TUI.Rpc, :call, fn _node, :erlang, :node, [], _timeout ->
+        {:badrpc, :timeout}
+      end)
+
+      assert {:link, {:error, :timeout}} = message = check.mapper.(check.fun.())
+      assert {:noreply, %{link: {:error, :timeout}} = state} = App.update({:info, message}, state)
+
+      widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
+
+      assert Enum.any?(widgets, fn
+               {%ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}}, _} ->
+                 Enum.map_join(spans, & &1.content) =~ "no reply"
+
+               _ ->
+                 false
+             end)
+    end
+  end
+
   describe "controllers tab" do
     setup do
       Fixtures.stub_bb_modules(
@@ -874,14 +903,24 @@ defmodule BB.TUI.AppTest do
       assert Pilot.holder(robot) == :free
     end
 
-    test "the lease is checked every second while the Drive tab is up", %{state: state} do
-      assert %Subscription{interval_ms: 1_000} =
-               Enum.find(App.subscriptions(state), &(&1.id == :pilot_check))
+    test "the lease is checked every second on every tab, for the status bar", %{
+      state: state
+    } do
+      for tab <- [{:extension, :drive}, :control, :visualization] do
+        assert %Subscription{interval_ms: 1_000} =
+                 Enum.find(
+                   App.subscriptions(put_in(state.ui.active_tab, tab)),
+                   &(&1.id == :pilot_check)
+                 )
+      end
+    end
 
-      refute Enum.any?(
-               App.subscriptions(put_in(state.ui.active_tab, :control)),
-               &(&1.id == :pilot_check)
-             )
+    test "without a drive, only a held lease is checked", %{state: state} do
+      state = put_in(state.extensions.drive, nil)
+      refute Enum.any?(App.subscriptions(state), &(&1.id == :pilot_check))
+
+      state = put_in(state.drive.lease, :mine)
+      assert Enum.any?(App.subscriptions(state), &(&1.id == :pilot_check))
     end
   end
 
