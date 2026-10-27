@@ -124,6 +124,71 @@ defmodule BB.TUI.RobotTest do
     end
   end
 
+  describe "controllers" do
+    @remote :"robot@127.0.0.1"
+
+    test "list_controllers/2 reads each controller's name, module and simulation mode" do
+      Mimic.stub(BB.Dsl.Info, :controllers, fn BB.TUI.TestRobot ->
+        [
+          %BB.Dsl.Controller{name: :balancer, child_spec: {MyBot.Balancer, gain: 2}},
+          %BB.Dsl.Controller{name: :yaw, child_spec: MyBot.Yaw, simulation: :start}
+        ]
+      end)
+
+      assert Robot.list_controllers(@robot, nil) == [
+               %{name: :balancer, module: MyBot.Balancer, simulation: :omit},
+               %{name: :yaw, module: MyBot.Yaw, simulation: :start}
+             ]
+    end
+
+    test "list_controllers/2 is empty when the DSL can't be read" do
+      Mimic.stub(BB.Dsl.Info, :controllers, fn _robot -> raise ArgumentError end)
+      assert Robot.list_controllers(@robot, nil) == []
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, BB.Dsl.Info, :controllers, [_] ->
+        {:badrpc, :nodedown}
+      end)
+
+      assert Robot.list_controllers(@robot, @remote) == []
+    end
+
+    test "controllers_alive/3 looks each controller up in the robot's registry" do
+      pid = self()
+
+      Mimic.stub(BB.Process, :whereis, fn
+        BB.TUI.TestRobot, :balancer -> pid
+        BB.TUI.TestRobot, :yaw -> :undefined
+      end)
+
+      assert Robot.controllers_alive(@robot, [:balancer, :yaw], nil) == %{
+               balancer: true,
+               yaw: false
+             }
+    end
+
+    test "controllers_alive/3 says none run when the robot isn't running" do
+      Mimic.stub(BB.Process, :whereis, fn _robot, _name -> raise ArgumentError end)
+      assert Robot.controllers_alive(@robot, [:balancer], nil) == %{balancer: false}
+    end
+
+    test "controllers_alive/3 asks the robot's node once, and claims nothing when it can't" do
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote,
+                                         Robot,
+                                         :controllers_alive,
+                                         [BB.TUI.TestRobot, [:balancer], nil] ->
+        %{balancer: true}
+      end)
+
+      assert Robot.controllers_alive(@robot, [:balancer], @remote) == %{balancer: true}
+
+      Mimic.expect(BB.TUI.Rpc, :call, fn @remote, Robot, :controllers_alive, _args ->
+        {:badrpc, :timeout}
+      end)
+
+      assert Robot.controllers_alive(@robot, [:balancer], @remote) == %{}
+    end
+  end
+
   describe "list_bridges/2 (local)" do
     test "returns bridge structs as plain maps, filtering :omit in sim mode" do
       Mimic.stub(BB.Robot.Runtime, :simulation_mode, fn BB.TUI.TestRobot -> :mock end)

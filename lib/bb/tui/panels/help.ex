@@ -22,7 +22,7 @@ defmodule BB.TUI.Panels.Help do
   ## Global
 
   - `q` — Quit
-  - `[` / `]` — Switch top-level tab (Control Panel / Visualization / extension tabs)
+  - `[` / `]` — Switch top-level tab (Control Panel / Visualization / Controllers / extension tabs)
   - `Tab` — Cycle to the next panel
   - `Shift+Tab` — Cycle to the previous panel
   - `1` / `2` / `3` / `4` / `5` — Jump directly to the panel whose
@@ -36,6 +36,11 @@ defmodule BB.TUI.Panels.Help do
   - `space` — Freeze the charts (they stop recording), again to resume
   - `t` — On the Drive tab, take the wheel (the pilot lease), or hand it back
   - `←` `↑` `↓` `→` — On the Drive tab, with the wheel, hold to drive; letting go stops. Leaving the tab, quitting or the window losing focus stops too
+
+  ## Controllers tab
+
+  - `j` / `↓`, `k` / `↑` — Select a controller
+  - `⏎` — Inspect: its `:inspect` state in a popup (`⏎` asks again, any other key closes)
 
   ## Visualization tab
 

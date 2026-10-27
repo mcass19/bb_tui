@@ -201,6 +201,22 @@ defmodule BB.TUI.Panels.StatusBar do
     end
   end
 
+  defp key_hints(%State{ui: %{active_tab: :controllers}}) do
+    [
+      Theme.key_pill("[ ]"),
+      Theme.dim_span(" tab "),
+      Theme.key_pill("?"),
+      Theme.dim_span(" help "),
+      Theme.key_pill("q", :quit),
+      Theme.dim_span(" quit "),
+      Theme.dim_span("  "),
+      Theme.key_pill("j/k"),
+      Theme.dim_span(" select "),
+      Theme.key_pill("⏎"),
+      Theme.dim_span(" inspect ")
+    ]
+  end
+
   defp key_hints(%State{ui: %{active_panel: panel}, safety: %{state: safety}} = state) do
     base =
       [

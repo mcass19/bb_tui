@@ -422,6 +422,111 @@ defmodule BB.TUI.AppTest do
     end
   end
 
+  describe "controllers tab" do
+    setup do
+      Fixtures.stub_bb_modules(
+        controllers: [
+          %BB.Dsl.Controller{name: :balancer, child_spec: {BB.TUI.Test.Drive, []}},
+          %BB.Dsl.Controller{name: :yaw, child_spec: BB.TUI.Test.Drive}
+        ]
+      )
+
+      Mimic.stub(BB.Process, :whereis, fn
+        _robot, :balancer -> self()
+        _robot, _name -> :undefined
+      end)
+
+      {:ok, state, _opts} = App.init(robot: BB.TUI.TestRobot)
+      %{state: put_in(state.ui.active_tab, :controllers)}
+    end
+
+    test "lists the robot's controllers, with which are running", %{state: state} do
+      assert [%{name: :balancer, module: BB.TUI.Test.Drive}, %{name: :yaw}] =
+               state.controllers.list
+
+      assert state.controllers.alive == %{balancer: true, yaw: false}
+      assert {:controllers, "Controllers"} in State.tab_labels(state)
+
+      widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
+
+      assert Enum.any?(
+               widgets,
+               &match?({%ExRatatui.Widgets.Table{header: ["Controller" | _]}, _}, &1)
+             )
+
+      assert StatusBar.render(state) |> inspect() =~ "inspect"
+    end
+
+    test "j/k select, other keys stay on the tab", %{state: state} do
+      assert {:noreply, state} = press(state, "j")
+      assert state.controllers.selected == 1
+      assert {:noreply, state} = press(state, "up")
+      assert state.controllers.selected == 0
+      assert {:noreply, ^state} = press(state, "l")
+    end
+
+    test "enter inspects the selected controller in a popup", %{state: state} do
+      assert {:noreply, state, commands: [%ExRatatui.Command{kind: :async} = ask]} =
+               press(state, "enter")
+
+      assert state.controllers.detail == %{name: :balancer, result: :loading}
+
+      Mimic.stub(BB.Process, :call, fn BB.TUI.TestRobot, :balancer, :inspect, _timeout ->
+        %{lean: 0.1}
+      end)
+
+      message = ask.mapper.(ask.fun.())
+      assert message == {:controller_detail, :balancer, {:ok, %{lean: 0.1}}}
+
+      {:noreply, state} = App.update({:info, message}, state)
+      assert state.controllers.detail.result == {:ok, %{lean: 0.1}}
+
+      widgets = App.render(state, %ExRatatui.Frame{width: 120, height: 30})
+      assert Enum.any?(widgets, &match?({%ExRatatui.Widgets.Popup{}, _}, &1))
+
+      # Enter asks again; any other key closes it.
+      assert {:noreply, %{controllers: %{detail: %{result: :loading}}}, commands: [_]} =
+               press(state, "enter")
+
+      assert {:noreply, %{controllers: %{detail: nil}}} = press(state, "j")
+    end
+
+    test "an answer for a popup already closed is dropped", %{state: state} do
+      message = {:info, {:controller_detail, :balancer, {:ok, %{}}}}
+      assert {:noreply, ^state, render?: false} = App.update(message, state)
+    end
+
+    test "enter with no controllers does nothing" do
+      state = %State{ui: %State.UI{active_tab: :controllers}}
+      assert {:noreply, ^state} = press(state, "enter")
+    end
+
+    test "running or not is checked every second while the tab is up", %{state: state} do
+      assert Subscription.interval(:controllers_check, 1_000, :controllers_check) in App.subscriptions(
+               state
+             )
+
+      refute Enum.any?(
+               App.subscriptions(put_in(state.ui.active_tab, :control)),
+               &(&1.id == :controllers_check)
+             )
+
+      assert {:noreply, ^state, commands: [check], render?: false} =
+               App.update({:info, :controllers_check}, state)
+
+      Mimic.stub(BB.Process, :whereis, fn _robot, _name -> :undefined end)
+      assert {:controllers_alive, alive} = check.mapper.(check.fun.())
+
+      assert {:noreply, state, render?: true} =
+               App.update({:info, {:controllers_alive, alive}}, state)
+
+      assert state.controllers.alive == %{balancer: false, yaw: false}
+
+      assert {:noreply, ^state, render?: false} =
+               App.update({:info, {:controllers_alive, alive}}, state)
+    end
+  end
+
   describe "extension sources" do
     setup do
       Fixtures.stub_bb_modules()
