@@ -90,6 +90,16 @@ The `-t` flag is required — it forces PTY allocation, which the TUI needs for 
 
 On OTP 29.0.6 and 29.1 the device's `ssh` application refuses a subsystem after a PTY request, so this fails with "PTY allocation request failed". OTP 29.1.1 fixes it; ex_ratatui's [SSH guide](https://hexdocs.pm/ex_ratatui/ssh_transport.html#known-issue-otp-29-0-6-and-29-1) has a client-side workaround for devices that can't upgrade yet.
 
+### From an IEx shell over SSH
+
+`BB.TUI.run/2` called from an IEx session that isn't the node's own terminal — the `nerves_ssh` shell, or an `iex --remsh` — draws in that session, through `ExRatatui.IODevice`, instead of taking over the device's console. A one-line helper in the robot's `.iex.exs` or IEx helpers module is enough:
+
+```elixir
+def tui(opts \\ []), do: BB.TUI.run(MyApp.Robot, Keyword.put_new(opts, :extensions, [MyApp.TUI]))
+```
+
+Keys reach it the way they reach an SSH session, key releases included in a terminal that reports them; the shell comes back as it was when the dashboard quits.
+
 `runtime.exs` is the right home for this: Mix evaluates compile-time configs before it builds deps for the target, so `ExRatatui.SSH` isn't on the code path yet, whereas `runtime.exs` runs at device boot after all beam files are loaded. The `Application.spec(:nerves_ssh)` guard keeps host builds silent.
 
 Under the hood, `ExRatatui.SSH.Daemon` listens on a TCP port and spawns an isolated `ExRatatui.SSH` channel process per client; each channel owns an in-memory `ExRatatui.Session` (backed by a Rust VTE parser) and a linked server running `BB.TUI.App`. See `ExRatatui.SSH.Daemon` for the full list of SSH options (authentication, host keys, idle timeout, max sessions).

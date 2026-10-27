@@ -164,9 +164,10 @@ defmodule BB.TUITest do
       assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, renderers: renderers)
     end
 
-    test "asks for focus events when an extension declares a drive" do
+    test "asks for focus events and key releases when an extension declares a drive" do
       Mimic.expect(BB.TUI.App, :start_link, fn opts ->
         assert opts[:focus_events] == true
+        assert opts[:keyboard_enhancement] == true
         {:ok, spawn(fn -> :ok end)}
       end)
 
@@ -174,15 +175,17 @@ defmodule BB.TUITest do
 
       Mimic.expect(BB.TUI.App, :start_link, fn opts ->
         refute Keyword.has_key?(opts, :focus_events)
+        refute Keyword.has_key?(opts, :keyboard_enhancement)
         {:ok, spawn(fn -> :ok end)}
       end)
 
       assert {:ok, _pid} = BB.TUI.start(BB.TUI.TestRobot, extensions: [BB.TUI.Test.LaterHints])
     end
 
-    test "wraps :extensions into :app_opts when transport is :ssh" do
+    test "wraps :extensions into :app_opts when transport is :ssh, asking for key releases" do
       Mimic.expect(BB.TUI.App, :start_link, fn opts ->
         assert opts[:app_opts][:extensions] == [BB.TUI.Test.Extension]
+        assert opts[:app_opts][:keyboard_enhancement] == true
         refute Keyword.has_key?(opts, :extensions)
         {:ok, spawn(fn -> :ok end)}
       end)
@@ -296,6 +299,35 @@ defmodule BB.TUITest do
   end
 
   describe "run/2" do
+    # The shell these tests run in is the node's own terminal; pinned here
+    # rather than left to how `mix test` happens to be started.
+    setup do
+      Mimic.stub(ExRatatui.IODevice, :io_device?, fn -> false end)
+      :ok
+    end
+
+    test "runs on the shell's I/O device from a remote IEx shell" do
+      Mimic.stub(ExRatatui.IODevice, :io_device?, fn -> true end)
+      Mimic.reject(BB.TUI.App, :start_link, 1)
+
+      Mimic.expect(ExRatatui.IODevice, :run, fn BB.TUI.App, opts ->
+        assert opts[:robot] == BB.TUI.TestRobot
+        assert opts[:keyboard_enhancement] == true
+        :ok
+      end)
+
+      assert :ok = BB.TUI.run(BB.TUI.TestRobot, extensions: [BB.TUI.Test.Extension])
+    end
+
+    test "a headless or SSH run never moves to the shell's device" do
+      Mimic.stub(ExRatatui.IODevice, :io_device?, fn -> true end)
+      Mimic.reject(ExRatatui.IODevice, :run, 2)
+      Mimic.expect(BB.TUI.App, :start_link, 2, fn _opts -> {:error, :nope} end)
+
+      assert {:error, :nope} = BB.TUI.run(BB.TUI.TestRobot, test_mode: {80, 24})
+      assert {:error, :nope} = BB.TUI.run(BB.TUI.TestRobot, transport: :ssh, port: 0)
+    end
+
     test "monitors the TUI process and returns :ok when it exits" do
       test_pid = self()
 

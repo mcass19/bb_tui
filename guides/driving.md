@@ -36,9 +36,9 @@ While a key is held, `publish` is called once straight away and then `rate` time
 Most terminals only report a key going down; holding it repeats the press after the operating system's autorepeat delay, around half a second. That is longer than a balancing robot's dead-man timeout, so the pad can't wait for the repeats to start before driving:
 
 - **Repeat mode** (the start). A key counts as held for 600 ms after its first press, covering the autorepeat delay, and then for 150 ms after each repeat. When the repeats stop, so does the robot, within 150 ms of letting go.
-- **Release mode**. The first key release the dashboard sees switches the session over: a key is held until its release arrives. A one-second safety window, refreshed by the key's repeats, still lets go of a key whose release got lost.
+- **Release mode**. The first key release — or key repeat, which only a terminal reporting releases sends as such — switches the session over: a key is held until its release arrives. A one-second safety window, refreshed by the key's repeats, still lets go of a key whose release got lost.
 
-The pad shows which mode is on. Key releases come from terminals speaking the kitty keyboard protocol (kitty, Ghostty, WezTerm, foot, Alacritty, iTerm2) and from the browser; GNOME Terminal and other VTE-based terminals, and most tmux setups, stay in repeat mode.
+The pad shows which mode is on. Key releases come from terminals speaking the kitty keyboard protocol (kitty, Ghostty, WezTerm, foot, Alacritty, iTerm2) and from the browser; GNOME Terminal and other VTE-based terminals, and most tmux setups, stay in repeat mode. Whenever an extension declares a drive, bb_tui asks for them (`keyboard_enhancement: true`, see `BB.TUI.with_key_releases/1`), so a terminal that can report them does from the first key.
 
 ## When driving stops
 
@@ -52,4 +52,6 @@ It stops the same ways driving does, and also when another joint is selected, th
 
 ## Transports
 
-Driving works on every transport: the local terminal, SSH, the browser, `:node` and `Distributed.attach/3`. What differs is whether key releases arrive (release mode) or not (repeat mode); the stops above apply on all of them.
+Driving works on every transport: the local terminal, SSH (a daemon or a `nerves_ssh` subsystem), an IEx shell over SSH, the browser, `:node` and `Distributed.attach/3`. What differs is whether key releases arrive (release mode) or not (repeat mode); the stops above apply on all of them.
+
+bb_tui asks for key releases itself on every entry point it starts — `run/2`, `start/2`, `start_ssh/2`, `subsystem/2` and `BB.TUI.Live`. Two places need a hand: a `BB.TUI.Live` that overrides `tui_mount_opts/1` returns its options through `BB.TUI.with_key_releases/1`, and an attaching terminal passes the option itself, `ExRatatui.Distributed.attach(node, BB.TUI.App, keyboard_enhancement: true)`.
