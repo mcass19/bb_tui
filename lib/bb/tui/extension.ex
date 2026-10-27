@@ -42,8 +42,8 @@ defmodule BB.TUI.Extension do
     * `drive` — hold-to-drive with the arrow keys: the `publish` function is
       called as `publish(robot, throttle, turn)` at `rate` Hz while a key is
       held, and `stop(robot)` when it is let go.
-    * `panels` — `panel` entities holding `readout`s and `plot`s, each fed by
-      a source: `joint/1`, `controller/2`, `topic/2` or `param/1` (see
+    * `panels` — `panel` entities holding `readout`s, `plot`s and
+      `attitude` indicators, each fed by a source: `joint/1`, `controller/2`, `topic/2` or `param/1` (see
       `BB.TUI.Extension.Source`).
     * `keys` — `bind` a key to a robot command. bb_tui's own keys
       (`reserved_keys/0`) can't be bound.

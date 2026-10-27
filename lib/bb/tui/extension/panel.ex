@@ -1,7 +1,7 @@
 defmodule BB.TUI.Extension.Panel do
   @moduledoc """
-  A `panel` declared in a `BB.TUI.Extension`: a titled box of readouts and
-  plots, in display order.
+  A `panel` declared in a `BB.TUI.Extension`: a titled box of readouts,
+  plots and attitude indicators, in display order.
 
   `tab` names the tab it sits on: `:drive` places it beside the drive pad,
   any other atom groups panels sharing it, and `nil` (the default) gives the
@@ -13,6 +13,10 @@ defmodule BB.TUI.Extension.Panel do
           name: atom(),
           title: String.t() | nil,
           tab: atom() | nil,
-          items: [BB.TUI.Extension.Readout.t() | BB.TUI.Extension.Plot.t()]
+          items: [
+            BB.TUI.Extension.Readout.t()
+            | BB.TUI.Extension.Plot.t()
+            | BB.TUI.Extension.Attitude.t()
+          ]
         }
 end

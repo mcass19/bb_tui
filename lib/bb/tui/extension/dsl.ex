@@ -104,13 +104,39 @@ defmodule BB.TUI.Extension.Dsl do
     ]
   }
 
+  @attitude %Spark.Dsl.Entity{
+    name: :attitude,
+    target: Extension.Attitude,
+    args: [:label],
+    transform: {Extension.Attitude, :validate, []},
+    describe: """
+    An artificial horizon moved by a pitch and tilted by a roll, both read
+    in radians. Positive pitch is nose up, positive roll right side down.
+    """,
+    examples: [
+      ~s{attitude "lean", pitch: joint(:lean)},
+      ~s{attitude "imu", pitch: topic([:sensor, :imu], [:orientation, :pitch]), roll: topic([:sensor, :imu], [:orientation, :roll])}
+    ],
+    schema: [
+      label: [type: :string, required: true, doc: "The indicator's title."],
+      pitch: [type: {:struct, Source}, doc: "The pitch, in radians."],
+      roll: [type: {:struct, Source}, doc: "The roll, in radians."],
+      scale: [type: :number, doc: "Multiplies both angles first; `-1` flips their sign."],
+      range: [
+        type: :pos_integer,
+        default: 30,
+        doc: "The pitch, in degrees, from the centre to the top edge."
+      ]
+    ]
+  }
+
   @panel %Spark.Dsl.Entity{
     name: :panel,
     target: Extension.Panel,
     args: [:name],
     identifier: :name,
-    entities: [items: [@readout, @plot]],
-    describe: "A titled box of readouts and plots, in the order declared.",
+    entities: [items: [@readout, @plot, @attitude]],
+    describe: "A titled box of readouts, plots and attitude indicators, in the order declared.",
     examples: [
       """
       panel :balance do
@@ -133,7 +159,7 @@ defmodule BB.TUI.Extension.Dsl do
   @panels %Spark.Dsl.Section{
     name: :panels,
     describe:
-      "Panels of readouts and plots, each on a tab of its own unless `tab` says otherwise.",
+      "Panels of readouts, plots and attitude indicators, each on a tab of its own unless `tab` says otherwise.",
     imports: [Source],
     entities: [@panel]
   }

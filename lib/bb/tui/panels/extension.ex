@@ -8,12 +8,14 @@ defmodule BB.TUI.Panels.Extension do
   last 10 seconds. Plots share the rest of the panel's height, each a
   braille line chart with one coloured line per source over its `window`,
   the x axis in seconds before now — or before the moment the charts were
-  frozen.
+  frozen. Attitude indicators share that height too: a braille horizon and
+  pitch ladder behind a fixed aircraft symbol, the angles underneath.
 
   Pure function — takes state and the current monotonic time, returns
   `{widget, rect}` pairs.
   """
 
+  alias BB.TUI.Extension.Attitude
   alias BB.TUI.Extension.Format
   alias BB.TUI.Extension.Panel
   alias BB.TUI.Extension.Plot
@@ -27,6 +29,7 @@ defmodule BB.TUI.Panels.Extension do
   alias ExRatatui.Layout.Rect
   alias ExRatatui.Style
   alias ExRatatui.Widgets.Block
+  alias ExRatatui.Widgets.Canvas
   alias ExRatatui.Widgets.Chart
   alias ExRatatui.Widgets.Chart.Axis
   alias ExRatatui.Widgets.Chart.Dataset
@@ -90,6 +93,7 @@ defmodule BB.TUI.Panels.Extension do
 
   defp constraint(%Readout{}), do: {:length, 1}
   defp constraint(%Plot{}), do: {:fill, 1}
+  defp constraint(%Attitude{}), do: {:fill, 1}
 
   defp inner(%Rect{x: x, y: y, width: w, height: h}),
     do: %Rect{x: x + 1, y: y + 1, width: max(w - 2, 0), height: max(h - 2, 0)}
@@ -108,6 +112,18 @@ defmodule BB.TUI.Panels.Extension do
 
   defp render_item(state, panel, {%Plot{} = plot, index}, area, _label_width, now) do
     [{chart(state, panel, index, plot, now), area}]
+  end
+
+  defp render_item(state, _panel, {%Attitude{} = attitude, _index}, area, _label_width, _now) do
+    [canvas_area, angles_area] = Layout.split(area, :vertical, [{:fill, 1}, {:length, 1}])
+    pitch = angle(state, attitude.pitch, attitude.scale)
+    roll = angle(state, attitude.roll, attitude.scale)
+
+    [
+      {horizon(attitude, pitch, roll, canvas_area), canvas_area},
+      {%Paragraph{text: angles_text(attitude, pitch, roll), style: %Style{fg: :white}},
+       angles_area}
+    ]
   end
 
   defp value_style("-"), do: %Style{fg: Theme.dim_text()}
@@ -202,6 +218,91 @@ defmodule BB.TUI.Panels.Extension do
     do: Integer.to_string(trunc(seconds))
 
   defp format_seconds(seconds), do: :erlang.float_to_binary(seconds, decimals: 1)
+
+  # An angle in radians, scaled; `0.0` for an angle the indicator doesn't
+  # read, `nil` for one not seen yet.
+  defp angle(_state, nil, _scale), do: 0.0
+
+  defp angle(state, %Source{} = source, scale) do
+    case Extensions.read(state, source) do
+      value when is_number(value) -> value * (scale || 1)
+      _not_yet -> nil
+    end
+  end
+
+  # Canvas units are the same size both ways: braille gives a cell 2×4 dots
+  # and a cell is about twice as tall as it is wide, so x spans 2 units a
+  # cell and y 4. The horizon and ladder are drawn in a frame turned by the
+  # roll and moved down by the pitch; the canvas clips what falls outside.
+  defp horizon(attitude, pitch, roll, %Rect{width: width, height: height}) do
+    x_half = max(width, 1) * 1.0
+    y_half = max(height - 1, 1) * 2.0
+    per_degree = y_half / attitude.range
+
+    shapes =
+      if pitch && roll,
+        do: ladder(pitch, roll, per_degree, x_half, attitude.range),
+        else: []
+
+    %Canvas{
+      x_bounds: {-x_half, x_half},
+      y_bounds: {-y_half, y_half},
+      shapes: shapes ++ aircraft(x_half),
+      block: %Block{
+        title: " #{attitude.label} ",
+        borders: [:top],
+        border_style: Theme.unfocused_border_style()
+      }
+    }
+  end
+
+  # A rung every 10° within `range` of the current pitch, unlabelled: the
+  # angles line underneath gives the numbers.
+  defp ladder(pitch, roll, per_degree, x_half, range) do
+    {sin, cos} = {:math.sin(roll), :math.cos(roll)}
+    pitch_degrees = pitch * 180 / :math.pi()
+    at = fn along, up -> {along * cos - up * sin, along * sin + up * cos} end
+    horizon_up = -pitch_degrees * per_degree
+
+    rungs =
+      for step <- -9..9,
+          step != 0,
+          abs(step * 10 - pitch_degrees) < range do
+        up = horizon_up + step * 10 * per_degree
+        {x1, y1} = at.(-x_half * 0.15, up)
+        {x2, y2} = at.(x_half * 0.15, up)
+        %Canvas.Line{x1: x1, y1: y1, x2: x2, y2: y2, color: Theme.dim_text()}
+      end
+
+    {x1, y1} = at.(-x_half * 3, horizon_up)
+    {x2, y2} = at.(x_half * 3, horizon_up)
+    [%Canvas.Line{x1: x1, y1: y1, x2: x2, y2: y2, color: Theme.cyan()} | rungs]
+  end
+
+  defp aircraft(x_half) do
+    [
+      %Canvas.Line{
+        x1: -x_half * 0.45,
+        y1: 0.0,
+        x2: -x_half * 0.12,
+        y2: 0.0,
+        color: Theme.yellow()
+      },
+      %Canvas.Line{x1: x_half * 0.12, y1: 0.0, x2: x_half * 0.45, y2: 0.0, color: Theme.yellow()},
+      %Canvas.Points{coords: [{0.0, 0.0}], color: Theme.yellow()}
+    ]
+  end
+
+  defp angles_text(attitude, pitch, roll) do
+    [pitch: {attitude.pitch, pitch}, roll: {attitude.roll, roll}]
+    |> Enum.reject(fn {_name, {source, _value}} -> source == nil end)
+    |> Enum.map_join("  ", fn {name, {_source, value}} -> " #{name} #{degrees(value)}" end)
+  end
+
+  defp degrees(nil), do: "-"
+
+  defp degrees(radians),
+    do: :erlang.float_to_binary(radians * 180 / :math.pi(), decimals: 1) <> "\u{00B0}"
 
   defp label_width([]), do: 1
   defp label_width(items), do: (items |> Enum.map(&String.length(&1.label)) |> Enum.max()) + 3

@@ -45,12 +45,13 @@ end
 
 
 ## panels
-Panels of readouts and plots, each on a tab of its own unless `tab` says otherwise.
+Panels of readouts, plots and attitude indicators, each on a tab of its own unless `tab` says otherwise.
 
 ### Nested DSLs
  * [panel](#panels-panel)
    * readout
    * plot
+   * attitude
 
 
 
@@ -62,11 +63,12 @@ panel name
 ```
 
 
-A titled box of readouts and plots, in the order declared.
+A titled box of readouts, plots and attitude indicators, in the order declared.
 
 ### Nested DSLs
  * [readout](#panels-panel-readout)
  * [plot](#panels-panel-plot)
+ * [attitude](#panels-panel-attitude)
 
 
 ### Examples
@@ -173,6 +175,51 @@ plot "lean vs target", [joint(:lean), controller(:balancer, :target)]
 ### Introspection
 
 Target: `BB.TUI.Extension.Plot`
+
+### panels.panel.attitude
+```elixir
+attitude label
+```
+
+
+An artificial horizon moved by a pitch and tilted by a roll, both read
+in radians. Positive pitch is nose up, positive roll right side down.
+
+
+
+
+### Examples
+```
+attitude "lean", pitch: joint(:lean)
+```
+
+```
+attitude "imu", pitch: topic([:sensor, :imu], [:orientation, :pitch]), roll: topic([:sensor, :imu], [:orientation, :roll])
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`label`](#panels-panel-attitude-label){: #panels-panel-attitude-label .spark-required} | `String.t` |  | The indicator's title. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`pitch`](#panels-panel-attitude-pitch){: #panels-panel-attitude-pitch } | `BB.TUI.Extension.Source` |  | The pitch, in radians. |
+| [`roll`](#panels-panel-attitude-roll){: #panels-panel-attitude-roll } | `BB.TUI.Extension.Source` |  | The roll, in radians. |
+| [`scale`](#panels-panel-attitude-scale){: #panels-panel-attitude-scale } | `number` |  | Multiplies both angles first; `-1` flips their sign. |
+| [`range`](#panels-panel-attitude-range){: #panels-panel-attitude-range } | `pos_integer` | `30` | The pitch, in degrees, from the centre to the top edge. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.TUI.Extension.Attitude`
 
 
 
