@@ -185,6 +185,9 @@ defmodule BB.TUI.State.Extensions do
   defp item_sources(%Extension.Readout{source: source}), do: [source]
   defp item_sources(%Extension.Plot{sources: sources}), do: sources
 
+  defp item_sources(%Extension.Attitude{pitch: pitch, roll: roll}),
+    do: for(%Source{} = source <- [pitch, roll], do: source)
+
   defp drive_sources(nil), do: []
 
   defp drive_sources(drive),

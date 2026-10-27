@@ -1,8 +1,9 @@
 defmodule Dev.TUI do
   @moduledoc """
   Dev-only `BB.TUI.Extension` for `Dev.TestRobot`, using every part of the
-  DSL: a drive through `Dev.Drive`, panels with readouts and plots from each
-  kind of source, a key bound to a command, and per-state hints.
+  DSL: a drive through `Dev.Drive`, panels with readouts, plots and an
+  attitude indicator from each kind of source, a key bound to a command,
+  and per-state hints.
   """
   use BB.TUI.Extension
 
@@ -21,6 +22,7 @@ defmodule Dev.TUI do
       readout "shoulder", joint(:shoulder), unit: :degree, decimals: 1, spark: true
       readout "elbow", joint(:elbow), unit: :degree, decimals: 1
       readout "max speed", param([:motion, :max_speed]), decimals: 2
+      attitude "attitude", pitch: joint(:shoulder), roll: joint(:waist), range: 60
     end
 
     panel :oscillator do

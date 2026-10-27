@@ -4,12 +4,12 @@ defmodule BB.TUI.Panels.ExtensionTest do
   doctest BB.TUI.Panels.Extension
   doctest BB.TUI.Panels.Hint
 
-  alias BB.TUI.Extension.{Panel, Plot, Readout, Source}
+  alias BB.TUI.Extension.{Attitude, Panel, Plot, Readout, Source}
   alias BB.TUI.Panels.Extension
   alias BB.TUI.State
   alias BB.TUI.State.Series
   alias ExRatatui.Layout.Rect
-  alias ExRatatui.Widgets.{Block, Chart, Paragraph, Sparkline}
+  alias ExRatatui.Widgets.{Block, Canvas, Chart, Paragraph, Sparkline}
 
   @area %Rect{x: 0, y: 0, width: 120, height: 30}
 
@@ -138,6 +138,100 @@ defmodule BB.TUI.Panels.ExtensionTest do
       panel = %Panel{name: :p, items: [%{plot | window: 2_500}]}
       [{chart, _}] = for({%Chart{}, _} = w <- widgets(state([panel]), panel), do: w)
       assert chart.x_axis.labels == ["-2.5s", "now"]
+    end
+  end
+
+  describe "attitude indicators" do
+    setup do
+      attitude = %Attitude{
+        label: "attitude",
+        pitch: Source.joint(:lean),
+        roll: Source.topic([:sensor, :imu], :roll)
+      }
+
+      %{attitude: attitude, panel: %Panel{name: :horizon, items: [attitude]}}
+    end
+
+    defp horizon(state, panel) do
+      [{%Block{}, _}, {%Canvas{} = canvas, _}, {%Paragraph{text: text}, _}] =
+        widgets(state, panel)
+
+      lines = for %Canvas.Line{color: :cyan} = line <- canvas.shapes, do: line
+      {lines, canvas, text}
+    end
+
+    defp tilt(panel, pitch, roll) do
+      state = state([panel], %{{:topic, [:sensor, :imu]} => %{roll: roll}})
+      put_in(state.joints.entries.lean.position, pitch)
+    end
+
+    test "a level robot has the horizon through the centre", %{panel: panel} do
+      {[horizon], canvas, text} = horizon(tilt(panel, 0.0, 0.0), panel)
+
+      assert {horizon.y1, horizon.y2} == {0.0, 0.0}
+      assert canvas.block.title == " attitude "
+      assert text == " pitch 0.0°   roll 0.0°"
+
+      # The aircraft symbol stays put, in yellow.
+      assert [_, _] = for(%Canvas.Line{color: :yellow} <- canvas.shapes, do: :wing)
+
+      assert [[{+0.0, +0.0}]] = for(%Canvas.Points{coords: coords} <- canvas.shapes, do: coords)
+    end
+
+    test "nose up moves the horizon down, with the ladder above it", %{panel: panel} do
+      {[horizon], canvas, text} = horizon(tilt(panel, 10 * :math.pi() / 180, 0.0), panel)
+
+      assert horizon.y1 < 0 and horizon.y1 == horizon.y2
+      assert text =~ "pitch 10.0°"
+
+      # Rungs every 10° within the range: -10 below the centre, +10 on it,
+      # +20 and +30 above.
+      rungs = for %Canvas.Line{color: :dark_gray, y1: y} <- canvas.shapes, do: y
+      assert length(rungs) == 4
+      assert Enum.count(rungs, &(&1 > 0.1)) == 2
+    end
+
+    test "right side down lifts the horizon's right end", %{panel: panel} do
+      {[horizon], _canvas, text} = horizon(tilt(panel, 0.0, 0.3), panel)
+
+      assert horizon.x2 > horizon.x1
+      assert horizon.y2 > horizon.y1
+      assert text =~ "roll 17.2°"
+    end
+
+    test "scale flips the angles", %{attitude: attitude} do
+      panel = %Panel{name: :horizon, items: [%{attitude | scale: -1}]}
+      {[horizon], _canvas, text} = horizon(tilt(panel, 0.0, 0.3), panel)
+
+      assert horizon.y2 < horizon.y1
+      assert text =~ "roll -17.2°"
+    end
+
+    test "draws only the aircraft until both angles are known", %{panel: panel} do
+      {[], canvas, text} = horizon(state([panel]), panel)
+
+      assert Enum.all?(canvas.shapes, &(&1.color == :yellow))
+      assert text == " pitch 45.0°   roll -"
+    end
+
+    test "an indicator reading only the pitch shows only the pitch", %{attitude: attitude} do
+      panel = %Panel{name: :horizon, items: [%{attitude | roll: nil}]}
+      {[horizon], _canvas, text} = horizon(state([panel]), panel)
+
+      assert horizon.y1 == horizon.y2
+      assert text == " pitch 45.0°"
+    end
+
+    test "draws at any angle without leaving its area", %{panel: panel} do
+      terminal = ExRatatui.init_test_terminal(40, 12)
+      area = %Rect{x: 0, y: 0, width: 40, height: 12}
+
+      for pitch <- [-3.0, -0.5, 0.0, 0.5, 3.0], roll <- [-3.0, 0.0, 1.0, 3.0] do
+        state = tilt(panel, pitch, roll)
+        assert :ok = ExRatatui.draw(terminal, Extension.render_panel(state, panel, area, 0))
+      end
+
+      assert ExRatatui.get_buffer_content(terminal) =~ "attitude"
     end
   end
 

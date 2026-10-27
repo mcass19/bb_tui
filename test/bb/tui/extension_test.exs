@@ -5,6 +5,7 @@ defmodule BB.TUI.ExtensionTest do
 
   doctest BB.TUI.Extension
   doctest BB.TUI.Extension.Source
+  doctest BB.TUI.Extension.Attitude
 
   alias BB.TUI.Extension
   alias BB.TUI.Extension.{Bind, Format, Hint, Info, Panel, Plot, Readout, Source}
@@ -38,6 +39,19 @@ defmodule BB.TUI.ExtensionTest do
              ] = items
 
       assert %Panel{name: :yaw, title: nil, tab: nil} = yaw
+    end
+
+    test "reads an attitude indicator back" do
+      assert [%Panel{name: :horizon, items: [attitude]}] =
+               Info.panels(BB.TUI.Test.AttitudeExtension)
+
+      assert %BB.TUI.Extension.Attitude{
+               label: "attitude",
+               pitch: %Source{type: :joint, target: :lean},
+               roll: %Source{type: :topic, path: [:orientation, :roll]},
+               scale: -1,
+               range: 20
+             } = attitude
     end
 
     test "reads its keys and hints back" do
@@ -141,6 +155,20 @@ defmodule BB.TUI.ExtensionTest do
 
       assert {:error, "expected a unit atom" <> _} =
                Format.validate_unit("degree")
+    end
+
+    test "an attitude indicator needs a pitch or a roll" do
+      assert_raise DslError, ~r/attitude "level" needs a pitch or a roll source/, fn ->
+        defmodule NoAngles do
+          use BB.TUI.Extension
+
+          panels do
+            panel :p do
+              attitude "level"
+            end
+          end
+        end
+      end
     end
 
     test "a key can only be bound once" do

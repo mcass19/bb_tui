@@ -176,6 +176,9 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   anything time-critical.
 - `plot` takes `unit:`/`scale:` like a readout (applied to every line) and
   `window:` in milliseconds. Space is reserved: it freezes the charts.
+- `attitude "label", pitch: source, roll: source` draws an artificial
+  horizon from angles in radians; at least one of the two is required,
+  `scale: -1` flips both, `range:` is degrees from centre to top edge.
 
 ## Rendering custom payloads
 

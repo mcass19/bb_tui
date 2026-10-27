@@ -107,6 +107,17 @@ defmodule BB.TUI.State.ExtensionsTest do
              ]
     end
 
+    test "an attitude indicator reads both its sources" do
+      {:ok, ext} = Extensions.build([Test.AttitudeExtension])
+
+      assert Extensions.sources(ext) == [
+               Source.joint(:lean),
+               Source.topic([:sensor, :imu], [:orientation, :roll])
+             ]
+
+      assert ext.topics == [[:sensor, :imu]]
+    end
+
     test "skips topics already under a subscribed path", %{extensions: ext} do
       assert Extensions.subscribe_paths(ext, [[:sensor]]) == []
       assert Extensions.subscribe_paths(ext, [[:command]]) == [[:sensor, :wheel]]

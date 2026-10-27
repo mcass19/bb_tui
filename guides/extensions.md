@@ -39,13 +39,13 @@ end
 Four sections, all optional:
 
 - **`drive`** — hold-to-drive with the arrow keys. While a key is held, bb_tui calls `publish(robot, throttle, turn)` at `rate` Hz, with throttle and turn of -1, 0 or 1 scaled by `throttle_scale` and `turn_scale`; letting go calls `stop(robot)`. bb_tui never needs to know the kit: the extension names the functions. The [Driving guide](driving.md) covers the Drive tab, key releases and every way driving stops.
-- **`panels`** — boxes of `readout`s (a labelled value) and `plot`s (a live chart), each on a tab of its own unless `tab` groups it; `tab :drive` puts a panel beside the drive pad.
+- **`panels`** — boxes of `readout`s (a labelled value), `plot`s (a live chart) and `attitude` indicators (an artificial horizon), each on a tab of its own unless `tab` groups it; `tab :drive` puts a panel beside the drive pad.
 - **`keys`** — `bind` a key to a robot command. bb_tui's own keys (`BB.TUI.Extension.reserved_keys/0`) can't be bound, and the compiler says so.
 - **`hints`** — a banner under the title bar for each robot runtime state.
 
 ## Sources
 
-Readouts, plots and drive scales read their values from sources:
+Readouts, plots, attitude indicators and drive scales read their values from sources:
 
 | Source | Value |
 |---|---|
@@ -62,7 +62,7 @@ A `controller` source reads the map the controller answers `handle_call(:inspect
 
 ## On screen
 
-Each tab holding extension panels joins the tab bar after Visualization, in the order the panels were declared: a panel alone on its tab names the tab after its title, panels sharing a `tab` share it, and `tab :drive` puts a panel on the Drive tab. A tab lays its panels out in rows of up to three. Inside a panel each readout takes a line, and plots share the rest of the height.
+Each tab holding extension panels joins the tab bar after Visualization, in the order the panels were declared: a panel alone on its tab names the tab after its title, panels sharing a `tab` share it, and `tab :drive` puts a panel on the Drive tab. A tab lays its panels out in rows of up to three. Inside a panel each readout takes a line, and plots and attitude indicators share the rest of the height.
 
 Controllers are only polled while a tab reading them is on screen, so a dashboard left on the Control Panel costs the robot nothing.
 
@@ -83,6 +83,20 @@ plot "lean vs target", [joint(:lean), controller(:pid_balancer, :target)],
 A readout with `spark: true` gets a sparkline of its last 10 seconds beside its value.
 
 Charts are fed as their sources change — a topic at the rate it is published, joints with their sensor messages, a controller with each poll, a parameter when it is set — and keep at most 1000 samples a line, so a 200 Hz topic can't grow them without bound. `Space` freezes every chart on the tab and stops recording, so a moment (a fall, a spike) stays on screen to look at; the readouts keep updating, and `Space` again lets the charts run.
+
+## Attitude
+
+An `attitude` draws an artificial horizon: a horizon line and a rung every 10° of pitch, moved by `pitch` and tilted by `roll` behind a fixed aircraft symbol, with both angles in degrees underneath. Both sources read radians and either may be left out; `range:` is the pitch from the centre to the top edge (30° by default), and `scale: -1` flips a robot whose angles run the other way. As on an aircraft, positive pitch is nose up and moves the horizon down, and positive roll is right side down.
+
+```elixir
+attitude "lean", pitch: joint(:lean), range: 20
+
+attitude "imu",
+  pitch: topic([:sensor, :imu], [:orientation, :pitch]),
+  roll: topic([:sensor, :imu], [:orientation, :roll])
+```
+
+An IMU's orientation is in the chip's own axes, so on a robot with the chip mounted turned the body's angles are better read elsewhere — a lean joint, or an estimator that already reports them.
 
 ## Units and formatting
 

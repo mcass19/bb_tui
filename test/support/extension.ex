@@ -58,6 +58,21 @@ defmodule BB.TUI.Test.PlotExtension do
   end
 end
 
+defmodule BB.TUI.Test.AttitudeExtension do
+  @moduledoc false
+  use BB.TUI.Extension
+
+  panels do
+    panel :horizon do
+      attitude "attitude",
+        pitch: joint(:lean),
+        roll: topic([:sensor, :imu], [:orientation, :roll]),
+        scale: -1,
+        range: 20
+    end
+  end
+end
+
 defmodule BB.TUI.Test.EmptyExtension do
   @moduledoc false
   use BB.TUI.Extension
