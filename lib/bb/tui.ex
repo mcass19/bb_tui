@@ -170,9 +170,8 @@ defmodule BB.TUI do
   Every call that waits on the robot — command execution and its
   await, jogs, safety actions, parameter and bridge writes — runs
   through `ExRatatui.Command.async/2`, and its result reaches the
-  reducer as an `{:info, _}` message.
-  Fast, fire-and-forget robot calls (arm / disarm / set_actuator /
-  set_parameter / publish) are invoked inline from `update/2`.
+  reducer as an `{:info, _}` message. Only the simulated-joint
+  `publish` stays inline in `update/2`.
 
   See the README for the full rationale and the cross-references to
   `ExRatatui.Command`, `ExRatatui.Subscription`, and
