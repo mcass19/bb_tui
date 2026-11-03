@@ -485,7 +485,10 @@ defmodule BB.TUI.AppTest do
                &match?({%ExRatatui.Widgets.Table{header: ["Controller" | _]}, _}, &1)
              )
 
-      assert StatusBar.render(state) |> inspect() =~ "inspect"
+      %ExRatatui.Widgets.Paragraph{text: %ExRatatui.Text.Line{spans: spans}} =
+        StatusBar.render(state)
+
+      assert Enum.map_join(spans, "", & &1.content) =~ "inspect"
     end
 
     test "j/k select, other keys stay on the tab", %{state: state} do
