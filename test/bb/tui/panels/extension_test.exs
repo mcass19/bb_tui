@@ -97,7 +97,7 @@ defmodule BB.TUI.Panels.ExtensionTest do
       [{%Chart{} = chart, _rect}] = for({%Chart{}, _} = w <- widgets(state, panel, 4_000), do: w)
 
       assert [
-               %{name: "lean", data: [{-3.0, 0.0}, {-1.0, 1.0}]},
+               %{name: "lean", data: [{-3.0, +0.0}, {-1.0, 1.0}]},
                %{name: "target", data: [{-1.0, 2.0}]}
              ] =
                chart.datasets
@@ -129,7 +129,7 @@ defmodule BB.TUI.Panels.ExtensionTest do
 
       [{chart, _}] = for({%Chart{}, _} = w <- widgets(state, panel, 60_000), do: w)
 
-      assert [%{data: [{-1.0, 0.0}]}, _] = chart.datasets
+      assert [%{data: [{-1.0, +0.0}]}, _] = chart.datasets
       assert chart.x_axis.labels == ["-5s", "frozen"]
       assert chart.block.title =~ "frozen"
     end
