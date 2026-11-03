@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-03
+
 ### Added
 
 - **Event-log summaries** for actuator motion, velocity, effort, stop and hold commands.
@@ -153,7 +155,8 @@ Initial release — a terminal dashboard for [Beam Bots](https://github.com/beam
 - **`mix bb_tui.install` Igniter task.** Adds `bb_tui` to a project, imports formatter rules, optionally scaffolds a `BB` robot, and wires up launch for the default, `--ssh`, or `--nerves` install shapes.
 - **Headless test suite.** Full coverage using Mimic and ExRatatui's test backend, including end-to-end tests that drive a real server via `ExRatatui.Runtime.inject_event/2`.
 
-[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/mcass19/bb_tui/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mcass19/bb_tui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/mcass19/bb_tui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mcass19/bb_tui/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mcass19/bb_tui/compare/v0.5.0...v0.6.0
