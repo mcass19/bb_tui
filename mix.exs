@@ -25,6 +25,7 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.SummaryOnlyRenderer,
           BB.TUI.Test.NilSummaryRenderer,
           BB.TUI.Test.Endpoint,
+          BB.TUI.Test.StrictController,
           # the robot `:distributed` tests start on a `:peer` node, its
           # command handlers and driver, and the helper that starts it there
           BB.TUI.Test.RemoteRobot,
@@ -34,6 +35,7 @@ defmodule BB.TUI.MixProject do
           BB.TUI.Test.PeerHelper,
           BB.TUI.Test.RemoteDrive,
           BB.TUI.Test.RemoteDriveExtension,
+          BB.TUI.Test.RemoteBalancer,
           # extension fixtures, and the DSL builder modules Spark generates
           # (they run at compile time)
           BB.TUI.Test.Drive,

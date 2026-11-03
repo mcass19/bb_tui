@@ -10,8 +10,7 @@ defmodule BB.TUI.State.Extensions do
   `bound` maps each bound key to its bind, for the key handler's guard.
 
   `topics` and `controllers` are what the sources read: the topic paths
-  whose latest payload is kept, and the controllers whose `:inspect` state
-  is polled. `values` holds those, keyed `{:topic, path}` and
+  whose latest payload is kept, and the controllers whose state is polled. `values` holds those, keyed `{:topic, path}` and
   `{:controller, name}`; `polling` is the controllers with a poll in flight.
   Joints and parameters are read from the rest of the session state, see
   `read/2`.
@@ -401,9 +400,9 @@ defmodule BB.TUI.State.Extensions do
   end
 
   @doc """
-  Records a controller's answer to `:inspect` and frees its poll: the state
-  it returned, or — when it couldn't answer — no value at all, so its
-  readouts show as missing rather than stale.
+  Records a controller's state and frees its poll: the state it held, or —
+  when it couldn't answer — no value at all, so its readouts show as missing
+  rather than stale.
 
   ## Examples
 

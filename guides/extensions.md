@@ -50,7 +50,7 @@ Readouts, plots, attitude indicators and drive scales read their values from sou
 | Source | Value |
 |---|---|
 | `joint(:lean)` | a joint's position, as the joints panel shows it |
-| `controller(:pid_balancer, :setpoint)` | a field of the map a controller answers `handle_call(:inspect, ...)` with; a list reaches into nested maps |
+| `controller(:pid_balancer, :setpoint)` | a field of the controller's state; a list reaches into nested maps |
 | `topic([:sensor, :wheel], :velocity)` | a field of the latest message under a path; a list reaches into the payload |
 | `param([:yaw, :turn_rate])` | a robot parameter's current value |
 
@@ -58,7 +58,7 @@ Paths reach into bb's message structs as they are: `topic([:drive], :vx)` reads 
 
 A `topic` source keeps the latest payload published on its path. Sensors and actuators publish under their full topology path (`[:sensor, :base_link, …, :imu]`), so a two-segment path `[root, name]` also matches any path that starts with `root` and ends with `name` — the same short name the event log shows.
 
-A `controller` source reads the map the controller answers `handle_call(:inspect, ...)` with. Controllers publish nothing, so the dashboard polls them, four times a second and never more than one call per controller at a time; one that isn't running, doesn't answer `:inspect` or takes longer than 200 ms shows its readouts as `-` until it answers again. Any map works, missing keys included.
+A `controller` source reads the state the controller's `BB.Controller` callbacks hold, with `:sys.get_state/2`, so the controller needs no code for it. Controllers publish nothing, so the dashboard polls them, four times a second and never more than one read per controller at a time; one that isn't running or takes longer than 200 ms shows its readouts as `-` until it answers again. Any map or struct works, missing keys included.
 
 ## On screen
 

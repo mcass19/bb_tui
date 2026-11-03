@@ -7,8 +7,8 @@ defmodule BB.TUI.State.Controllers do
   `%{name:, module:, simulation:}` (see `BB.TUI.Robot.list_controllers/2`);
   `alive` maps a name to whether its process is running, as last checked;
   `selected` is the highlighted row. `detail` is the open inspect popup —
-  the controller's name and its `:inspect` answer, `:loading` until it
-  arrives — or `nil`.
+  the controller's name and its state, `:loading` until it arrives — or
+  `nil`.
   """
 
   defstruct list: [], alive: %{}, selected: 0, detail: nil

@@ -2,13 +2,17 @@ defmodule BB.TUI.Test.RemoteRobot do
   @moduledoc false
   # A real (DSL-built) robot for the `:distributed` tests, which start it on a
   # `:peer` node and attach a dashboard with `node:`. Kept to what those tests
-  # drive: a fast and a slow command, a string parameter, and one actuated
-  # joint. Compiled to disk so the peer can load it.
+  # drive: a fast and a slow command, a string parameter, one actuated joint
+  # and one controller. Compiled to disk so the peer can load it.
   use BB
   import BB.Unit
 
   settings do
     name(:remote_robot)
+  end
+
+  controllers do
+    controller(:balancer, BB.TUI.Test.RemoteBalancer, simulation: :start)
   end
 
   commands do
@@ -106,6 +110,19 @@ defmodule BB.TUI.Test.Servo do
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
+end
+
+defmodule BB.TUI.Test.RemoteBalancer do
+  @moduledoc false
+  # Answers only the calls it defines, with no catch-all, like
+  # `BB.NSK.Balance.Controller`: any other call crashes it.
+  use BB.Controller
+
+  @impl BB.Controller
+  def init(_opts), do: {:ok, %{lean: 0.0, mode: :idle}}
+
+  @impl BB.Controller
+  def handle_call(:events, _from, state), do: {:reply, [], state}
 end
 
 defmodule BB.TUI.Test.PeerHelper do

@@ -36,9 +36,9 @@ A robot that declares controllers gets a Controllers tab after Visualization: ea
 |---|---|
 | `j` / `Down` | Select next controller |
 | `k` / `Up` | Select previous controller |
-| `Enter` | Inspect: the state the controller answers `handle_call(:inspect, ...)` with, pretty-printed in a popup |
+| `Enter` | Inspect: the controller's state, pretty-printed in a popup |
 
-In the popup `Enter` asks again and any other key closes it. A controller that isn't running, doesn't answer `:inspect` or takes longer than 200 ms shows `no answer` and the reason.
+In the popup `Enter` reads it again and any other key closes it. A controller that isn't running or takes longer than 200 ms shows `no answer` and the reason.
 
 ## Visualization tab
 

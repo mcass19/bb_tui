@@ -7,8 +7,8 @@ defmodule BB.TUI.Extension.Source do
   `readout "lean", joint(:lean)` rather than building the struct:
 
     * `joint(name)` — a joint's position, as the joints panel shows it
-    * `controller(name, key)` — a field of the state a controller returns
-      from `handle_call(:inspect, ...)` (a key, or a path into nested maps)
+    * `controller(name, key)` — a field of a controller's state, the state
+      its `BB.Controller` callbacks hold (a key, or a path into nested maps)
     * `topic(path, field)` — a field of the latest message published under
       `path` (a key, or a path into the payload)
     * `param(path)` — a robot parameter's current value
@@ -47,7 +47,7 @@ defmodule BB.TUI.Extension.Source do
   @spec joint(atom()) :: t()
   def joint(name) when is_atom(name), do: %__MODULE__{type: :joint, target: name}
 
-  @doc "A field of a controller's `:inspect` state: a key, or a path into nested maps."
+  @doc "A field of a controller's state: a key, or a path into nested maps."
   @spec controller(atom(), atom() | [atom()]) :: t()
   def controller(name, key_or_path) when is_atom(name),
     do: %__MODULE__{type: :controller, target: name, path: path!(key_or_path)}

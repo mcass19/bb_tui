@@ -1,8 +1,7 @@
 defmodule BB.TUI.Panels.Controllers do
   @moduledoc """
   The Controllers tab: every controller the robot declares, with its module
-  and whether its process is running, and a popup of the state it answers
-  `:inspect` with.
+  and whether its process is running, and a popup of its state.
 
   Pure functions — take state, return widget structs.
   """
@@ -69,7 +68,7 @@ defmodule BB.TUI.Panels.Controllers do
   defp line(text, color), do: %Line{spans: [%Span{content: text, style: %Style{fg: color}}]}
 
   @doc """
-  Renders the inspect popup: the controller's `:inspect` state, pretty-printed.
+  Renders the inspect popup: the controller's state, pretty-printed.
 
   ## Examples
 
@@ -91,7 +90,7 @@ defmodule BB.TUI.Panels.Controllers do
       percent_width: 70,
       percent_height: 70,
       block: %Block{
-        title: " #{name} :inspect  \u{23CE} refresh, any key closes ",
+        title: " #{name} state  \u{23CE} refresh, any key closes ",
         borders: [:all],
         border_type: :double,
         border_style: %Style{fg: :cyan}

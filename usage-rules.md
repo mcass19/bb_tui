@@ -155,8 +155,9 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
 - Pass it as `extensions:` everywhere: `run/2`, `start/2`, `start_ssh/2`,
   `subsystem/2`, `use BB.TUI.Live`, a distributed listener's `app_opts`,
   `mix bb.tui --extension`.
-- Sources are `joint/1`, `controller/2` (a field of the controller's
-  `:inspect` state), `topic/2` and `param/1`. There is no `inspect/2`.
+- Sources are `joint/1`, `controller/2` (a field of the controller's state,
+  read with `:sys.get_state/2`, so controllers need no extra code), `topic/2`
+  and `param/1`. There is no `inspect/2`.
 - Field paths reach into bb's message structs; orientations also answer
   `:roll`/`:pitch`/`:yaw` (radians, Z-Y-X) and poses `:x`/`:y`/`:z` too, e.g.
   `topic([:sensor, :imu], [:orientation, :pitch])`.
@@ -164,8 +165,9 @@ BB.TUI.run(MyApp.Robot, extensions: [MyApp.TUI])
   the compiler rejects it.
 - Only one extension per session may declare `drive`. Driving happens only on
   the Drive tab with the arrow keys, and only for the session holding the
-  pilot lease (`t`, `BB.TUI.Pilot`) — one driver per robot across all
-  connected nodes; bb_tui calls `stop` on release, quit,
+  pilot lease (`t`, `BB.TUI.Pilot`) — one bb_tui session per robot across all
+  connected nodes (other drivers, such as a phone pad, don't take it); bb_tui
+  calls `stop` on release, quit,
   leaving the tab, focus loss and session end, but the robot must still keep
   its own dead-man timeout — a dropped connection is invisible to bb_tui.
 - A declared drive makes every bb_tui entry point ask for key releases

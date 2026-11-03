@@ -1128,7 +1128,7 @@ defmodule BB.TUI.App do
   # Coalesced sensor render: clear the pending flag and let the default
   # render?: true draw the single freshest frame. The next subscriptions/1
   # reconcile then drops :sensor_flush until the next sensor message.
-  # One `:inspect` per controller per tick, skipping any whose last poll is
+  # One state read per controller per tick, skipping any whose last poll is
   # still out, so a slow controller never piles polls up.
   def update({:info, :poll_controllers}, state) do
     {due, extensions} = State.Extensions.start_polls(state.extensions, visible_controllers(state))
@@ -1676,7 +1676,7 @@ defmodule BB.TUI.App do
   # every jog keypress. The async runner traps the exit of an actuator that
   # crashes while handling the command and delivers it as
   # `{:error, {:exit, reason}}`.
-  # Off the event loop: an `:inspect` is a `GenServer.call` into the robot.
+  # Off the event loop: reading a controller's state waits on the controller.
   defp inspect_controller_command(%State{robot: robot, node: node}, name) do
     Command.async(
       fn -> Robot.inspect_controller(robot, name, node) end,

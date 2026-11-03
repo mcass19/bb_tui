@@ -42,7 +42,7 @@ defmodule BB.TUI.Panels.ControllersTest do
     assert %Popup{content: %CodeBlock{content: "# asking…"}, block: block} =
              Controllers.detail(%{name: :yaw, result: :loading})
 
-    assert block.title =~ "yaw :inspect"
+    assert block.title =~ "yaw state"
 
     assert %Popup{content: %CodeBlock{content: "# no answer: :noproc"}} =
              Controllers.detail(%{name: :yaw, result: {:error, :noproc}})
