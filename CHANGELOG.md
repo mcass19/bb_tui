@@ -9,26 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **The commands panel shows every running command, whoever started it** (another SSH session, a browser tab, automation), and `c` cancels the selected one. A running command shows `⏳ Running` in place of its Ready / Blocked badge, with `×N` when it has several executions. Mirrors `bb_liveview` 0.3.4.
-- **Refused writes reach the event log.** A refused arm, disarm, force disarm, parameter write or bridge write used to look like success. It now logs the reason, e.g. `arm ✘ :already_armed` or `mavlink.PITCH_P ✘ :timeout`.
-- **More actuator messages get an event-log summary:** motion start and end (`elbow_servo moving -0.131 → 0.500`, `stopped at 0.500 (completed)`), plus velocity, effort, stop and hold commands.
+- **Event-log summaries** for actuator motion, velocity, effort, stop and hold commands.
+- **Commands started anywhere** show as running in the commands panel, and `c` cancels them.
+- **Refused writes** (arm, disarm, parameter and bridge writes) are logged with their reason.
 
 ### Changed
 
-- **Breaking: `BB.TUI.Robot.cancel_command/2` is now `cancel_command/3`** and takes the robot and an execution id instead of a pid. `BB.TUI.State.set_command_pid/2` and the `executing_pid` field of `BB.TUI.State.Commands` are gone. `executing` now holds the command's name, and the new `running` field lists the robot's running commands. New: `BB.TUI.Robot.running_commands/2` and `BB.TUI.Robot.await_command/2`.
-- **The `bb` dependency is now `~> 0.33`** and **`ex_ratatui` is now `~> 0.18`** (native NIF for OTP 29, sharper images in the browser's Visualization tab).
-- **Holding a jog key keeps moving the joint.** Each step used to start from the measured position, so holding a key barely moved the joint. Steps now start from the commanded target until the joint gets there.
-- **One jog in flight per actuator.** Key repeats that arrive in the meantime collapse into the latest target, so a slow actuator no longer works through stale targets after the key is released.
-- **The event log is easier to scan.** Actuator and sensor paths are shortened to the component name (`actuator.elbow_servo`). Refusals and failures are red. A late jog (bb's `CommandPending`) is a yellow `⚠` instead of `✘`, and a cancelled command reads `cancelled`.
-- **Holding a key on a parameter logs the final value**, not only the first step.
-- **A running command no longer redraws the dashboard ten times a second.** The spinner tick only runs while disarming.
+- **Breaking:** `BB.TUI.Robot.cancel_command/2` is now `cancel_command/3`, taking an execution id instead of a pid. `BB.TUI.State.set_command_pid/2` and the `executing_pid` field are gone.
+- **Requires `bb ~> 0.33` and `ex_ratatui ~> 0.18`.**
+- **Holding a jog key keeps moving the joint**, with one jog in flight per actuator.
+- **The event log** shortens actuator and sensor paths, colors failures by severity, and shows where a held parameter change ended up.
+- **A running command no longer redraws the dashboard** ten times a second.
 
 ### Fixed
 
-- **Commands on a remote robot (`node:` set) report their real result.** Quick commands showed `✖ :noproc` even when they succeeded.
-- **The dashboard no longer freezes on arm, disarm, cancel, parameter writes or bridge calls.** They now run off the event loop. Over `:rpc`, a failed call used to crash the dashboard.
-- **Short commands' outcomes and quick state transitions show up in the event log.** The debounce used to hide them.
-- **Command errors show their message** instead of an inspected `BB.Error` struct, in both the commands panel and the event log.
+- **Commands on a remote robot (`node:`)** report their real result instead of `:noproc`.
+- **Arm, disarm, cancel, parameter writes and bridge calls** no longer freeze the dashboard.
+- **Quick commands' outcomes and state transitions** are no longer dropped from the event log.
+- **Command errors** show their message instead of an inspected struct.
 
 ## [0.7.1] - 2026-10-05
 
