@@ -40,7 +40,7 @@ defmodule BB.TUI.Panels.Help do
   ## Controllers tab
 
   - `j` / `↓`, `k` / `↑` — Select a controller
-  - `⏎` — Inspect: its `:inspect` state in a popup (`⏎` asks again, any other key closes)
+  - `⏎` — Inspect: its state in a popup (`⏎` reads it again, any other key closes)
 
   ## Visualization tab
 

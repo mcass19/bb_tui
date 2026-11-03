@@ -3,6 +3,7 @@ defmodule BB.TUI.RobotTest do
   use Mimic
 
   alias BB.TUI.Robot
+  alias BB.TUI.Test.StrictController
 
   setup :set_mimic_private
 
@@ -798,14 +799,47 @@ defmodule BB.TUI.RobotTest do
   describe "inspect_controller/3" do
     @remote :"robot@127.0.0.1"
 
-    test "returns the controller's :inspect answer" do
-      Mimic.expect(BB.Process, :call, fn @robot, :balancer, :inspect, 200 -> %{lean: 0.1} end)
+    # The crash at the end logs.
+    @tag :capture_log
+    test "reads a controller's state without calling it" do
+      {:ok, pid} = StrictController.start(%{lean: 0.1})
+      on_exit(fn -> Process.exit(pid, :kill) end)
+      Mimic.expect(BB.Process, :via, fn @robot, :balancer -> pid end)
+
       assert Robot.inspect_controller(@robot, :balancer, nil) == {:ok, %{lean: 0.1}}
+      assert Process.alive?(pid)
+
+      # What a call would have done: the controller has no clause for it.
+      ref = Process.monitor(pid)
+      catch_exit(GenServer.call(pid, :inspect))
+      assert_receive {:DOWN, ^ref, :process, ^pid, {:function_clause, _}}
     end
 
-    test "turns a missing, crashing or slow controller into an error" do
-      Mimic.expect(BB.Process, :call, fn _robot, _name, _msg, _timeout -> exit(:noproc) end)
+    test "returns any other process's state as it is" do
+      pid = start_supervised!({Agent, fn -> %{heading: 0.5} end})
+      Mimic.expect(BB.Process, :via, fn @robot, :yaw -> pid end)
+
+      assert Robot.inspect_controller(@robot, :yaw, nil) == {:ok, %{heading: 0.5}}
+    end
+
+    test "turns a missing or slow controller, or a robot that isn't up, into an error" do
+      dead = spawn(fn -> :ok end)
+      ref = Process.monitor(dead)
+      assert_receive {:DOWN, ^ref, :process, ^dead, _}
+      Mimic.expect(BB.Process, :via, fn _robot, _name -> dead end)
       assert Robot.inspect_controller(@robot, :balancer, nil) == {:error, :noproc}
+
+      # Never answers a system message.
+      stuck = spawn(fn -> Process.sleep(:infinity) end)
+      on_exit(fn -> Process.exit(stuck, :kill) end)
+      Mimic.expect(BB.Process, :via, fn _robot, _name -> stuck end)
+      assert Robot.inspect_controller(@robot, :balancer, nil) == {:error, :timeout}
+
+      Mimic.expect(BB.Process, :via, fn _robot, _name ->
+        raise ArgumentError, "unknown registry"
+      end)
+
+      assert Robot.inspect_controller(@robot, :balancer, nil) == {:error, :not_running}
     end
 
     test "asks on the robot's node" do

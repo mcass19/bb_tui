@@ -270,19 +270,31 @@ defmodule BB.TUI.Robot do
   end
 
   # A readout poll, not a control loop: a controller that takes longer than
-  # this to answer `:inspect` is skipped until the next poll.
+  # this to answer is skipped until the next poll.
   @inspect_timeout_ms 200
 
   @doc """
-  Asks a robot controller for its state, through its `handle_call(:inspect,
-  ...)`. Returns `{:ok, state}`, or `{:error, reason}` when the controller
-  isn't running, doesn't answer `:inspect`, or is too slow to.
+  Reads a robot controller's state: the state its `BB.Controller` callbacks
+  hold.
+
+  Read with `:sys.get_state/2` rather than a call of bb_tui's own, so it
+  works on any controller without its cooperation. A controller that
+  defines `handle_call/3` clauses without a catch-all would crash on a call
+  it doesn't know.
+
+  Returns `{:ok, state}`, or `{:error, reason}` when the controller (or the
+  robot) isn't running, or the controller is too slow to answer.
   """
   @spec inspect_controller(module(), atom(), maybe_node()) :: {:ok, term()} | {:error, term()}
   def inspect_controller(robot, name, nil) do
-    {:ok, BB.Process.call(robot, name, :inspect, @inspect_timeout_ms)}
+    state = robot |> BB.Process.via(name) |> :sys.get_state(@inspect_timeout_ms)
+    {:ok, controller_state(state)}
+  rescue
+    # The robot's registry isn't up.
+    ArgumentError -> {:error, :not_running}
   catch
-    :exit, reason -> {:error, reason}
+    # `:sys` wraps the reason: `{:noproc, {:sys, :get_state, args}}`.
+    :exit, {reason, {:sys, :get_state, _args}} -> {:error, reason}
   end
 
   def inspect_controller(robot, name, node) do
@@ -291,6 +303,11 @@ defmodule BB.TUI.Robot do
       result -> result
     end
   end
+
+  # bb runs every controller in a `BB.Controller.Server`, which keeps the
+  # callbacks' state in `user_state`.
+  defp controller_state(%BB.Controller.Server{user_state: state}), do: state
+  defp controller_state(state), do: state
 
   @doc """
   Spins a velocity-driven actuator, for a held jog key. Broadcast here — a

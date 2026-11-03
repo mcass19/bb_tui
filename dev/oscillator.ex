@@ -2,9 +2,8 @@ defmodule Dev.Oscillator do
   @moduledoc """
   Dev-only controller with state worth watching: a sine wave and a target
   that lags it, the shape of a balancing loop's lean and setpoint. It
-  publishes nothing — like goatbot's balancer, its state is only reachable
-  through `handle_call(:inspect, ...)` — so it exercises the extension
-  `controller/2` source and its polling.
+  publishes nothing and answers no calls, like most controllers, so the
+  extension `controller/2` source and its polling read its state directly.
   """
   use BB.Controller
 
@@ -26,11 +25,6 @@ defmodule Dev.Oscillator do
     # The target follows the output with a lag, like a setpoint chasing a lean.
     target = state.target + (output - state.target) * 0.1
     {:noreply, %{state | output: output, target: target, ticks: state.ticks + 1}}
-  end
-
-  @impl BB.Controller
-  def handle_call(:inspect, _from, state) do
-    {:reply, Map.drop(state, [:started_at]), state}
   end
 
   defp now, do: System.monotonic_time(:millisecond)

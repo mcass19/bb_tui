@@ -505,9 +505,8 @@ defmodule BB.TUI.AppTest do
 
       assert state.controllers.detail == %{name: :balancer, result: :loading}
 
-      Mimic.stub(BB.Process, :call, fn BB.TUI.TestRobot, :balancer, :inspect, _timeout ->
-        %{lean: 0.1}
-      end)
+      balancer = start_supervised!({Agent, fn -> %{lean: 0.1} end})
+      Mimic.stub(BB.Process, :via, fn BB.TUI.TestRobot, :balancer -> balancer end)
 
       message = ask.mapper.(ask.fun.())
       assert message == {:controller_detail, :balancer, {:ok, %{lean: 0.1}}}
@@ -577,7 +576,8 @@ defmodule BB.TUI.AppTest do
     end
 
     test "a poll asks each visible controller once until it answers", %{state: state} do
-      Mimic.stub(BB.Process, :call, fn _robot, name, :inspect, _timeout -> %{name: name} end)
+      balancer = start_supervised!({Agent, fn -> %{name: :balancer} end})
+      Mimic.stub(BB.Process, :via, fn _robot, :balancer -> balancer end)
       state = put_in(state.ui.active_tab, {:extension, :drive})
 
       assert {:noreply, state, opts} = App.update({:info, :poll_controllers}, state)

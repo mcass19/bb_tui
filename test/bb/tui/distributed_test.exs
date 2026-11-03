@@ -154,6 +154,23 @@ defmodule BB.TUI.DistributedTest do
     end)
   end
 
+  test "a controller's state is read on the robot's node without calling it", %{
+    tui: tui,
+    peer_node: peer
+  } do
+    balancer = :rpc.call(peer, BB.Process, :whereis, [RemoteRobot, :balancer])
+    assert is_pid(balancer)
+
+    :sys.replace_state(tui, &put_in(&1.user_state.ui.active_tab, :controllers))
+    press(tui, "enter")
+
+    eventually(fn ->
+      assert user_state(tui).controllers.detail.result == {:ok, %{lean: 0.0, mode: :idle}}
+    end)
+
+    assert :rpc.call(peer, Process, :alive?, [balancer])
+  end
+
   defp select_command(tui, name) do
     press(tui, "2")
     index = Enum.find_index(user_state(tui).commands.available, &(&1.name == name))
